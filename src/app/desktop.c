@@ -534,6 +534,10 @@ int rc_desktop_run(rc_machine **owner,rc_config *c,const rc_rom_index *roms,cons
                     /* Always release the original binding, even if modifiers changed. */
                     if(!down){rc_joykeys_key(&d.joykeys,(int)e.key.keysym.scancode,0);rc_keymap_key(&d.keymap,(unsigned)e.key.keysym.scancode,name,0);}
                     const int browser_was_active=d.browser.active;const int handled=shell_key(&d,hostkey,down);
+                    if(down&&e.key.keysym.scancode==SDL_SCANCODE_RALT&&d.freeze_pending){
+                        int key_count=0;const Uint8 *held_keys=SDL_GetKeyboardState(&key_count);
+                        for(int scancode=0;scancode<key_count;++scancode)if(scancode!=SDL_SCANCODE_RALT&&held_keys[scancode]){d.freeze_pending=0;break;}
+                    }
                     if(down&&!browser_was_active)d.suppress_text=handled!=0;
                     if(handled||d.paused)continue;if(down)rc_typist_cancel(&d.typist);
                     if(rc_joykeys_key(&d.joykeys,(int)e.key.keysym.scancode,down)){d.suppress_text=down;continue;}
