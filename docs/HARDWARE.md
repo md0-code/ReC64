@@ -301,3 +301,47 @@ External flash/freezer mappers bind callbacks to this same port.
 display each mapper's name. Their firmware and Ultimax glyphs are original
 test material, not real cartridge software; mapper-register and exact-state
 checks accompany these startup fixtures.
+## Freezer cartridges
+
+`hw/cart_freezer` models CRT 1 (Action Replay 4.1/4.2/5/6), 30 (earlier
+MK4 without cartridge RAM), 36 (Retro Replay), and 3 (Final Cartridge III).
+Original hardware documents and unmodified verification firmware are pinned
+in `sources.lock.json`; test firmware stays under ignored `work/`.
+
+Action Replay 5/6 decoding follows the physical 82S129 PROM dump, including
+its empty ROM windows and cartridge RAM accesses when ROML is not selected.
+PROM A0..A7 are control D5, D1, D0, IO2, address A13, A15, A14, and the
+inverted freeze latch. O1..O4 are ROM enable, RAM enable, GAME, and EXROM.
+The first two outputs are active low. IO1 accesses clock the control latch
+on reads as well as writes; read data comes from the preceding VIC half-cycle.
+The positive edge of the physical freeze button clocks the first flip-flop.
+The counter loads fifteen while BA is low, then its Qc output clocks the
+second flip-flop after five consecutive available PHI2 cycles. This releases
+IRQ/NMI and enables the frozen memory map. Control bit 6 releases that map.
+
+MK4 uses its different five-bit register, no RAM, and an initially disabled
+cartridge. Its normal power-up is the computer's BASIC screen; pressing
+freeze enters cartridge firmware. Register bit 2 disables the cartridge and
+rearms freezing. A five-cycle counter likewise restarts when BA is low.
+
+Retro Replay provides eight 8 KiB ROM banks and four 8 KiB RAM banks.
+The flash jumper is unset, which physically inhibits flash writes. Its
+write-once AllowBank, NoFreeze and REU-compatible bits retain their original
+semantics; enabling the unpopulated accessory connector leaves those
+register addresses floating. The button must remain down for more than two
+microseconds before release. Freeze asserts IRQ/NMI and waits for three
+consecutive CPU writes before selecting bank zero and its vectors. VIC reads
+and observation-only debugger reads do not advance the CPU write detector.
+
+FC3 has four 16 KiB ROM banks and no RAM. IO1/IO2 always expose the lower
+ROM's final 512 bytes, including when bit 7 hides its write register. Its
+button asserts NMI immediately and GAME after seven BA-enabled PHI2 cycles;
+release removes the button contribution while the register can keep both
+lines asserted. Reset clears the register, including its active-low NMI
+output. ROMH is also available on VIC accesses for the firmware's freezer
+menu font and sprite data.
+
+All RAM, register visibility, freeze state, button level, debounce age,
+counter position and BA state are serialized. The board supplies real bus
+cycles, combines IRQ/NMI lines, and presents a qualified freeze action as a
+physical button pulse. Cartridge code never accesses the board or CPU.
