@@ -18,11 +18,13 @@ int rc_host_console_init(void) {
     /* A program of the Windows subsystem has no console of its own: its
      * messages go to the console it was started from, or to the pipes a
      * script gave it. */
-    if (!GetStdHandle(STD_OUTPUT_HANDLE) && !GetStdHandle(STD_ERROR_HANDLE)) {
+    const HANDLE output=GetStdHandle(STD_OUTPUT_HANDLE),error=GetStdHandle(STD_ERROR_HANDLE),input=GetStdHandle(STD_INPUT_HANDLE);
+    if ((!output||output==INVALID_HANDLE_VALUE)&&(!error||error==INVALID_HANDLE_VALUE)) {
         FILE *ignored;
         if (AttachConsole(ATTACH_PARENT_PROCESS)) {
             freopen_s(&ignored, "CONOUT$", "w", stdout);
             freopen_s(&ignored, "CONOUT$", "w", stderr);
+            if(!input||input==INVALID_HANDLE_VALUE)freopen_s(&ignored,"CONIN$","r",stdin);
         } else hidden = 1;
     }
     SetConsoleOutputCP(CP_UTF8);

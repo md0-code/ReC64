@@ -152,6 +152,12 @@ static int shell_key(void *ctx,const char *name,int down){
     const char *bare=strrchr(key,'+');bare=bare?bare+1:key;
     const int ctrl=strstr(key,"CTRL+")!=NULL,alt=strstr(key,"ALT+")!=NULL,shifted=strstr(key,"SHIFT+")!=NULL;
     char error[256]="";
+    /* This remains a host control while a setup row has the focus. */
+    if(alt&&(!strcmp(bare,"RETURN")||!strcmp(bare,"ENTER")||!strcmp(bare,"KEYPAD ENTER"))){
+        if(down){d->config->fullscreen=!d->config->fullscreen;
+            if(!apply_video(d,error,sizeof error)||!store_config(d,error,sizeof error))message(d,error);}
+        return 1;
+    }
     if(!strcmp(bare,"F12")){
         if(!down)return 1;
         if(alt||ctrl){reset(d,ctrl?1:0);message(d,ctrl?"Cold boot":"Reset");return 1;}
@@ -182,7 +188,6 @@ static int shell_key(void *ctx,const char *name,int down){
     if(!strcmp(bare,"PAUSE")){if(down){d->paused=!d->paused;d->pace_dirty=1;release_keys(d);message(d,d->paused?"Paused":"Running");input_config(d);}return 1;}
     if(ctrl&&(!strcmp(bare,"F1")||!strcmp(bare,"F2")||!strcmp(bare,"F5")||!strcmp(bare,"F6"))){if(down)message(d,bare[1]=='1'||bare[1]=='2'?"No media device available":"Snapshot slots unavailable");return 1;}
     if((alt&&(!strcmp(bare,"F")||!strcmp(bare,"S")||!strcmp(bare,"T")))||!strcmp(bare,"F9")){if(down)message(d,"Control unavailable");return 1;}
-    if(alt&&(!strcmp(bare,"RETURN")||!strcmp(bare,"ENTER"))){if(down){d->config->fullscreen=!d->config->fullscreen;apply_video(d,error,sizeof error);if(!store_config(d,error,sizeof error))message(d,error);}return 1;}
     if(!strcmp(bare,"PRINTSCREEN")||!strcmp(bare,"PRINT SCREEN")){
         if(down){char path[RC_HOST_PATH];rc_host_make_folders("work/screenshots");snprintf(path,sizeof path,"work/screenshots/rec64-%llu.png",(unsigned long long)d->frames);if(shot(d,path,error,sizeof error))message(d,path);else message(d,error);}return 1;
     }
@@ -285,7 +290,7 @@ int rc_desktop_run(rc_machine **owner,rc_config *c,const rc_rom_index *roms,cons
                     if(!d.setup.active&&!d.paused){const unsigned held=SDL_GetMouseState(NULL,NULL),buttons=(held&SDL_BUTTON_LMASK?1u:0)|(held&SDL_BUTTON_RMASK?2u:0);
                         for(unsigned p=0;p<2;++p)if(c->sticks[p].type==RC_CONTROL_MOUSE1351)rc_machine_pointer(d.machine,p,RC_CONTROL_MOUSE1351,e.type==SDL_MOUSEMOTION?e.motion.xrel:0,e.type==SDL_MOUSEMOTION?e.motion.yrel:0,buttons);}}
                 else if(e.type==SDL_KEYDOWN||e.type==SDL_KEYUP){
-                    if(e.key.repeat&&!d.setup.active)continue;
+                    if(e.key.repeat&&(!d.setup.active||(e.key.keysym.mod&(KMOD_ALT|KMOD_CTRL))||e.key.keysym.scancode==SDL_SCANCODE_F12))continue;
                     const int down=e.type==SDL_KEYDOWN;const char *name=SDL_GetScancodeName(e.key.keysym.scancode);
                     char hostkey[96];snprintf(hostkey,sizeof hostkey,"%s%s%s%s",e.key.keysym.mod&KMOD_CTRL?"Ctrl+":"",e.key.keysym.mod&KMOD_ALT?"Alt+":"",e.key.keysym.mod&KMOD_SHIFT?"Shift+":"",name);
                     /* Always release the original binding, even if modifiers changed. */

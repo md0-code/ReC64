@@ -24,7 +24,7 @@ are accepted). Full screen, integer scaling, pixel shape and vsync are live.
 
 Alt+F12 resets; Ctrl+F12 cold boots; Shift+F12 powers off. F10 switches
 100%/full speed (sound is muted at full speed), Pause stops/resumes, and
-Alt+Enter switches full screen. Print Screen writes a PNG under
+Alt+Enter switches full screen, including while setup is open. Print Screen writes a PNG under
 `work/screenshots/`. Setup and status messages use the same presenter as
 the machine, including its display filter.
 
@@ -64,6 +64,9 @@ left/right buttons; F12 releases capture while setup is open. Paddles use
 absolute mouse X/Y and the left/right buttons with `device: mouse`, or a
 controller's left X/Y axes and A/B. Mouse and paddle values reach the SID
 through the CIA-controlled 4066 switch and the 512-cycle ADC conversion.
+
+Normal Windows startup opens only the emulator window. Command-line output
+uses an existing terminal or redirected pipes.
 
 `--hidden` never opens a window or an audio device. Supply `--frames N`,
 `--script FILE` or `--control stdin|tcp:PORT`. TCP binds to localhost.
