@@ -8,6 +8,7 @@ typedef struct rc_traps_io {
     uint8_t (*read)(void *ctx,uint16_t address);
     void (*write)(void *ctx,uint16_t address,uint8_t value);
     /* 0: no virtual device (execute the real ROM), 1: success,
+     * 2: success with absolute tape-header address (KERNAL type3),
      * negative: KERNAL error 1..9. Data is borrowed through this call. */
     int (*load)(void *ctx,unsigned device,unsigned secondary,const uint8_t name[16],unsigned length,
                 uint16_t *address,const uint8_t **data,size_t *size);

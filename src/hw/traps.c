@@ -34,7 +34,7 @@ int rc_traps_fetch(rc_traps *t,const rc_traps_io *io,uint16_t pc,uint8_t a,uint1
         io->write(io->ctx,0x93,a);io->write(io->ctx,0x90,0);
         if(result<0){*next_pc=failure(result);return 1;}
         if((size&&!data)||size>65536){*next_pc=failure(-5);return 1;}
-        const uint16_t target=secondary?address:read16(io,0xc3);
+        const uint16_t target=secondary||result==2?address:read16(io,0xc3);
         if(device==1)write16(io,0xc1,target);
         uint8_t status=0;
         for(size_t i=0;i<size;++i){const uint16_t at=(uint16_t)(target+i);

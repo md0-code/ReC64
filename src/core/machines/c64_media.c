@@ -22,6 +22,9 @@ static int select_entry(rc_c64 *c,unsigned slot,unsigned entry,char *error,size_
     if(rc_media_extension_in(m->path,"tap")){
         if(!rc_datasette_insert(&c->tape,m,error,cap))return 0;
         if(entry!=UINT32_MAX&&!rc_datasette_control(&c->tape,RC_MEDIA_SEEK,entry))return rc_image_error(error,cap,"Tape entry not found");
+        c->program_address=0x0801;size_t count=0;
+        if(rc_tape_directory(&c->tape.deck.tape,NULL,0,&count,NULL,0)&&count){rc_tape_entry *entries=calloc(count,sizeof *entries);
+            if(entries&&rc_tape_directory(&c->tape.deck.tape,entries,count,&count,NULL,0)){const unsigned index=entry==UINT32_MAX?0:entry;if(index<count)c->program_address=entries[index].address;}free(entries);}
         rc_media_close(c->synthetic);c->synthetic=NULL;free(c->program);c->program=NULL;c->program_size=0;
         c->source=(uint8_t)slot;c->physical=1;c->selected[slot]=entry==UINT32_MAX?0:entry;rc_c64_media_lines(c);return 1;
     }
@@ -59,7 +62,7 @@ static int trap_load(void *self,unsigned device,unsigned secondary,const uint8_t
             for(unsigned i=0;i<t.count;++i){rc_t64_entry e;if(rc_t64_entry_at(&t,i,&e)&&matches(name,length,e.name)){found=select_entry(c,c->source,i,error,sizeof error);break;}}rc_t64_close(&t);}}
         if(!found)return -4;
     }
-    *address=c->program_address;*data=c->program;*size=c->program_size;return 1;
+    *address=c->program_address;*data=c->program;*size=c->program_size;return device==1&&c->program_address!=0x0801?2:1;
 }
 static int trap_save(void *self,unsigned device,unsigned secondary,const uint8_t name[16],unsigned length,uint16_t start,uint16_t end){
     (void)secondary;(void)length;rc_c64 *c=self;if(c->physical||c->source>=3)return 0;rc_media *m=c->media[c->source];
@@ -110,12 +113,17 @@ int rc_c64_eject(void *self,unsigned slot){rc_c64 *c=self;if(slot>=3||!c->media[
 }
 int rc_c64_control(void *self,unsigned slot,unsigned command,uint32_t value){rc_c64 *c=self;if(slot>=3)return 0;
     if(command==RC_MEDIA_SEEK&&c->media[slot]){char error[128];return select_entry(c,slot,value,error,sizeof error);}
+    if((command==RC_MEDIA_NEXT||command==RC_MEDIA_PREVIOUS||command==RC_MEDIA_REWIND)&&c->media[slot]&&rc_media_extension_in(c->media[slot]->path,"t64")){
+        rc_t64 t={0};char error[128];if(!rc_t64_open(&t,c->media[slot]->data,c->media[slot]->size,error,sizeof error))return 0;
+        unsigned entry=c->selected[slot];if(command==RC_MEDIA_REWIND)entry=0;else if(command==RC_MEDIA_NEXT&&entry+1<t.count)++entry;else if(command==RC_MEDIA_PREVIOUS&&entry)--entry;
+        rc_t64_close(&t);const int playing=c->tape.deck.play,ok=select_entry(c,slot,entry,error,sizeof error);if(ok&&playing)rc_datasette_control(&c->tape,RC_MEDIA_PLAY,0);return ok;
+    }
     if(slot!=0&&slot!=c->source)return 0;const int ok=rc_datasette_control(&c->tape,command,value);rc_c64_media_lines(c);return ok;
 }
 unsigned rc_c64_activity(const void *self){const rc_c64 *c=self;return c->source<3&&c->tape.motor&&c->tape.deck.play?1u<<c->source:0;}
 unsigned rc_c64_tape_options(void *self,unsigned slot,unsigned bits){rc_c64 *c=self;if(slot>=3)return 0;if(!(bits&RC_TAPE_QUERY))c->tape_bits[slot]=bits&15u;return c->tape_bits[slot];}
 const char *rc_c64_autoload(const void *self,unsigned slot,int *power){rc_c64 *c=(rc_c64 *)self;*power=1;if(slot>=3)return NULL;
-    if(c->physical||c->program_address==0x0801)snprintf(c->autoload_text,sizeof c->autoload_text,"LOAD\"\",1,1\nRUN\n");
+    if(c->program_address==0x0801||!c->program_address)snprintf(c->autoload_text,sizeof c->autoload_text,"LOAD\"\",1,1\nRUN\n");
     else snprintf(c->autoload_text,sizeof c->autoload_text,"LOAD\"\",1,1\nSYS%u\n",c->program_address);return c->autoload_text;
 }
 struct rc_tape_deck *rc_c64_tape_deck(void *self,unsigned slot){rc_c64 *c=self;return (slot==0||slot==c->source)&&c->tape.deck.tape.image?&c->tape.deck:NULL;}

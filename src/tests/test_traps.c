@@ -20,6 +20,7 @@ int main(void){
     fixture *f=calloc(1,sizeof *f);CHECK(f);memcpy(f->program,"ABCD",4);f->result=1;f->ram[0xba]=1;f->ram[0xc3]=0;f->ram[0xc4]=0x20;f->ram[0xf4a5]=0x85;
     const rc_traps_io io={f,read_byte,write_byte,load_file,save_file};rc_traps traps;rc_traps_init(&traps,hash);CHECK(traps.known);
     uint16_t pc=0;CHECK(rc_traps_fetch(&traps,&io,0xf4a5,0,&pc)&&pc==0xf5a9);CHECK(!memcmp(f->ram+0x2000,"ABCD",4)&&f->ram[0xae]==4&&f->ram[0xaf]==0x20&&f->ram[0x93]==0);
+    f->result=2;f->ram[0x801]=0;CHECK(rc_traps_fetch(&traps,&io,0xf4a5,0,&pc)&&!memcmp(f->ram+0x801,"ABCD",4));f->result=1;
     f->ram[0xb9]=1;CHECK(rc_traps_fetch(&traps,&io,0xf4a5,0,&pc)&&!memcmp(f->ram+0x801,"ABCD",4));
     f->ram[0x802]='X';CHECK(rc_traps_fetch(&traps,&io,0xf4a5,1,&pc)&&f->ram[0x90]==0x10&&f->ram[0x802]=='X');
     CHECK(f->ram[0xf4a5]==0x85); /* No trap opcode or firmware patch. */
