@@ -57,7 +57,7 @@ add_library(rc_core STATIC core/config.c core/yamledit.c core/romdb.c core/state
     core/media.c core/font8x8.c core/palette.c core/keymap.c core/stick.c core/machine.c core/stub_machine.c core/machines/c64.c core/machines/c64_media.c hw/bus.c hw/sched.c hw/mos6510.c
     hw/traps.c hw/mouse1351.c hw/cia6526.c hw/pla.c hw/c64kbd.c hw/sid_resid.cpp hw/vic2.c hw/via6522.c
     core/media/image.c core/media/d64.c core/media/t64.c core/media/tap.c core/media/prg.c core/media/gcr.c
-    core/media/tapedeck.c hw/datasette.c)
+    core/media/tapedeck.c hw/datasette.c hw/c1541.c hw/iec.c)
 target_include_directories(rc_core PUBLIC core hw PRIVATE ${CMAKE_CURRENT_BINARY_DIR}/generated)
 target_link_libraries(rc_core PUBLIC rc_yaml rc_host rc_resid)
 if(NOT WIN32)
@@ -150,3 +150,8 @@ add_executable(test_loading tests/test_loading.c)
 target_link_libraries(test_loading PRIVATE rc_core)
 target_compile_definitions(test_loading PRIVATE RC_ROM_DIR="${CMAKE_CURRENT_SOURCE_DIR}/../roms" RC_WORK="${RC_WORK}")
 rc_set_warnings(test_loading)
+add_executable(test_drive tests/test_drive.c)
+target_link_libraries(test_drive PRIVATE rc_core)
+target_compile_definitions(test_drive PRIVATE RC_ROM_DIR="${CMAKE_CURRENT_SOURCE_DIR}/../roms" RC_WORK="${RC_WORK}")
+rc_set_warnings(test_drive)
+add_test(NAME drive COMMAND test_drive)
