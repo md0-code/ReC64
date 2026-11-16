@@ -375,3 +375,33 @@ All RAM, register visibility, freeze state, button level, debounce age,
 counter position and BA state are serialized. The board supplies real bus
 cycles, combines IRQ/NMI lines, and presents a qualified freeze action as a
 physical button pulse. Cartridge code never accesses the board or CPU.
+
+## EasyFlash
+
+EasyFlash has two independent Am29F040B arrays, each 512 KiB, and 256 bytes
+of RAM at I/O2. DE00 selects their shared 8K bank; DE02 controls the physical
+GAME/EXROM lines and LED. Registers are write-only. The enabled boot jumper
+starts bank zero in Ultimax; software can override it. Reset changes the
+board latches while preserving RAM and active flash operations: the flash
+chips have no C64 RESET input. ROMH uses the same flash chip in the CPU's
+A000/E000 windows and VIC Ultimax accesses.
+
+The flash engines execute the AMD unlock, autoselect, byte-program, sector
+erase and chip-erase command sequences. Programming only clears bits;
+attempted zero-to-one programming reports DQ5 failure until a reset command.
+Busy status implements DQ7 data polling, DQ6 toggling, selected-sector DQ2
+and the DQ3 erase timer. Peeks leave the toggles unchanged. Sector erase can
+select multiple sectors within its 50 microsecond command window, suspend,
+allow programming outside the selected sectors and resume. The documented
+typical durations (7 microseconds program, 1 second sector erase and 8
+seconds chip erase) are rounded up to guest cycles. Suspend is immediate,
+within the data sheet's 20 microsecond maximum. Unspecified status bits are
+deterministic; their values are not a hardware guarantee.
+
+Missing CRT banks begin erased (FF). Completed operations update the borrowed
+CRT bytes and dirty flag; the first write to an omitted bank appends a valid
+flash CHIP packet containing that bank. The host flushes that same image.
+Read-only media inhibit flash writes while retaining banking and RAM writes.
+Snapshots retain both flash arrays, command phases, polling bits, pending
+timers, selected sectors, RAM, bank, control and jumper. The image's original
+EAPI and every other firmware byte remain untouched by the implementation.
