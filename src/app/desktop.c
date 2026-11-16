@@ -47,6 +47,8 @@ static void media_status(desktop *d);
 static int flush_media(desktop *d,char *error,size_t cap);
 static void states_status(desktop *d);
 static void media_options(desktop *d);
+static int restart(desktop *d,char *error,size_t cap);
+static void restore_machine_config(desktop *d);
 static rc_machine *machine(void *ctx) { return ((desktop *)ctx)->machine; }
 static int message_active(const desktop *d){return d->osd.text[0]&&(int32_t)(d->osd.until_ms-(uint32_t)(d->frames*20u))>=0;}
 static void message(desktop *d,const char *text){rc_osd_show(&d->osd,(uint32_t)(d->frames*20u),"%s",text);}
@@ -121,7 +123,7 @@ static int state_load(void *ctx,const char *path,char *error,size_t cap) {
         if(i<family->media_count){rc_config_media *setting=rc_config_media_slot(d->config,family->media[i].key);if(setting){snprintf(setting->image,sizeof setting->image,"%s",info.media[i].present?info.media[i].path:"");setting->write_protect=info.media[i].write_protect;setting->explicit_flags|=RC_MEDIA_SETTING_PROTECT;}}}
     snprintf(d->config->model,sizeof d->config->model,"%s",config.model);d->config->option_count=config.option_count;memcpy(d->config->options,config.options,sizeof config.options);
     d->keymap=keys;d->typist=typist;rc_joykeys_set(&d->joykeys,d->config->keyboard_joystick);d->source_slot=source;d->running_config=*d->config;
-    d->setup.active=0;rc_browser_close(&d->browser);d->restart_pending=0;d->pace_dirty=d->states_dirty=1;media_options(d);
+    d->setup.active=0;rc_browser_close(&d->browser);d->restart_pending=d->freeze_pending=0;d->pace_dirty=d->states_dirty=1;media_options(d);
     if(d->audio.device){SDL_ClearQueuedAudio(d->audio.device);d->audio.flowing=0;}
     free(data);return 1;
 invalid:
@@ -293,6 +295,7 @@ static int browser_action(desktop *d,unsigned action,char *error,size_t cap){
         else if(action==RC_BROWSER_SAVE_D64){rc_d64 disk={0};if(!rc_d64_create(&disk,NULL,NULL,error,cap))return 0;const int ok=rc_host_write_file(selected.path,disk.image->data,disk.image->size,error,cap);rc_d64_close(&disk);if(!ok)return 0;slot=image_slot(d,selected.path);if(slot<0||!mount_media(d,(unsigned)slot,selected.path,error,cap))return 0;}
     }
     close_browser(d);d->setup.active=0;input_config(d);
+    if(d->restart_pending){d->restart_pending=0;if(!restart(d,error,cap)){restore_machine_config(d);return 0;}}
     if(load&&!autoload(d,(unsigned)slot,error,cap))return 0;
     message(d,action>=RC_BROWSER_SAVE_PRG?"Saved":"Image inserted");return 1;
 }
