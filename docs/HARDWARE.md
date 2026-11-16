@@ -330,4 +330,4 @@ flash CHIP packet containing that bank. The host flushes that same image.
 Read-only media inhibit flash writes while retaining banking and RAM writes.
 Snapshots retain both flash arrays, command phases, polling bits, pending
 timers, selected sectors, RAM, bank, control and jumper. The image's original
-EAPI and every other firmware byte remain untouched by the implementation.
+firmware, including EAPI, changes only through guest flash operations.
