@@ -43,6 +43,7 @@ typedef struct rc_pace {
     uint64_t anchor, anchor_guest;
     double next_frame;          /* the clock reading the next picture is due at */
     unsigned free_ran;          /* unthrottled: frame periods run since the last picture */
+    int free_running;
     int late;                   /* 1: a picture was just asked for; 2: its cost is known, the machine has its turn */
     uint64_t pic_at, pic_cost;  /* when that picture (then the machine's turn) began; the clock ticks it took */
 } rc_pace;

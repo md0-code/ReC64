@@ -101,7 +101,7 @@ Left or Backspace goes back; at a filesystem root it lists the available
 roots. Typing a name searches the list. Space inserts a selected image
 without loading it. D64 and T64 contents show their PETSCII names, including
 reverse controls; TAP contents use the machine's tape-directory decoder.
-Cartridge, SID and snapshot files stay disabled until their handlers exist.
+Snapshot files load directly. Cartridge and SID files remain disabled.
 
 The Save page uses Tab to switch between the file list, format and name.
 Left/Right or Enter changes the format (PRG program, TAP recording or blank
@@ -135,6 +135,23 @@ and full_speed settings. D64 loading and saving always use the true 1541;
 KERNAL traps and skipped loader instructions never apply to disks.
 Automatic full speed runs while the configured media is active, with every
 guest cycle still executed. Manual F10 full speed continues to mute sound.
+
+## Snapshots
+
+Ctrl+F5 saves the selected slot; Ctrl+F6 restores it, including from setup.
+The States page has ten slots per model, a guest-screen preview, save time,
+and Save/Load actions. Up/Down chooses a slot; Enter on a slot selects it.
+`ui.state_slot` remembers the selection (1–10). Files are stored atomically
+at `states/<model>/slot-N.rcs` beside the configuration file. The Load browser
+and dropped `.rcs` files use the same restore path.
+
+Snapshots retain chip timing, disk/tape positions, incomplete transfers,
+and pending auto-load/RUN input. Media are referenced by absolute path and
+SHA-256; modified media are flushed when saving. Loading checks integrity,
+model, ROMs, machine options and media before replacing the running machine.
+Missing or changed media and incompatible snapshots are refused. Display,
+sound, manual speed and host input preferences remain current. Returning
+from full speed reanchors pacing immediately.
 
 The headless `drop FILE` command takes the same path as a native drop;
 `insert SLOT FILE` mounts only, for explicit LOAD or tape-control commands.

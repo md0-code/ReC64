@@ -61,8 +61,32 @@ static int replace_line(rc_ydoc *doc, size_t at, const char *text) {
     return 1;
 }
 
+/* The line editor needs one root key per line. Remove only a root flow
+ * mapping's braces/commas; nested collections, quoted text and comments stay. */
+static int root_mapping(const char *text,size_t length,char **out,size_t *size){
+    *out=NULL;*size=length;size_t first=0;
+    while(first<length){while(first<length&&(text[first]==' '||text[first]=='\t'||text[first]=='\r'||text[first]=='\n'))++first;
+        if(first<length&&text[first]=='#'){while(first<length&&text[first]!='\n')++first;continue;}
+        if(first+3<=length&&!memcmp(text+first,"---",3)&&(first+3==length||text[first+3]=='\r'||text[first+3]=='\n')){first+=3;continue;}break;}
+    if(first==length||text[first]!='{')return 1;
+    char *result=malloc(length+1);if(!result)return 0;memcpy(result,text,first);size_t n=first;unsigned depth=1;char quote=0;int strip=1;
+    for(size_t i=first+1;i<length;++i){const char ch=text[i];
+        if(quote){result[n++]=ch;if(quote=='"'&&ch=='\\'&&i+1<length)result[n++]=text[++i];
+            else if(ch==quote){if(quote=='\''&&i+1<length&&text[i+1]=='\'')result[n++]=text[++i];else quote=0;}continue;}
+        if(ch=='#'&&(i==0||text[i-1]==' '||text[i-1]=='\t'||text[i-1]=='\n')){while(i<length&&text[i]!='\n')result[n++]=text[i++];if(i<length)result[n++]='\n';strip=1;continue;}
+        if(depth==1&&strip&&(ch==' '||ch=='\t'||ch=='\r'))continue;
+        if(ch=='\''||ch=='"')quote=ch;
+        if(ch=='{'||ch=='[')++depth;
+        if(ch=='}'||ch==']'){if(!--depth){memcpy(result+n,text+i+1,length-i-1);n+=length-i-1;break;}}
+        if(depth==1&&ch==','){result[n++]='\n';strip=1;continue;}
+        result[n++]=ch;strip=ch=='\n';
+    }
+    result[n]=0;*out=result;*size=n;return 1;
+}
+
 int rc_ydoc_parse(rc_ydoc *doc, const char *text, size_t length) {
     memset(doc, 0, sizeof *doc);
+    char *normalized=NULL;if(!root_mapping(text,length,&normalized,&length))return 0;if(normalized)text=normalized;
     size_t start = 0, crlf = 0, lf = 0;
     for (size_t i = 0; i <= length; ++i) {
         if (i < length && text[i] != '\n') continue;
@@ -70,12 +94,13 @@ int rc_ydoc_parse(rc_ydoc *doc, const char *text, size_t length) {
         size_t end = i;
         if (end > start && text[end - 1] == '\r') { end--; crlf++; } else if (i < length) lf++;
         char *line = duplicate(text + start, end - start);
-        if (!line || !insert_line(doc, doc->count, "")) { free(line); rc_ydoc_free(doc); return 0; }
+        if (!line || !insert_line(doc, doc->count, "")) { free(line); free(normalized);rc_ydoc_free(doc); return 0; }
         free(doc->lines[doc->count - 1]);
         doc->lines[doc->count - 1] = line;
         start = i + 1;
     }
     doc->crlf = crlf > lf;
+    free(normalized);
     return 1;
 }
 int rc_ydoc_load(rc_ydoc *doc, const char *path) {

@@ -5,6 +5,8 @@
 #include "setup.h"
 #include "browser.h"
 #include "typist.h"
+#include "states.h"
+#include "rc_version.h"
 #include "../core/media/tapedeck.h"
 #include "../core/media/d64.h"
 #include "pads.h"
@@ -39,8 +41,12 @@ typedef struct desktop {
     char input[1024];
     size_t input_size;
     int stdin_control, full, io_failed,source_slot;
+    int states_dirty,states_slot;char states_model[RC_STATE_ID];
 } desktop;
 static void media_status(desktop *d);
+static int flush_media(desktop *d,char *error,size_t cap);
+static void states_status(desktop *d);
+static void media_options(desktop *d);
 static rc_machine *machine(void *ctx) { return ((desktop *)ctx)->machine; }
 static int message_active(const desktop *d){return d->osd.text[0]&&(int32_t)(d->osd.until_ms-(uint32_t)(d->frames*20u))>=0;}
 static void message(desktop *d,const char *text){rc_osd_show(&d->osd,(uint32_t)(d->frames*20u),"%s",text);}
@@ -69,17 +75,59 @@ static int shot(void *ctx,const char *path,char *error,size_t cap) {
     return 1;
 }
 static int state_save(void *ctx,const char *path,char *error,size_t cap) {
-    desktop *d=ctx;rc_state_writer w;rc_sw_init(&w);rc_machine_save(d->machine,&w);
-    int ok=rc_sw_finish(&w);
+    desktop *d=ctx;if(!flush_media(d,error,cap))return 0;rc_states_info info={0};
+    const rc_family *family=rc_machine_family(d->machine);
+    for(unsigned i=0;i<family->media_count&&i<RC_CONFIG_MEDIA;++i){rc_media *m=rc_machine_media(d->machine,i);if(!m)continue;
+        rc_states_media *md=&info.media[i];md->present=md->hashed=1;md->write_protect=!m->writable;
+        snprintf(md->path,sizeof md->path,"%s",m->path);rc_sha256(m->data,m->size,md->sha256);}
+    rc_frame frame;if(rc_machine_frame(d->machine,&frame)){frame.palette=d->palette;info.has_thumb=rc_states_thumb_make(&frame,&info.thumb);}
+    rc_host_time time;if(rc_host_local_time(&time)){info.has_time=1;info.time=(rc_states_time){time.year,time.month,time.day,time.hour,time.minute,time.second};}
+    snprintf(info.version,sizeof info.version,"%s",RC_VERSION);
+    rc_state_writer w;rc_sw_init(&w);int ok=rc_states_write(d->machine,&info,&w);
+    rc_sw_begin(&w,"AUTO",0);rc_sw_u32(&w,1);rc_sw_u32(&w,(unsigned)(d->source_slot+1));rc_sw_u32(&w,RC_CONFIG_MEDIA);
+    for(unsigned i=0;i<RC_CONFIG_MEDIA;++i)rc_sw_u32(&w,d->media_entry[i]);
+    rc_typist_save(&d->typist,&w);rc_keymap_save(&d->keymap,&w);rc_sw_end(&w);ok=ok&&rc_states_finish(&w);
     if(!ok) snprintf(error,cap,"Cannot serialise state");
-    else ok=rc_host_write_file(path,w.data,w.size,error,cap);
-    rc_sw_free(&w);return ok;
+    else ok=rc_states_save_file(path,w.data,w.size,error,cap);
+    rc_sw_free(&w);d->states_dirty=1;return ok;
 }
 static int state_load(void *ctx,const char *path,char *error,size_t cap) {
-    desktop *d=ctx;uint8_t *data=NULL;size_t size=0;int writable=0;
-    if(!rc_host_read_file(path,64u*1024u*1024u,&data,&size,&writable,error,cap)) return 0;
-    rc_state_reader r;const int ok=rc_sr_open(&r,data,size,error,cap)&&rc_machine_load(d->machine,&r,error,cap);
-    free(data);if(ok){d->pace_dirty=1;rc_typist_cancel(&d->typist);rc_keymap_init(&d->keymap,d->machine,d->config);memset(d->keymap.sent,255,sizeof d->keymap.sent);}return ok;
+    desktop *d=ctx;uint8_t *data=NULL;size_t size=0;if(!rc_states_load_file(path,&data,&size,error,cap))return 0;
+    rc_states_info info;rc_state_reader r;rc_machine *next=NULL;rc_config config=*d->config;rc_typist typist;rc_keymap keys;
+    int source=-1;uint32_t entries[RC_CONFIG_MEDIA];for(unsigned i=0;i<RC_CONFIG_MEDIA;++i)entries[i]=UINT32_MAX;
+    if(!rc_states_read(data,size,&info,&r,error,cap))goto failed;
+    snprintf(config.model,sizeof config.model,"%s",d->running_config.model);config.option_count=d->running_config.option_count;memcpy(config.options,d->running_config.options,sizeof config.options);
+    next=rc_machine_create(&config,d->roms,error,cap);if(!next||!rc_machine_load(next,&r,error,cap))goto failed;rc_machine_border(next,d->config->border);
+    rc_typist_init(&typist);rc_keymap_init(&keys,next,d->config);
+    if(rc_sr_chunk(&r,"AUTO",0)){
+        if(rc_sr_u32(&r)!=1)goto invalid;const unsigned selected=rc_sr_u32(&r),count=rc_sr_u32(&r);if(selected>RC_CONFIG_MEDIA||count!=RC_CONFIG_MEDIA)goto invalid;
+        source=(int)selected-1;for(unsigned i=0;i<count;++i)entries[i]=rc_sr_u32(&r);
+        if(!rc_typist_load(&typist,&r)||!rc_keymap_load(&keys,&r))goto invalid;
+    }else {memset(keys.sent,255,sizeof keys.sent);rc_keymap_clear(&keys);}
+    const rc_family *family=rc_machine_family(next);
+    if(source>=0&&(unsigned)source>=family->media_count)goto invalid;
+    /* A complete candidate is validated before the running machine is replaced. */
+    if(!flush_media(d,error,cap))goto failed;
+    for(unsigned i=0;i<RC_CONFIG_MEDIA;++i){rc_media *m=i<family->media_count?rc_machine_media(next,i):NULL;const rc_states_media *md=&info.media[i];
+        if((m!=NULL)!=md->present){snprintf(error,cap,"Snapshot media references are missing");goto failed;}if(!m)continue;
+        uint8_t hash[32];rc_sha256(m->data,m->size,hash);
+        if(!md->hashed||strcmp(m->path,md->path)||memcmp(hash,md->sha256,32)){snprintf(error,cap,"Snapshot media reference does not match");goto failed;}
+        rc_media *file=rc_media_open(md->path,md->write_protect,error,cap);if(!file)goto failed;rc_sha256(file->data,file->size,hash);
+        const int matches=!memcmp(hash,md->sha256,32)&&file->writable==m->writable;rc_media_close(file);
+        if(!matches){snprintf(error,cap,"Snapshot media has changed: %s",md->path);goto failed;}
+    }
+    rc_machine_destroy(d->machine);*d->owner=d->machine=next;next=NULL;
+    for(unsigned i=0;i<RC_CONFIG_MEDIA;++i){rc_media_close(d->media[i]);d->media[i]=NULL;d->media_entry[i]=entries[i];
+        if(i<family->media_count){rc_config_media *setting=rc_config_media_slot(d->config,family->media[i].key);if(setting){snprintf(setting->image,sizeof setting->image,"%s",info.media[i].present?info.media[i].path:"");setting->write_protect=info.media[i].write_protect;setting->explicit_flags|=RC_MEDIA_SETTING_PROTECT;}}}
+    snprintf(d->config->model,sizeof d->config->model,"%s",config.model);d->config->option_count=config.option_count;memcpy(d->config->options,config.options,sizeof config.options);
+    d->keymap=keys;d->typist=typist;rc_joykeys_set(&d->joykeys,d->config->keyboard_joystick);d->source_slot=source;d->running_config=*d->config;
+    d->setup.active=0;rc_browser_close(&d->browser);d->restart_pending=0;d->pace_dirty=d->states_dirty=1;media_options(d);
+    if(d->audio.device){SDL_ClearQueuedAudio(d->audio.device);d->audio.flowing=0;}
+    free(data);return 1;
+invalid:
+    snprintf(error,cap,"Snapshot input state is damaged");
+failed:
+    rc_machine_destroy(next);free(data);return 0;
 }
 static void release_keys(desktop *d){rc_typist_cancel(&d->typist);rc_keymap_clear(&d->keymap);rc_joykeys_set(&d->joykeys,d->config->keyboard_joystick);const rc_family *f=rc_machine_family(d->machine);for(unsigned i=0;i<f->key_count;++i)rc_machine_key(d->machine,i,0);for(unsigned p=0;p<f->joysticks;++p){rc_machine_joystick(d->machine,p,0);if(d->config->sticks[p].type==RC_CONTROL_MOUSE1351)rc_machine_pointer(d->machine,p,RC_CONTROL_MOUSE1351,0,0,0);}d->suppress_text=0;}
 static void input_config(desktop *d){
@@ -103,7 +151,7 @@ static void input_poll(desktop *d){
     }
 }
 static void reset(void *ctx,int power) { desktop *d=ctx;release_keys(d);if(power!=2){rc_machine_reset(d->machine,power==1);d->pace_dirty=1;} }
-static void speed(void *ctx,int full) { ((desktop *)ctx)->full=full; }
+static void speed(void *ctx,int full) { desktop *d=ctx;d->full=full!=0;d->pace_dirty=1; }
 static int audio_capture(void *ctx,const char *path,char *error,size_t cap) {
     desktop *d=ctx;
     if(!rc_wav_close(&d->wav)) { snprintf(error,cap,"Cannot finish audio capture");return 0; }
@@ -144,7 +192,18 @@ static int store_config(desktop *d,char *error,size_t cap){
     const int ok=rc_config_store(d->config,&doc)&&rc_ydoc_save(&doc,path);rc_ydoc_free(&doc);if(!ok)snprintf(error,cap,"Cannot save configuration");return ok;
 }
 static int media_available(const desktop *d){return !strcmp(rc_machine_family(d->machine)->id,"c64");}
+static void states_status(desktop *d){
+    if(!d->setup.active||d->setup.page!=RC_SETUP_STATES)return;const rc_family *f=rc_machine_family(d->machine);const char *model=f->models[rc_machine_model(d->machine)].id;
+    if(!d->states_dirty&&d->states_slot==d->config->state_slot&&!strcmp(d->states_model,model))return;
+    d->states_dirty=0;d->states_slot=d->config->state_slot;snprintf(d->states_model,sizeof d->states_model,"%s",model);memset(&d->setup.state_thumb,0,sizeof d->setup.state_thumb);d->setup.state_version[0]=0;
+    for(unsigned i=0;i<RC_STATES_SLOTS;++i){char path[RC_HOST_PATH];rc_states_info info={0};rc_states_slot_path(d->config->source,model,i+1,path,sizeof path);
+        const int present=rc_host_file_exists(path),valid=present&&rc_states_slot_info(path,&info)&&!strcmp(info.family,f->id)&&!strcmp(info.model,model);
+        d->setup.state_status[i]=(uint8_t)(valid?1:present?2:0);d->setup.state_time[i][0]=0;
+        if(valid){if(info.has_time)rc_states_time_text(&info.time,d->setup.state_time[i],sizeof d->setup.state_time[i]);if(i+1==(unsigned)d->config->state_slot){if(info.has_thumb)d->setup.state_thumb=info.thumb;snprintf(d->setup.state_version,sizeof d->setup.state_version,"%s",info.version);}}
+    }
+}
 static void media_status(desktop *d){
+    states_status(d);
     d->setup.media_available=media_available(d);d->setup.has_disk=0;d->setup.has_tape=d->setup.tape_writable=d->setup.tape_playing=d->setup.tape_recording=0;
     if(!d->setup.media_available)return;rc_media *media=rc_machine_media(d->machine,0);rc_tape_deck *deck=rc_machine_tape_deck(d->machine,0);
     d->setup.has_tape=media!=NULL;d->setup.tape_writable=media&&media->writable&&rc_media_extension_in(media->path,"tap");d->setup.tape_playing=deck&&deck->play;d->setup.tape_recording=deck&&deck->record;
@@ -215,6 +274,9 @@ static int save_program(desktop *d,const char *path,char *error,size_t cap){
 static int browser_action(desktop *d,unsigned action,char *error,size_t cap){
     if(!action)return 1;if(action==RC_BROWSER_CLOSE){close_browser(d);return 1;}
     const rc_browser_result selected=d->browser.result;int slot=-1,load=0;
+    if((action==RC_BROWSER_LOAD||action==RC_BROWSER_INSERT)&&rc_media_extension_in(selected.path,"rcs")){
+        if(!state_load(d,selected.path,error,cap))return 0;message(d,"Snapshot loaded");return store_config(d,error,cap);
+    }
     if(action==RC_BROWSER_LOAD||action==RC_BROWSER_INSERT){slot=image_slot(d,selected.path);if(slot<0){snprintf(error,cap,"No device for this image");return 0;}
         if(!mount_media(d,(unsigned)slot,selected.path,error,cap))return 0;
         if(selected.entry!=UINT32_MAX&&!rc_machine_control(d->machine,(unsigned)slot,RC_MEDIA_SEEK,selected.entry)){snprintf(error,cap,"Cannot select image entry");return 0;}
@@ -273,6 +335,11 @@ static int needs_restart(desktop *d){
     for(unsigned i=0;i<f->option_count;++i)if((f->options[i].flags&RC_OPTION_RESET)&&values[i]!=current[i])return 1;
     return 0;
 }
+static int quick_state(desktop *d,int save,char *error,size_t cap){
+    const rc_family *f=rc_machine_family(d->machine);char path[RC_HOST_PATH];const unsigned slot=(unsigned)d->config->state_slot;
+    rc_states_slot_path(d->config->source,f->models[rc_machine_model(d->machine)].id,slot,path,sizeof path);
+    const int ok=save?state_save(d,path,error,cap):state_load(d,path,error,cap);if(ok){char text[64];snprintf(text,sizeof text,"%s slot %u",save?"Saved":"Loaded",slot);message(d,text);return store_config(d,error,cap);}return 0;
+}
 /* The same host controls serve SDL and the headless harness. */
 static int shell_key(void *ctx,const char *name,int down){
     desktop *d=ctx;char key[96];size_t n=strlen(name);if(n>=sizeof key)return 0;
@@ -287,6 +354,8 @@ static int shell_key(void *ctx,const char *name,int down){
         return 1;
     }
     if(ctrl&&(!strcmp(bare,"F1")||!strcmp(bare,"F2"))){if(down&&!browser_open(d,!strcmp(bare,"F2"),error,sizeof error))message(d,error);return 1;}
+    if(ctrl&&(!strcmp(bare,"F5")||!strcmp(bare,"F6"))){if(down&&!quick_state(d,!strcmp(bare,"F5"),error,sizeof error))message(d,error);return 1;}
+    if(!strcmp(bare,"F10")){if(down){speed(d,!d->full);message(d,d->full?"Full speed (sound muted)":"100% speed");}return 1;}
     if(alt&&(!strcmp(bare,"F")||!strcmp(bare,"S"))){if(!media_available(d)){if(down)message(d,"No drive available");return 1;}if(down){rc_config_media effective;rc_config_media_settings(d->config,"disk",&effective);rc_config_media *disk=rc_config_media_slot(d->config,"disk");if(disk){
         if(!strcmp(bare,"F")){disk->fast=!effective.fast;disk->explicit_flags|=RC_MEDIA_SETTING_FAST;message(d,disk->fast?"Drive fast loading on":"Drive fast loading off");d->pace_dirty=1;}
         else {disk->sound=!effective.sound;disk->explicit_flags|=RC_MEDIA_SETTING_SOUND;message(d,disk->sound?"Drive sounds on":"Drive sounds off");}
@@ -302,7 +371,7 @@ static int shell_key(void *ctx,const char *name,int down){
         if(alt||ctrl){reset(d,ctrl?1:0);message(d,ctrl?"Cold boot":"Reset");return 1;}
         if(shifted){d->quit=1;return 2;}
         if(d->browser.active){close_browser(d);return 1;}
-        if(!d->setup.active){release_keys(d);d->setup.active=1;d->setup.row=0;}
+        if(!d->setup.active){release_keys(d);d->setup.active=1;d->setup.row=d->setup.page==RC_SETUP_STATES?(unsigned)d->config->state_slot-1u:0;d->states_dirty=1;}
         else {d->setup.active=0;if(d->restart_pending){if(!restart(d,error,sizeof error)){restore_machine_config(d);message(d,error);}d->restart_pending=0;}if(!store_config(d,error,sizeof error))message(d,error);}
         d->pace_dirty=1;input_config(d);return 1;
     }
@@ -310,6 +379,8 @@ static int shell_key(void *ctx,const char *name,int down){
         if(!down)return 1;media_status(d);const rc_config before=*d->config;const unsigned action=rc_setup_key(&d->setup,bare);
         if(action&(RC_SETUP_LOAD|RC_SETUP_SAVE)){if(!browser_open(d,(action&RC_SETUP_SAVE)!=0,error,sizeof error))message(d,error);}
         if(action&RC_SETUP_MEDIA_OPTIONS)media_options(d);
+        if(action&RC_SETUP_STATE_REFRESH)d->states_dirty=1;
+        if(action&(RC_SETUP_STATE_SAVE|RC_SETUP_STATE_LOAD)){if(!quick_state(d,(action&RC_SETUP_STATE_SAVE)!=0,error,sizeof error))message(d,error);}
         if(action&RC_SETUP_EJECT){if(!eject(d,0))message(d,"Cannot eject tape");}
         if(action&RC_SETUP_EJECT_DISK){if(!eject(d,2))message(d,"Cannot eject disk");}
         if(action&(RC_SETUP_PLAY|RC_SETUP_STOP|RC_SETUP_REWIND|RC_SETUP_RECORD)){const unsigned command=action&RC_SETUP_PLAY?RC_MEDIA_PLAY:action&RC_SETUP_STOP?RC_MEDIA_STOP:action&RC_SETUP_REWIND?RC_MEDIA_REWIND:RC_MEDIA_RECORD;if(!rc_machine_control(d->machine,0,command,0))message(d,"Tape control unavailable");media_status(d);}
@@ -329,9 +400,7 @@ static int shell_key(void *ctx,const char *name,int down){
             input_config(d);if(!store_config(d,error,sizeof error))message(d,error);
         }return 1;
     }
-    if(!strcmp(bare,"F10")){if(down){d->full=!d->full;d->pace_dirty=1;message(d,d->full?"Full speed (sound muted)":"100% speed");}return 1;}
     if(!strcmp(bare,"PAUSE")){if(down){d->paused=!d->paused;d->pace_dirty=1;release_keys(d);message(d,d->paused?"Paused":"Running");input_config(d);}return 1;}
-    if(ctrl&&(!strcmp(bare,"F5")||!strcmp(bare,"F6"))){if(down)message(d,"Snapshot slots unavailable");return 1;}
     if((alt&&(!strcmp(bare,"F")||!strcmp(bare,"S")))||!strcmp(bare,"F9")){if(down)message(d,"Control unavailable");return 1;}
     if(!strcmp(bare,"PRINTSCREEN")||!strcmp(bare,"PRINT SCREEN")){
         if(down){char path[RC_HOST_PATH];rc_host_make_folders("work/screenshots");snprintf(path,sizeof path,"work/screenshots/rec64-%llu.png",(unsigned long long)d->frames);if(shot(d,path,error,sizeof error))message(d,path);else message(d,error);}return 1;
@@ -375,7 +444,7 @@ static void control_write(void *ctx,const char *line) {
     if(sent!=(size_t)n) d->io_failed=1;
 }
 int rc_desktop_run(rc_machine **owner,rc_config *c,const rc_rom_index *roms,const rc_desktop_options *o,char *error,size_t cap) {
-    rc_machine *m=*owner;desktop d={0};d.machine=m;d.owner=owner;d.config=c;d.roms=roms;d.hidden=o->hidden;d.running_config=*c;d.source_slot=-1;for(unsigned i=0;i<RC_CONFIG_MEDIA;++i)d.media_entry[i]=UINT32_MAX;rc_browser_init(&d.browser);rc_browser_set_tape_reader(&d.browser,tape_directory,&d);rc_typist_init(&d.typist);
+    rc_machine *m=*owner;desktop d={0};d.machine=m;d.owner=owner;d.config=c;d.roms=roms;d.hidden=o->hidden;d.running_config=*c;d.source_slot=-1;d.states_dirty=1;for(unsigned i=0;i<RC_CONFIG_MEDIA;++i)d.media_entry[i]=UINT32_MAX;rc_browser_init(&d.browser);d.browser.states_enabled=1;rc_browser_set_tape_reader(&d.browser,tape_directory,&d);rc_typist_init(&d.typist);
     rc_keymap_init(&d.keymap,m,c);int keys[RC_CONFIG_STICK_KEYS];for(unsigned i=0;i<RC_CONFIG_STICK_KEYS;++i)keys[i]=(int)SDL_GetScancodeFromName(c->stick_keys[i]);rc_joykeys_init(&d.joykeys,keys,c->keyboard_joystick);
     int status=1;rc_harness *h=NULL;rc_setup_init(&d.setup,c);
     char folder[RC_HOST_PATH];
@@ -459,21 +528,24 @@ int rc_desktop_run(rc_machine **owner,rc_config *c,const rc_rom_index *roms,cons
         if(!o->hidden){rc_pad_key pad;if((d.setup.active||d.browser.active)&&rc_pads_repeat(&d.pads,SDL_GetTicks(),&pad)){const char *names[]={"","UP","DOWN","LEFT","RIGHT"};shell_key(&d,names[pad],1);}input_poll(&d);}
         m=d.machine;
         if(d.pace_dirty){rc_pace_init(&pace,SDL_GetPerformanceFrequency(),rc_machine_clock(m),100);rc_pace_reset(&pace,SDL_GetPerformanceCounter(),rc_machine_time(m));d.pace_dirty=0;}
-        uint64_t ticks=rc_machine_frame_period(m);int present=1;
+        uint64_t ticks=rc_machine_frame_period(m);int present=1,input_frame=1;
         if(h) {
             const int action=rc_harness_step(h);
             if(action==RC_HARNESS_QUIT) { status=rc_harness_status(h);if(status) snprintf(error,cap,"%s",rc_harness_error(h));break; }
             if(action==RC_HARNESS_IDLE) { rc_host_sleep_us(1000);continue; }
         } else if(!o->hidden&&(d.setup.active||d.browser.active||d.paused)) {rc_host_sleep_us(16000);d.pace_dirty=1;}
         else if(!o->hidden) {
-            const rc_pace_step step=rc_pace_next(&pace,d.full||automatic_speed(&d),SDL_GetPerformanceCounter(),rc_machine_time(m),ticks);
+            const int free_running=d.full||automatic_speed(&d);
+            const rc_pace_step step=rc_pace_next(&pace,free_running,SDL_GetPerformanceCounter(),rc_machine_time(m),ticks);
             if(step.action==RC_PACE_WAIT) { rc_host_sleep_us(500);continue; }
             present=step.action==RC_PACE_PRESENT;ticks=present?0:step.ticks;
+            /* At full speed, skipped pictures still advance keyboard timing. */
+            input_frame=free_running?step.action==RC_PACE_RUN:present;
         }
         if(d.quit){status=0;break;}m=d.machine;
-        if(!d.setup.active&&!d.browser.active&&!d.paused&&present&&rc_typist_frame(&d.typist,m,&d.keymap)<0)message(&d,d.typist.error);
+        if(!d.setup.active&&!d.browser.active&&!d.paused&&input_frame&&rc_typist_frame(&d.typist,m,&d.keymap)<0)message(&d,d.typist.error);
         if(!d.setup.active&&!d.browser.active&&!d.paused&&rc_machine_run(m,ticks)!=RC_RUN_OK) { snprintf(error,cap,"%s",rc_machine_error(m));goto done; }
-        if(present){++d.frames;if(!d.setup.active&&!d.browser.active&&!d.paused)rc_keymap_frame(&d.keymap);}
+        if(present)++d.frames;if(input_frame&&!d.setup.active&&!d.browser.active&&!d.paused)rc_keymap_frame(&d.keymap);
         if(d.wav.file) rc_wav_pump(&d.wav,m);
         else rc_host_audio_pump(&d.audio,m,(unsigned)c->volume,o->hidden||d.full||!c->sound||d.setup.active||d.browser.active||d.paused);
         if(d.video&&present) {

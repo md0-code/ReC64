@@ -16,5 +16,9 @@ int rc_keymap_key(rc_keymap *k,unsigned host,const char *name,int down);
 /* UTF-8, translated using the family's typing table; 0: unsupported or full. */
 int rc_keymap_text(rc_keymap *k,const char *text);
 void rc_keymap_frame(rc_keymap *k);
+/* Snapshot the pending text queue, retaining its exact press/release phase.
+ * Physical host keys are reconciled as released when restored. */
+void rc_keymap_save(const rc_keymap *k,rc_state_writer *w);
+int rc_keymap_load(rc_keymap *k,rc_state_reader *r);
 int rc_keymap_action(const rc_family *f,const char *name,uint8_t keys[2]);
 #endif

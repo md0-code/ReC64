@@ -14,7 +14,7 @@ typedef struct rc_browser {
     rc_tui tui;
     rc_browser_item *items;size_t count,selected,top,capacity;
     char path[RC_MEDIA_PATH],image[RC_MEDIA_PATH],filename[RC_BROWSER_NAME],search[RC_BROWSER_NAME],message[128];
-    int active,save,contents,roots,confirm,listing_failed,replace_name;unsigned focus,save_type;
+    int active,save,contents,roots,confirm,listing_failed,replace_name,states_enabled;unsigned focus,save_type;
     rc_browser_result result;
     rc_browser_tape_list_fn tape_list;void *tape_ctx;
 } rc_browser;

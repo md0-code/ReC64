@@ -13,8 +13,9 @@
  * chunks it does not know and finds the ones it wants by tag and instance,
  * whatever their order, so a later version may add chunks, and a chip may
  * add fields at the end of its chunk (a reader that runs off the end of an
- * older chunk reads zeros). Media are not in a state: a state names them by
- * path and hash ("MDIA" chunks, the shell's), and the shell puts them back.
+ * older chunk reads zeros). Snapshot files reference media by path and hash
+ * ("MDIA" chunks). Device chunks retain their buffers and raw tracks so an
+ * unfinished transfer can resume exactly after the shell checks the media.
  *
  * All numbers are little-endian. Memory is run-length packed (rc_sw_packed).
  * The writer grows a buffer in memory, so the same serialisation feeds the

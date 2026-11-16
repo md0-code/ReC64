@@ -10,6 +10,7 @@ void rc_pace_init(rc_pace *p, uint64_t freq, uint32_t clock_hz, unsigned catch_u
     p->anchor = p->anchor_guest = 0;
     p->next_frame = 0;
     p->free_ran = 0;
+    p->free_running = 0;
     p->late = 0;
     p->pic_at = p->pic_cost = 0;
 }
@@ -19,6 +20,7 @@ void rc_pace_reset(rc_pace *p, uint64_t now, uint64_t guest) {
     p->anchor_guest = guest;
     p->next_frame = (double)now;
     p->free_ran = 0;
+    p->late=0;p->pic_at=p->pic_cost=0;
 }
 
 void rc_pace_hold(rc_pace *p, uint64_t now, uint64_t guest) {
@@ -32,6 +34,8 @@ uint64_t rc_pace_due(const rc_pace *p, uint64_t now) {
 
 rc_pace_step rc_pace_next(rc_pace *p, int free_running, uint64_t now, uint64_t guest, uint64_t period) {
     rc_pace_step s = {RC_PACE_WAIT, 0};
+    free_running=free_running!=0;
+    if(p->free_running!=free_running){rc_pace_reset(p,now,guest);p->free_running=free_running;}
     if (free_running) {
         if (p->free_ran >= RC_PACE_FREE_FRAMES) {
             p->free_ran = 0;

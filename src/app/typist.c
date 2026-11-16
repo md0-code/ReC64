@@ -2,8 +2,16 @@
 #include <stdio.h>
 #include <string.h>
 void rc_typist_init(rc_typist *t){memset(t,0,sizeof *t);}
-void rc_typist_cancel(rc_typist *t){t->active=t->queued=0;t->position=t->length=0;}
+void rc_typist_cancel(rc_typist *t){t->active=t->queued=0;t->position=t->length=0;t->commands[0]=0;}
 int rc_typist_busy(const rc_typist *t){return t->active;}
+void rc_typist_save(const rc_typist *t,rc_state_writer *w){
+    rc_sw_u32(w,1);rc_sw_str(w,t->commands);rc_sw_u32(w,t->position);rc_sw_u32(w,t->length);rc_sw_u8(w,(uint8_t)t->active);rc_sw_u8(w,(uint8_t)t->queued);
+}
+int rc_typist_load(rc_typist *t,rc_state_reader *r){
+    rc_typist_init(t);if(rc_sr_u32(r)!=1)return 0;rc_sr_str(r,t->commands,sizeof t->commands);if(r->end-r->at<10)return 0;
+    t->position=rc_sr_u32(r);t->length=rc_sr_u32(r);t->active=rc_sr_u8(r);t->queued=rc_sr_u8(r);
+    return rc_sr_ok(r)&&t->length==strlen(t->commands)&&t->position<=t->length&&t->active<=1&&t->queued<=1;
+}
 static int fail(rc_typist *t,const char *message,char *error,size_t cap){snprintf(t->error,sizeof t->error,"%s",message);if(cap)snprintf(error,cap,"%s",message);rc_typist_cancel(t);return 0;}
 int rc_typist_start(rc_typist *t,const char *commands,char *error,size_t cap){
     rc_typist_init(t);unsigned line=0;

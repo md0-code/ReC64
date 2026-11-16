@@ -20,6 +20,15 @@ and ROM SHA-256 values, then tagged chunks and an `END ` marker. Unknown
 chunks are skipped. Memory is run-length packed. Each chip restores its own
 deadlines on load. The host writes the resulting buffer atomically.
 
+Snapshot files add media paths and SHA-256 hashes (`MDIA`), a palette-indexed
+guest-screen preview (`THMB`), local save time and application version, and
+the pending auto-typist/keyboard queue (`AUTO`). A final `SHA2` chunk covers
+the header and every preceding chunk. Restoring validates a separate machine
+and its media before exchanging the live machine. Host pacing, display and
+sound preferences remain outside guest state. A speed-mode transition resets
+the wall-clock anchor; full-speed input timing follows every emulated frame,
+including those whose picture is skipped.
+
 ## NMOS 6510 / 6502
 
 `hw/mos6510.h` exposes the pins of one access and accepts one granted cycle.
@@ -195,7 +204,7 @@ are serialized, and a saved hook state cannot enable a different ROM hash.
 ## C64 media wiring
 
 The board exposes tape, virtual program and disk-image slots. The current
-slot selects one Datasette path. PRG/P00, T64 entries and extracted D64 PRGs
+virtual-program or tape slot selects one Datasette path. PRG/P00 and T64 entries
 have an original-format synthesized tape available even while fast hooks
 are enabled. Turning hooks off therefore uses the same data through the
 actual KERNAL tape routines. TAP always bypasses the hooks. Type3 absolute

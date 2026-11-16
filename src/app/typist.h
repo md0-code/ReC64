@@ -11,4 +11,6 @@ void rc_typist_cancel(rc_typist *t);
  * or finished, -1 failure in t->error. The owner clocks keymap normally. */
 int rc_typist_frame(rc_typist *t,rc_machine *machine,rc_keymap *keys);
 int rc_typist_busy(const rc_typist *t);
+void rc_typist_save(const rc_typist *t,rc_state_writer *w);
+int rc_typist_load(rc_typist *t,rc_state_reader *r);
 #endif

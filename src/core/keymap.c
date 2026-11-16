@@ -57,3 +57,15 @@ void rc_keymap_frame(rc_keymap *k){
         if(k->count>1&&k->queue[k->read].key==k->queue[(k->read+1)%RC_KEYMAP_QUEUE].key)duration+=6;
         if(++k->phase>=duration){k->phase=0;k->read=(k->read+1)%RC_KEYMAP_QUEUE;--k->count;}apply(k);}
 }
+void rc_keymap_save(const rc_keymap *k,rc_state_writer *w){
+    uint8_t sent[256]={0};const unsigned n=rc_machine_family(k->machine)->key_count;memcpy(sent,k->sent,n<256?n:256);
+    rc_sw_u32(w,1);rc_sw_u32(w,k->count);rc_sw_u32(w,k->phase);rc_sw_bytes(w,sent,sizeof sent);
+    for(unsigned i=0;i<k->count;++i){const rc_typing_desc *ch=&k->queue[(k->read+i)%RC_KEYMAP_QUEUE];rc_sw_u32(w,ch->ch);rc_sw_u8(w,ch->key);rc_sw_u8(w,ch->shift);}
+}
+int rc_keymap_load(rc_keymap *k,rc_state_reader *r){
+    if(rc_sr_u32(r)!=1)return 0;const unsigned count=rc_sr_u32(r),phase=rc_sr_u32(r);const rc_family *f=rc_machine_family(k->machine);
+    if(count>RC_KEYMAP_QUEUE||phase>=12||r->end-r->at<sizeof k->sent+count*6u)return 0;
+    rc_sr_bytes(r,k->sent,sizeof k->sent);memset(k->held,0,sizeof k->held);memset(k->keys,RC_KEY_NONE,sizeof k->keys);k->read=0;k->count=count;k->phase=phase;
+    for(unsigned i=0;i<count;++i){rc_typing_desc *ch=&k->queue[i];ch->ch=rc_sr_u32(r);ch->key=rc_sr_u8(r);ch->shift=rc_sr_u8(r);if(ch->key>=f->key_count||(ch->shift!=RC_KEY_NONE&&ch->shift>=f->key_count))return 0;}
+    if(!rc_sr_ok(r))return 0;memset(k->sent,255,sizeof k->sent);apply(k);return 1;
+}

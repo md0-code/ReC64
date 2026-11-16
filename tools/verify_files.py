@@ -4,6 +4,7 @@ import argparse
 import json
 import struct
 import subprocess
+from verify_states import machine_bytes
 
 ROOT = Path(__file__).resolve().parents[1]
 
@@ -34,7 +35,7 @@ def main() -> None:
         "state save work/verify-files/after-browser.rcs", "key ESCAPE", "key F12", "expect TAPE FAST LOAD", "shot work/verify-files/media.png"])
     original = (work / "saved.prg").read_bytes()
     assert original[:2] == b"\x01\x08" and b"42" in original
-    assert (work / "before-browser.rcs").read_bytes() == (work / "after-browser.rcs").read_bytes()
+    assert machine_bytes(work / "before-browser.rcs") == machine_bytes(work / "after-browser.rcs")
     # The browser selects the second real T64 entry; the original KERNAL
     # and BASIC then LOAD and RUN it through the auto-typist.
     programs = [original[2:], original[2:].replace(b"42", b"43", 1)]

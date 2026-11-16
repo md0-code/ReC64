@@ -386,6 +386,7 @@ static void type_frame(rc_harness *h) {
 
 int rc_harness_step(rc_harness *h) {
     for (;;) {
+        if(h->trace)rc_machine_set_trace(machine(h),trace_line,h->trace);
         if (h->quit) return RC_HARNESS_QUIT;
         if (h->busy) {
             if (h->type_at < h->type_len) { type_frame(h); ++h->frame; return RC_HARNESS_RUN; }
