@@ -41,7 +41,7 @@ int rc_browser_open(rc_browser *b,const char *folder,int save,char *error,size_t
 }
 static int image_items(rc_browser *b,const rc_browser_content *entries,size_t count,unsigned kind){
     rc_browser_item *items=count?calloc(count,sizeof *items):NULL;if(count&&!items)return 0;
-    for(size_t i=0;i<count;++i){items[i].content=entries[i];items[i].format=kind;items[i].bytes=entries[i].length;
+    for(size_t i=0;i<count;++i){items[i].content=entries[i];items[i].format=kind;items[i].bytes=entries[i].length;items[i].disabled=kind==RC_BROWSER_D64&&(entries[i].type&7u)!=2;
         unsigned at=0;for(unsigned j=0;j<16;++j){const unsigned c=entries[i].name[j];if(!c)break;if(c!=0x12&&c!=0x92)items[i].name[at++]=(char)petscii(c);}items[i].name[at]=0;}
     clear_items(b);b->items=items;b->count=b->capacity=count;b->contents=1;b->roots=0;return 1;
 }
@@ -95,7 +95,7 @@ unsigned rc_browser_key(rc_browser *b,const char *name){
     else if(same(key,"PAGEDOWN")){if(b->count)b->selected=b->selected+LIST_ROWS<b->count?b->selected+LIST_ROWS:b->count-1;}
     else if(same(key,"SPACE")||same(key,"RETURN")||same(key,"ENTER")||same(key,"RIGHT")){
         if(b->save&&same(key,"SPACE"))return save_action(b,0);
-        if(b->contents){if(same(key,"SPACE"))return result(b,RC_BROWSER_INSERT,b->image,UINT32_MAX,0);if(b->count)return result(b,RC_BROWSER_LOAD,b->image,b->items[b->selected].content.index,0);return RC_BROWSER_NONE;}
+        if(b->contents){if(same(key,"SPACE"))return result(b,RC_BROWSER_INSERT,b->image,UINT32_MAX,0);if(b->count){if(b->items[b->selected].disabled){rc_browser_error(b,"Only PRG files can be loaded");return RC_BROWSER_NONE;}return result(b,RC_BROWSER_LOAD,b->image,b->items[b->selected].content.index,0);}return RC_BROWSER_NONE;}
         if(!b->count){if(b->save){b->focus=2;return save_action(b,0);}return RC_BROWSER_NONE;}
         rc_browser_item *item=&b->items[b->selected];char path[RC_MEDIA_PATH],error[128]="";
         if(item->disabled){rc_browser_error(b,"Format is not available yet");return RC_BROWSER_NONE;}
@@ -117,17 +117,17 @@ void rc_browser_input(rc_browser *b,const char *text){if(!b->active||b->confirm)
 /* PETSCII case variants and reverse controls are resolved before the ASCII
  * UI font is used. Unsupported graphics remain visible as a question mark. */
 static unsigned petscii(unsigned c){if(c==0xa0)return ' ';if(c>=0xc1&&c<=0xda)return c-0x80;if(c>=0x61&&c<=0x7a)return c-0x20;if(c>=0x20&&c<=0x5f)return c;return '?';}
-static void content_row(rc_browser *b,unsigned row,const rc_browser_item *item,int selected){char prefix[10],suffix[8];const unsigned blocks=(unsigned)((item->bytes+253u)/254u);snprintf(prefix,sizeof prefix,"%5u \"",blocks);rc_tui_put(&b->tui,row,2,prefix,selected?6:14,selected?14:6);
-    int reverse=0;unsigned column=9;for(unsigned i=0;i<16&&column<26;++i){const unsigned c=item->content.name[i];if(!c)break;if(c==0x12){reverse=1;continue;}if(c==0x92){reverse=0;continue;}b->tui.ch[row][column]=(uint8_t)petscii(c);const int invert=selected^reverse;b->tui.ink[row][column]=(uint8_t)(invert?6:14);b->tui.paper[row][column]=(uint8_t)(invert?14:6);++column;}
-    while(column<25){b->tui.ch[row][column]=' ';b->tui.ink[row][column]=(uint8_t)(selected?6:14);b->tui.paper[row][column]=(uint8_t)(selected?14:6);++column;}
-    const unsigned type=item->content.type&7u;const char *types[]={"DEL","SEQ","PRG","USR","REL","???","???","???"};snprintf(suffix,sizeof suffix,"\" %s",item->format==RC_BROWSER_D64?types[type]:"PRG");rc_tui_put(&b->tui,row,25,suffix,selected?6:14,selected?14:6);
+static void content_row(rc_browser *b,unsigned row,const rc_browser_item *item,int selected){const uint8_t ink=(uint8_t)(item->disabled?12:14);char prefix[10],suffix[8];const unsigned blocks=(unsigned)((item->bytes+253u)/254u);snprintf(prefix,sizeof prefix,"%5u \"",blocks);rc_tui_put(&b->tui,row,2,prefix,selected?6:ink,selected?ink:6);
+    int reverse=0;unsigned column=9;for(unsigned i=0;i<16&&column<26;++i){const unsigned c=item->content.name[i];if(!c)break;if(c==0x12){reverse=1;continue;}if(c==0x92){reverse=0;continue;}b->tui.ch[row][column]=(uint8_t)petscii(c);const int invert=selected^reverse;b->tui.ink[row][column]=(uint8_t)(invert?6:ink);b->tui.paper[row][column]=(uint8_t)(invert?ink:6);++column;}
+    while(column<25){b->tui.ch[row][column]=' ';b->tui.ink[row][column]=(uint8_t)(selected?6:ink);b->tui.paper[row][column]=(uint8_t)(selected?ink:6);++column;}
+    const unsigned type=item->content.type&7u;const char *types[]={"DEL","SEQ","PRG","USR","REL","???","???","???"};snprintf(suffix,sizeof suffix,"\" %s",item->format==RC_BROWSER_D64?types[type]:"PRG");rc_tui_put(&b->tui,row,25,suffix,selected?6:ink,selected?ink:6);
 }
 static const char *tail(const char *path,size_t width){const size_t length=strlen(path);return length>width?path+length-width:path;}
 void rc_browser_draw(rc_browser *b,const uint32_t palette[16],rc_frame *frame){
     rc_tui_clear(&b->tui);rc_tui_bar(&b->tui,0,b->save?"REC64  SAVE":"REC64  LOAD");rc_tui_put(&b->tui,2,2,b->roots?"FILESYSTEM ROOTS":tail(b->contents?b->image:b->path,36),14,6);rc_tui_box(&b->tui,4,1,17,38);
     if(b->save){const char *types[]={"PROGRAM .PRG","RECORD .TAP","BLANK .D64"};char line[37];snprintf(line,sizeof line,"FORMAT: %-27s",types[b->save_type]);rc_tui_put(&b->tui,3,2,line,b->focus==1?6:14,b->focus==1?14:6);}
     else rc_tui_put(&b->tui,3,2,b->contents?"IMAGE CONTENTS":"FILES AND FOLDERS",14,6);
-    for(unsigned row=0;row<LIST_ROWS&&b->top+row<b->count;++row){const size_t index=b->top+row;const rc_browser_item *item=&b->items[index];const int selected=index==b->selected&&(!b->save||!b->focus);char line[37];memset(line,' ',36);line[36]=0;rc_tui_put(&b->tui,5+row,2,line,selected?6:item->disabled?12:14,selected?14:6);
+    for(unsigned row=0;row<LIST_ROWS&&b->top+row<b->count;++row){const size_t index=b->top+row;const rc_browser_item *item=&b->items[index];const int selected=index==b->selected&&(!b->save||!b->focus)&&!item->disabled;char line[37];memset(line,' ',36);line[36]=0;rc_tui_put(&b->tui,5+row,2,line,selected?6:item->disabled?12:14,selected?14:6);
         if(b->contents)content_row(b,5+row,item,selected);
         else {snprintf(line,sizeof line,"%c %-31.31s%s",item->folder?'[':' ',item->name,item->folder?"]":" ");rc_tui_put(&b->tui,5+row,2,line,selected?6:item->disabled?12:14,selected?14:6);}}
     if(!b->count)rc_tui_put(&b->tui,7,3,b->contents?"NO PROGRAM ENTRIES":"NO MATCHING FILES",12,6);

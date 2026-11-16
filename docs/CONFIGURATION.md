@@ -109,3 +109,29 @@ D64). In the name field, Ctrl+A selects the whole name for replacement,
 Backspace edits it and Enter saves. The matching extension is added when
 missing. Replacing an existing file requires a separate Enter/Y confirmation;
 Escape/N cancels that replacement. Escape closes either browser.
+
+Ctrl+F1 opens Load and Ctrl+F2 opens Save, including from setup. Dropped
+PRG/P00 files load and run; dropped D64/T64/TAP files open their contents.
+With auto-load enabled, choosing Load runs the machine's LOAD/RUN commands through real keyboard
+input after a cold boot. Space inserts without auto-loading. Opening a
+browser pauses the guest; closing returns to the previous setup or machine
+screen. Manual keyboard input, focus loss and reset cancel auto-typing.
+
+The Media page has tape Play, Stop, Rewind, Record and Eject controls,
+plus fast loading, tape sound and auto-load. Alt+T toggles tape sound.
+Saving to TAP creates and mounts a recording target: use BASIC SAVE to
+record the program. Saving a blank D64 creates and inserts that image.
+Modified media are flushed before replacement, ejection, restart and exit.
+A model restart retains mounted images and selected entries.
+
+`media.tape` supplies default fast, sound, autoload, full_speed, traps,
+save_traps and accelerate settings for the virtual program/disk slots as
+well. An explicit setting under `media.program` or `media.disk` overrides
+that one default; storing an image path alone preserves inheritance.
+Automatic full speed runs while the configured media is active, with every
+guest cycle still executed. Manual F10 full speed continues to mute sound.
+
+The headless `drop FILE` command takes the same path as a native drop;
+`insert SLOT FILE` mounts only, for explicit LOAD or tape-control commands.
+Typing while a file dialog is active edits its search/name field, and
+`enter` activates the current dialog selection.

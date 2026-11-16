@@ -24,6 +24,7 @@ typedef struct rc_harness_host {
     size_t (*screen_text)(void *ctx,char *out,size_t capacity);
     int (*drop)(void *ctx,const char *path,char *error,size_t capacity);
     int (*audio)(void *ctx,const char *path,char *error,size_t capacity);
+    int (*text_input)(void *ctx,const char *text); /* 1: host UI consumed typing */
     int (*key)(void *ctx,const char *name,int down); /* 1: consumed; 2: power off */
 } rc_harness_host;
 rc_harness *rc_harness_open(const rc_harness_host *host,const char *script,char *error,size_t capacity);
