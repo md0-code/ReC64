@@ -67,8 +67,11 @@ def main() -> None:
         while at+12 <= len(data):
             tag, _, length = struct.unpack_from("<4sII", data, at); at += 12
             if tag == b"CMED":
-                assert data[at+14] == 0  # no tape image precedes program
-                return struct.unpack_from("<I", data, at+19)[0]
+                version = struct.unpack_from("<I", data, at)[0]
+                assert version in (1, 2)
+                slots = at + 6 + (26 if version == 2 else 0)
+                assert data[slots+8] == 0  # no tape image precedes program
+                return struct.unpack_from("<I", data, slots+13)[0]
             at += length
         raise AssertionError("CMED not found")
     for explicit, expected in [(False, 0), (True, 14)]:

@@ -101,6 +101,7 @@ static void reset(void *self,int power){
     if(power){rc_vic2_reset(&c->vic);c->bus.pot_phase=0;memset(c->bus.pot_value,255,2);memset(c->bus.pot_charge,255,2);for(unsigned p=0;p<2;++p)rc_mouse1351_init(&c->bus.mouse[p]);}rc_cia6526_reset(&c->cia[0]);rc_cia6526_reset(&c->cia[1]);rc_sid_reset(&c->sid);
     c->keyboard.dev.ops->reset(&c->keyboard);c->restore=0;c->bus.data=c->bus.vic_data=255;c->bus.game=c->bus.exrom=1;
     rc_c1541_reset(&c->drive);c->drive_phase=0;rc_iec_init(&c->iec);rc_c64_iec_lines(c);
+    rc_fastload_reset(&c->fastload,c->sched.now,c->iec.edges);
     rc_c64_media_lines(c);interrupts(c);
 }
 static void nmi(void *self){rc_c64 *c=self;rc_mos6510_input(&c->cpu,RC_CPU_NMI,1);rc_mos6510_input(&c->cpu,RC_CPU_NMI,c->cia[1].irq);}
@@ -185,5 +186,6 @@ void *rc_c64_create(const rc_machine_setup *setup,char *error,size_t capacity){
     const rc_rom_file *drive_rom=rc_rom_index_find(setup->roms,rc_romdb_find("dos1541"));
     if(!drive_rom||drive_rom->size!=16384){if(capacity)snprintf(error,capacity,"Missing 1541 DOS ROM");rc_sid_release(&c->sid);free(c);return NULL;}
     rc_c1541_init(&c->drive,drive_rom->data,8u+setup->options[1]);rc_sha256(drive_rom->data,drive_rom->size,c->rom_hashes+96);rc_iec_init(&c->iec);
+    rc_fastload_init(&c->fastload,c->hz);
     rc_c64_media_init(c);reset(c,1);return c;
 }

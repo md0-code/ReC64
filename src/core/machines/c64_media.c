@@ -107,6 +107,7 @@ void rc_c64_iec_lines(rc_c64 *c){
 void rc_c64_media_tick(rc_c64 *c){
     rc_c64_iec_lines(c);c->drive_phase+=1000000u;
     while(c->drive_phase>=c->hz){c->drive_phase-=c->hz;rc_c1541_tick(&c->drive);rc_c64_iec_lines(c);}
+    rc_fastload_observe(&c->fastload,c->sched.now,c->drive.motor,c->iec.edges);
     rc_c64_media_lines(c);rc_datasette_tick(&c->tape,1);c->tape_audio_phase+=48000;
     if(c->tape_audio_phase>=c->hz){c->tape_audio_phase-=c->hz;
         if(c->tape_audio_count==48000){c->tape_audio_head=(c->tape_audio_head+1)%48000;--c->tape_audio_count;}
@@ -139,7 +140,7 @@ int rc_c64_control(void *self,unsigned slot,unsigned command,uint32_t value){rc_
     }
     if(slot!=0&&slot!=c->source)return 0;const int ok=rc_datasette_control(&c->tape,command,value);rc_c64_media_lines(c);return ok;
 }
-unsigned rc_c64_activity(const void *self){const rc_c64 *c=self;return (c->source<2&&c->tape.motor&&c->tape.deck.play?1u<<c->source:0)|(c->drive.motor||rc_iec_lines(&c->iec)!=RC_IEC_ALL?4u:0);}
+unsigned rc_c64_activity(const void *self){const rc_c64 *c=self;return (c->source<2&&c->tape.motor&&c->tape.deck.play?1u<<c->source:0)|(rc_fastload_active(&c->fastload)?4u:0);}
 unsigned rc_c64_tape_options(void *self,unsigned slot,unsigned bits){rc_c64 *c=self;if(slot>=3)return 0;if(!(bits&RC_TAPE_QUERY))c->tape_bits[slot]=bits&15u;return c->tape_bits[slot];}
 const char *rc_c64_autoload(const void *self,unsigned slot,int *power){rc_c64 *c=(rc_c64 *)self;*power=1;if(slot>=3)return NULL;
     if(slot==2){
@@ -163,6 +164,7 @@ void rc_c64_media_save(const rc_c64 *c,rc_state_writer *w){
     rc_sw_u64(w,c->tape_audio_phase);rc_sw_u32(w,c->tape_audio_count);for(unsigned i=0;i<c->tape_audio_count;++i)rc_sw_u16(w,(uint16_t)c->tape_audio[(c->tape_audio_head+i)%48000]);rc_sw_end(w);
     rc_sw_begin(w,"DSET",0);rc_datasette_save(&c->tape,w);rc_sw_end(w);rc_sw_begin(w,"TRAP",0);rc_traps_save(&c->traps,w);rc_sw_end(w);
     rc_sw_begin(w,"1541",0);rc_c1541_save(&c->drive,w);rc_sw_end(w);rc_sw_begin(w,"IEC ",0);rc_iec_save(&c->iec,w);rc_sw_end(w);
+    rc_sw_begin(w,"FAST",0);rc_fastload_save(&c->fastload,w);rc_sw_end(w);
 }
 int rc_c64_media_load(rc_c64 *c,rc_state_reader *r){
     if(!rc_sr_chunk(r,"CMED",0))return 1;if(rc_sr_u32(r)!=2)return 0;
@@ -186,5 +188,6 @@ int rc_c64_media_load(rc_c64 *c,rc_state_reader *r){
     if(!rc_sr_chunk(r,"DSET",0)||!rc_datasette_load(&c->tape,r)||!rc_sr_chunk(r,"TRAP",0)||!rc_traps_load(&c->traps,r))return 0;
     if(c->media[2]&&!rc_c1541_mount(&c->drive,c->media[2],error,sizeof error))return 0;
     if(!rc_sr_chunk(r,"1541",0)||!rc_c1541_load(&c->drive,r)||!rc_sr_chunk(r,"IEC ",0)||!rc_iec_load(&c->iec,r))return 0;
+    if(!rc_sr_chunk(r,"FAST",0)||!rc_fastload_load(&c->fastload,r))return 0;
     return 1;
 }
