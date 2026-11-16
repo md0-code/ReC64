@@ -19,3 +19,17 @@ portable headers only. Host services live behind `host/host.h`.
 and ROM SHA-256 values, then tagged chunks and an `END ` marker. Unknown
 chunks are skipped. Memory is run-length packed. Each chip restores its own
 deadlines on load. The host writes the resulting buffer atomically.
+
+## NMOS 6510 / 6502
+
+`hw/mos6510.h` exposes the pins of one access and accepts one granted cycle.
+RDY repeats reads; writes continue. Boards implement AEC arbitration outside
+this chip. The same core runs a 6502 without the integrated port. It handles
+all 256 opcodes, NMOS decimal arithmetic, page-crossing and dummy accesses,
+stack/interrupt/reset cycles, JAM, and ROM fetch hooks. The unstable immediate
+opcodes use the documented $EE silicon constant. The six external port pins
+are supplied by the board. State includes every in-flight microcycle latch.
+
+`python tools/cpu_suite.py fetch` downloads the pinned NMOS vectors;
+`python tools/cpu_suite.py run` checks registers, RAM and every bus cycle.
+The JSON and lossless binary conversion stay under `work/cpu/`.

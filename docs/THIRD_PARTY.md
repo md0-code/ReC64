@@ -14,3 +14,7 @@ relicense them as ReC64 source. No firmware is committed to this repository.
 Each image's source, exact byte count and SHA-256 are recorded in the lock.
 The 1541 image contains both the 325302-01 lower half and 901229-05 upper half.
 The test screen does not require firmware.
+
+SingleStepTests/65x02 test vectors are MIT-licensed, downloaded only into
+`work/cpu/` at the commit in the source lock. Their full notice is downloaded
+with them. They are not program source and are not distributed with ReC64.
