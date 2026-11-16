@@ -33,3 +33,18 @@ are supplied by the board. State includes every in-flight microcycle latch.
 `python tools/cpu_suite.py fetch` downloads the pinned NMOS vectors;
 `python tools/cpu_suite.py run` checks registers, RAM and every bus cycle.
 The JSON and lossless binary conversion stay under `work/cpu/`.
+
+## CIA, PLA and keyboard
+
+The 6526/8521 has cycle-pipelined timers with CNT/cascade sources, force load,
+one shot, PB6/PB7 outputs, model-specific IRQ timing, FLAG, serial transfer,
+and external 50/60 Hz TOD pulses with BCD clock, alarm and read latching.
+The board ticks it before the phi2 register access and supplies port inputs.
+The timer smoke uses Lorenz's published twelve-cycle cascade sequence.
+
+The PLA evaluates the original 82S100 product equations. Input flags are the
+physical levels in the paper; output flags are asserted chip selections.
+The board supplies CPU/VIC ownership, address, cartridge and banking pins.
+The keyboard resolves the bidirectional 8x8 switch network to a fixed point,
+including ghost keys and both joysticks. RESTORE has its own output line.
+Each module includes its state interface and a focused state-round-trip check.
