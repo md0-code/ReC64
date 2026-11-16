@@ -191,3 +191,20 @@ Successful LOAD returns to F5A9, where the original CLC/LDX/LDY/RTS executes;
 SAVE returns to F68D. Negative callback results enter the original KERNAL
 error table. LOAD supports relocation and VERIFY status. Flags and counters
 are serialized, and a saved hook state cannot enable a different ROM hash.
+
+## C64 media wiring
+
+The board exposes tape, virtual program and disk-image slots. The current
+slot selects one Datasette path. PRG/P00, T64 entries and extracted D64 PRGs
+have an original-format synthesized tape available even while fast hooks
+are enabled. Turning hooks off therefore uses the same data through the
+actual KERNAL tape routines. TAP always bypasses the hooks. Type3 absolute
+headers preserve their address even with secondary address zero; auto-load
+selects RUN for BASIC or SYS for another start address.
+
+CPU P4 receives active-low sense, P5 controls the active-low motor, P3 sends
+write transitions, and Datasette read drives CIA1 FLAG. Tape samples are
+mixed with SID audio at the board's output rate. The board saves mounted
+media and synthetic data, selected entries, recorder phase, loading-hook
+state and pending tape audio along with the chips. A separate, fixed board
+fetch mask keeps tape-prompt handling available when fast hooks are off.

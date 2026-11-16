@@ -32,6 +32,11 @@ keyboard joystick; Shift+F11 swaps ports. Controllers, the 1351 mouse and
 paddles are configured on the Controllers page. Keyboard text follows your
 host layout.
 
+Ctrl+F1 opens Load for PRG/P00 files and D64/T64/TAP contents; dropped files
+use the same browser. Ctrl+F2 saves a PRG, creates a TAP recording target,
+or makes a blank D64. The Media page controls tape transport, fast loading
+and loading sounds. Alt+T switches tape sound.
+
 Create a portable Windows build in `dist/` with `./tools/build_dist.ps1`.
 Launch `dist/rec64.exe`; the native ARM64 copy is `dist/arm64/rec64.exe`.
 See [configuration and control](docs/CONFIGURATION.md) and
