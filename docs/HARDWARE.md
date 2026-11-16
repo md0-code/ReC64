@@ -376,6 +376,18 @@ counter position and BA state are serialized. The board supplies real bus
 cycles, combines IRQ/NMI lines, and presents a qualified freeze action as a
 physical button pulse. Cartridge code never accesses the board or CPU.
 
+`tools/verify_freezers.py` uses `work/p7/freezers/fixtures/{ar4,ar41,ar5,ar6,rr,fc3}.crt`;
+`--case` selects one firmware. The four Action Replay files are unchanged
+members of the pinned archive. FC3 wraps the pinned 64 KiB binary in CRT type
+3 with four 16 KiB CHIP packets. RR wraps the manufacturer's `RR38QROM` file
+from `Flashtool.zip` / `flashutil.d64` in type 36 with eight 8 KiB packets;
+that file is exactly 64 KiB with no two-byte PRG prefix. The script checks
+the original file or concatenated ROM payload hash before execution. No
+fixture is included in releases. FC3 enters BASIC with RUN/STOP held during
+startup, as specified in its original manual; its freezer menu uses ROM
+sprites and must be inspected in the captured image rather than extracted
+screen text. AR4/4.1 use an overlay strip and F5 horizontal option selector.
+
 ## EasyFlash
 
 EasyFlash has two independent Am29F040B arrays, each 512 KiB, and 256 bytes

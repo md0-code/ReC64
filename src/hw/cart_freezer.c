@@ -144,7 +144,16 @@ static void reset(void *ctx){
     f->enabled=(uint8_t)(f->hardware!=RC_CRT_ACTION_REPLAY4);
 }
 int rc_freezer_init(rc_freezer *f,rc_crt *crt){
-    if(!f || !crt || !rc_freezer_supported(crt->hardware))return 0;
+    if(!f || !crt || !rc_freezer_supported(crt->hardware) || !crt->image ||
+       !crt->image->data || !crt->chips || !crt->count)return 0;
+    unsigned banks=crt->hardware==RC_CRT_RETRO_REPLAY?8:4;
+    unsigned bytes=crt->hardware==RC_CRT_FINAL_III?16384:8192;
+    for(size_t i=0;i<crt->count;++i){
+        const rc_crt_chip *c=&crt->chips[i];
+        if(c->type==1 || c->type>2 || c->bank>=banks || c->address!=0x8000 ||
+           c->size!=bytes || c->offset>crt->image->size ||
+           c->size>crt->image->size-c->offset)return 0;
+    }
     memset(f,0,sizeof *f);f->crt=crt;f->hardware=crt->hardware;reset(f);return 1;
 }
 static void observe(void *ctx,uint16_t a,int wr,int effects,int vic){

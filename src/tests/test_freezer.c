@@ -20,6 +20,8 @@ int main(void){
     rc_media media={.data=data,.size=sizeof data};rc_crt_chip chips[8];
     for(unsigned b=0;b<8;++b)chips[b]=(rc_crt_chip){0,(uint16_t)b,0x8000,8192,b*8192};
     rc_crt crt={.image=&media,.chips=chips,.count=4,.hardware=RC_CRT_ACTION_REPLAY};
+    chips[0].type=1;chips[0].offset=SIZE_MAX;CHECK(!rc_freezer_init(&f,&crt));
+    chips[0].type=0;chips[0].offset=0;
     CHECK(rc_freezer_init(&f,&crt));CHECK(rd(0x8000,RC_CART_ROML)==0);
     wr(0xde00,RC_CART_IO1,0x18);CHECK(rd(0x8000,RC_CART_ROML)==0x60);
     wr(0xde00,RC_CART_IO1,0x20);wr(0x8000,0,0x51);CHECK(rd(0x8000,RC_CART_ROML)==0x51);
