@@ -210,3 +210,31 @@ state and pending tape audio along with the chips. A separate, fixed board
 fetch mask keeps tape-prompt handling available when fast hooks are off.
 The board presses PLAY at the known KERNAL prompt, rather than on motor
 changes during reset, so an idle auto-load cannot consume the tape first.
+
+## 1541 board and IEC
+
+The drive runs its unmodified 16 KiB DOS on the cycle-stepped NMOS 6502,
+with 2 KiB RAM and two independent MOS 6522 VIAs. Its board decodes memory
+and wires both VIA interrupts to IRQ. The serial VIA receives inverted
+DATA, CLK and ATN, and its PB4 attention acknowledgement combines with ATN
+through the schematic's XOR gate. Bus endpoints only pull lines low; the
+resolved levels are the AND of their released outputs. Device jumpers select
+8 through 11. The drive sees the physical reset line.
+
+The mechanism stores circular GCR tracks with a nominal 200 ms rotation.
+The 16 MHz clock divided by 13, 14, 15 or 16 gives the four recording zones.
+Serial read bits feed the shift register; ten consecutive ones reset byte
+framing and assert active-low SYNC. Byte-ready pulses reach VIA CA1 and,
+when CA2 enables them, the CPU's logical SO input. The ROM decodes the GCR
+and executes disk jobs itself. CB2 switches reading and writing; Port A
+supplies the next serial write byte. Motor, LED, phase changes and head
+bumps come from the actual VIA outputs. A head step preserves angular
+position across tracks.
+
+D64 sectors are converted to header and data blocks with their checksums,
+sync and gaps. Extended-image error codes change the corresponding physical
+header/data descriptor, checksum or disk ID while retaining valid GCR.
+Completed writes are decoded back into the mounted, borrowed image before
+the host flushes it. State includes both processors' interface state, drive
+RAM, bus levels, mechanism phase, raw tracks and an unfinished write. No
+firmware byte or custom-loader instruction is replaced.
