@@ -104,24 +104,14 @@ static int tape_slot(rc_harness *h) {
 
 /* --- the commands ------------------------------------------------------------------- */
 
-static int start_typing(rc_harness *h, const char *text) {
-    const rc_family *f = rc_machine_family(machine(h));
-    size_t n = 0;
-    for (const char *p = text; *p && n + 1 < sizeof h->typing; ++p) {
-        char ch = *p;
-        if (ch == '\\' && p[1]) {
-            ++p;
-            ch = *p == 'n' ? '\n' : *p == 'b' ? '\b' : *p == 't' ? '\t' : *p;
-        }
-        uint8_t key, shift;
-        if (!rc_family_typing(f, ch, &key, &shift)) return failf(h, "This keyboard cannot type '%c'", ch);
-        h->typing[n++] = ch;
-    }
-    if (!n) return DONE;
-    h->type_len = n;
-    h->type_at = 0;
-    h->type_phase = 0;
-    return STARTED;
+static int start_typing(rc_harness *h,const char *text){
+    const rc_family *f=rc_machine_family(machine(h));size_t n=0;
+    for(const char *p=text;*p&&n+1<sizeof h->typing;++p){char ch=*p;
+        if(ch=='\\'&&p[1]){++p;ch=*p=='n'?'\n':*p=='b'?'\b':*p=='t'?'\t':*p;}h->typing[n++]=ch;}
+    h->typing[n]=0;
+    if(h->host.text_input&&h->host.text_input(h->host.ctx,h->typing))return DONE;
+    for(size_t i=0;i<n;++i){uint8_t key,shift;if(!rc_family_typing(f,h->typing[i],&key,&shift))return failf(h,"This keyboard cannot type '%c'",h->typing[i]);}
+    if(!n)return DONE;h->type_len=n;h->type_at=0;h->type_phase=0;return STARTED;
 }
 
 /* The characters on the screen: the setup screen's while it is open, else the machine's. */
