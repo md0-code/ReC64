@@ -1,15 +1,17 @@
 #include "sidplayer.h"
+#include <ctype.h>
 #include <stdio.h>
 #include <string.h>
 void rc_sidplayer_init(rc_sidplayer *p){memset(p,0,sizeof *p);rc_tui_init(&p->tui);}
 int rc_sidplayer_open(rc_sidplayer *p,const uint8_t *data,size_t size,char *error,size_t cap){rc_sidfile f;if(!rc_sidfile_parse(&f,data,size,error,cap))return 0;p->file=f;p->active=1;return 1;}
 void rc_sidplayer_close(rc_sidplayer *p){p->active=0;memset(&p->file,0,sizeof p->file);}
+static int key_is(const char *a,const char *b){for(;*a&&*b;++a,++b)if(toupper((unsigned char)*a)!=*b)return 0;return !*a&&!*b;}
 unsigned rc_sidplayer_key(rc_sidplayer *p,const char *key,unsigned song,int paused){
     (void)paused;if(!p->active)return RC_SIDPLAYER_NONE;
-    if(!strcmp(key,"Escape"))return RC_SIDPLAYER_CLOSE;
-    if(!strcmp(key,"Space"))return RC_SIDPLAYER_PAUSE;
-    if(!strcmp(key,"Left")&&song)return RC_SIDPLAYER_PREVIOUS;
-    if(!strcmp(key,"Right")&&song+1<p->file.songs)return RC_SIDPLAYER_NEXT;
+    if(key_is(key,"ESCAPE"))return RC_SIDPLAYER_CLOSE;
+    if(key_is(key,"SPACE"))return RC_SIDPLAYER_PAUSE;
+    if(key_is(key,"LEFT")&&song)return RC_SIDPLAYER_PREVIOUS;
+    if(key_is(key,"RIGHT")&&song+1<p->file.songs)return RC_SIDPLAYER_NEXT;
     return RC_SIDPLAYER_NONE;
 }
 /* The TUI font has ASCII glyphs; keep the original metadata bytes in file,
@@ -20,7 +22,7 @@ void rc_sidplayer_draw(rc_sidplayer *p,unsigned song,uint64_t cycles,uint32_t hz
     metadata(t,4,"TITLE",p->file.title);metadata(t,7,"AUTHOR",p->file.author);metadata(t,10,"RELEASE",p->file.released);
     snprintf(line,sizeof line,"%s  SUB-TUNE %u / %u",p->file.rsid?"RSID":"PSID",song+1,p->file.songs);rc_tui_put(t,14,4,line,1,6);
     const uint64_t seconds=hz?cycles/hz:0;snprintf(line,sizeof line,"%02llu:%02llu  %s",(unsigned long long)(seconds/60),(unsigned long long)(seconds%60),paused?"PAUSED":"PLAYING");rc_tui_put(t,16,4,line,1,6);
-    rc_tui_put(t,19,4,"SPACE PAUSE   ESC CLOSE",14,6);if(p->file.songs>1)rc_tui_put(t,23,4,"LEFT / RIGHT  SUB-TUNE",14,6);
+    rc_tui_put(t,19,4,"SPACE PAUSE  ESC CLOSE/STOP",14,6);if(p->file.songs>1)rc_tui_put(t,23,4,"LEFT / RIGHT  SUB-TUNE",14,6);
     rc_tui_frame(t,palette,frame);
 }
 size_t rc_sidplayer_text(rc_sidplayer *p,char *out,size_t cap){return rc_tui_text(&p->tui,out,cap);}

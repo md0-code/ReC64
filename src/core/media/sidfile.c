@@ -12,7 +12,7 @@ static int driver_page(unsigned page){return (page>=4&&page<0xa0)||(page>=0xc0&&
 static int overlaps(unsigned a,unsigned n,unsigned b,unsigned m){return a<b+m&&b<a+n;}
 int rc_sidfile_parse(rc_sidfile *out,const uint8_t *d,size_t size,char *error,size_t cap){
     rc_sidfile s={0};
-    if(!d||size<0x76||(!memcmp(d,"PSID",4)?0:memcmp(d,"RSID",4)))return fail(error,cap,"Not a PSID or RSID file");
+    if(!d||size<0x76||(memcmp(d,"PSID",4)&&memcmp(d,"RSID",4)))return fail(error,cap,"Not a PSID or RSID file");
     s.rsid=(uint8_t)(d[0]=='R');s.version=be16(d+4);
     if(s.version<1||s.version>4||(s.rsid&&s.version<2))return fail(error,cap,"Unsupported SID version (PSID 1-4 / RSID 2-4 required)");
     const size_t header=s.version==1?0x76u:0x7cu;
@@ -63,7 +63,7 @@ int rc_sidfile_driver(const rc_sidfile *s,unsigned song,rc_sid_driver *out,char 
     bank(&d,rc_sidfile_bank(s->init));imm(&d,0xa9,song);imm(&d,0xa2,0);imm(&d,0xa0,0);absop(&d,0x20,s->init);
     /* Idle with the original KERNAL vector visible; the per-call bank can
      * expose a playback routine anywhere without replacing payload vectors. */
-    if(s->play)bank(&d,0x37);
+    if(s->play)bank(&d,overlaps(s->load,s->length,0x0314,2)?0x35:0x37);
     emit(&d,0x58);d.idle=(uint16_t)here(&d);absop(&d,0x4c,d.idle);
     d.irq=(uint16_t)here(&d);emit(&d,0x48);emit(&d,0x8a);emit(&d,0x48);emit(&d,0x98);emit(&d,0x48); /* save A X Y */
     if(!s->play){

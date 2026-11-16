@@ -6,6 +6,7 @@
 
 enum { SID_BOOT=1,SID_INIT,SID_RUNNING };
 static void word(uint8_t *ram,unsigned address,unsigned value){ram[address]=(uint8_t)value;ram[address+1]=(uint8_t)(value>>8);}
+static int payload_at(const rc_sidfile *f,unsigned address,unsigned count){return f->load<address+count&&address<f->load+f->length;}
 static void io(rc_c64 *c,unsigned address,unsigned value){rc_bus_write(&c->bus,(uint16_t)address,(uint8_t)value);}
 static int ready(const rc_c64 *c){
     /* Inspect the original screen's READY. prompt, never a guessed ROM PC. */
@@ -44,12 +45,13 @@ static void launch(rc_c64 *c){
         memcpy(c->bus.ram+d.address,d.bytes,d.length);
         /* A play=0 init can bank out KERNAL. Supply a normal IRQ shim only
          * where the payload has not supplied its own physical vectors. */
-        if(!f->play){
-            if(f->load+f->length<=0xfffe)word(c->bus.ram,0xfffe,d.irq);
-            if(f->load+f->length<=0xfffa)word(c->bus.ram,0xfffa,d.nmi);
+        if(!f->play||payload_at(f,0x0314,2)){
+            if(!payload_at(f,0xfffe,2))word(c->bus.ram,0xfffe,d.irq);
+            if(!payload_at(f,0xfffa,2))word(c->bus.ram,0xfffa,d.nmi);
         }
-        word(c->bus.ram,0x0314,d.indirect_irq);
-        c->cpu.pc=d.entry;c->cpu.p=RC_P_U|RC_P_I;c->cpu.s=0xff;c->cpu.a=c->cpu.x=c->cpu.y=0;rc_mos6510_start(&c->cpu);
+        if(!payload_at(f,0x0314,2))word(c->bus.ram,0x0314,d.indirect_irq);
+        c->cpu.pc=d.entry;c->cpu.p=RC_P_U|RC_P_I;c->cpu.s=0xff;c->cpu.a=c->cpu.x=c->cpu.y=0;
+        c->cpu.irq_pending=c->cpu.irq_poll=c->cpu.interrupt=c->cpu.resetting=0;rc_mos6510_start(&c->cpu);
     }else if(f->basic){
         const unsigned end=f->load+f->length;
         word(c->bus.ram,0x2b,f->load);word(c->bus.ram,0x2d,end);word(c->bus.ram,0x2f,end);word(c->bus.ram,0x31,end);

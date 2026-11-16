@@ -440,3 +440,29 @@ Read-only media inhibit flash writes while retaining banking and RAM writes.
 Snapshots retain both flash arrays, command phases, polling bits, pending
 timers, selected sectors, RAM, bank, control and jumper. The image's original
 firmware, including EAPI, changes only through guest flash operations.
+
+## SID files and player
+
+The HVSC PSID v1-v4 and RSID v2-v4 reader keeps the original payload separate
+from its header and optional little-endian load prefix. It checks the 64 KiB
+load boundary, song range, RSID reserved fields and init address, and driver
+relocation pages. Clock and chip hints select the corresponding C64 model.
+Multi-SID files and Compute! MUS files requiring an external player are refused.
+
+PSID runs an original small 6510 program in a free, permitted RAM page. The
+song accumulator is zero-based, each init/play call applies the specified
+6510 bank value, and the selected speed bit enables raster or CIA1 timer-A
+interrupts. CIA1 timer A runs at the documented 60 Hz startup latch for the
+chosen clock. A zero play address leaves playback to the tune's installed
+interrupt vector. The firmware and loaded payload are never patched.
+
+RSID waits for the unchanged firmware to reach READY, loads physical RAM,
+and calls init on the real CPU stack. A returning init resumes the firmware's
+input loop; a non-returning init continues its own code. RSID BASIC sets the
+BASIC text/end pointers and zero-based song byte at $030C, then types RUN
+through the original keyboard buffer. Interrupt timing remains guest code
+and actual hardware. Pause stops guest cycles; the displayed elapsed time is
+guest time. The SIDP state chunk retains the launch phase, song, pause,
+elapsed/boot cycles and returning-init register context; chip/CPU/RAM chunks
+retain the actual running driver and tune state. The player is a transient
+view rebuilt from the mounted file and saved machine status.
