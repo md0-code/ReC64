@@ -1,5 +1,6 @@
 /* Board media wiring, original KERNAL interfaces and format readers. */
 #include "c64_media.h"
+#include "c64_expansion.h"
 #include "../media/prg.h"
 #include "../media/t64.h"
 #include "../media/d64.h"
@@ -119,23 +120,27 @@ void rc_c64_media_tick(rc_c64 *c){
     }
 }
 int16_t rc_c64_tape_audio(rc_c64 *c){if(!c->tape_audio_count)return 0;const int16_t value=c->tape_audio[c->tape_audio_head];c->tape_audio_head=(c->tape_audio_head+1)%48000;--c->tape_audio_count;return value;}
-void rc_c64_media_release(rc_c64 *c){rc_c1541_close(&c->drive);rc_datasette_eject(&c->tape);rc_media_close(c->synthetic);c->synthetic=NULL;free(c->program);c->program=NULL;for(unsigned i=0;i<3;++i){if(c->media_owned[i])rc_media_close(c->media[i]);c->media[i]=NULL;c->media_owned[i]=0;}c->source=255;}
+void rc_c64_media_release(rc_c64 *c){rc_c1541_close(&c->drive);rc_datasette_eject(&c->tape);rc_media_close(c->synthetic);c->synthetic=NULL;free(c->program);c->program=NULL;for(unsigned i=0;i<4;++i){if(c->media_owned[i])rc_media_close(c->media[i]);c->media[i]=NULL;c->media_owned[i]=0;}c->source=255;}
 int rc_c64_insert(void *self,unsigned slot,rc_media *image,char *error,size_t cap){
-    rc_c64 *c=self;if(slot>=3||!image)return rc_image_error(error,cap,"Invalid media slot");
-    const char *formats[]={"tap,t64","prg,p00","d64"};if(!rc_media_extension_in(image->path,formats[slot]))return rc_image_error(error,cap,"Wrong image type for this slot");
+    rc_c64 *c=self;if(slot>=4||!image)return rc_image_error(error,cap,"Invalid media slot");
+    const char *formats[]={"tap,t64","prg,p00","d64","crt"};if(!rc_media_extension_in(image->path,formats[slot]))return rc_image_error(error,cap,"Wrong image type for this slot");
     rc_media *old=c->media[slot];const uint8_t owned=c->media_owned[slot];c->media[slot]=image;c->media_owned[slot]=0;
     int ok=1;if(slot==2){ok=rc_c1541_mount(&c->drive,image,error,cap);if(ok)ok=select_entry(c,slot,UINT32_MAX,error,cap);}
+    else if(slot==3){ok=rc_c64_cart_insert(c,image,error,cap);if(ok)c->selected[3]=UINT32_MAX;}
     else ok=select_entry(c,slot,UINT32_MAX,error,cap);
     if(!ok){c->media[slot]=old;c->media_owned[slot]=owned;return 0;}if(owned)rc_media_close(old);return 1;
 }
-rc_media *rc_c64_media(const void *self,unsigned slot){return slot<3?((const rc_c64 *)self)->media[slot]:NULL;}
-int rc_c64_eject(void *self,unsigned slot){rc_c64 *c=self;if(slot>=3||!c->media[slot])return 0;
+rc_media *rc_c64_media(const void *self,unsigned slot){return slot<4?((const rc_c64 *)self)->media[slot]:NULL;}
+int rc_c64_eject(void *self,unsigned slot){rc_c64 *c=self;if(slot>=4||!c->media[slot])return 0;
     if(slot==2&&!rc_c1541_mount(&c->drive,NULL,NULL,0))return 0;
+    if(slot==3&&!rc_c64_cart_insert(c,NULL,NULL,0))return 0;
     if(c->source==slot){rc_datasette_eject(&c->tape);rc_media_close(c->synthetic);c->synthetic=NULL;free(c->program);c->program=NULL;c->program_size=0;c->source=255;rc_c64_media_lines(c);}
     if(c->media_owned[slot])rc_media_close(c->media[slot]);c->media[slot]=NULL;c->media_owned[slot]=0;return 1;
 }
-int rc_c64_control(void *self,unsigned slot,unsigned command,uint32_t value){rc_c64 *c=self;if(slot>=3)return 0;
-    if(command==RC_MEDIA_FLUSH)return slot==2?rc_c1541_flush(&c->drive):1;
+int rc_c64_control(void *self,unsigned slot,unsigned command,uint32_t value){rc_c64 *c=self;if(slot>=4)return 0;
+    if(command==RC_MEDIA_FREEZE)return slot==3&&rc_c64_cart_freeze(c,value);
+    if(command==RC_MEDIA_FLUSH)return slot==2?rc_c1541_flush(&c->drive):slot==3?rc_c64_cart_flush(c):1;
+    if(slot==3)return 0;
     if(command==RC_MEDIA_SEEK&&c->media[slot]){char error[128];return select_entry(c,slot,value,error,sizeof error);}
     if((command==RC_MEDIA_NEXT||command==RC_MEDIA_PREVIOUS||command==RC_MEDIA_REWIND)&&c->media[slot]&&rc_media_extension_in(c->media[slot]->path,"t64")){
         rc_t64 t={0};char error[128];if(!rc_t64_open(&t,c->media[slot]->data,c->media[slot]->size,error,sizeof error))return 0;
@@ -160,9 +165,9 @@ const char *rc_c64_autoload(const void *self,unsigned slot,int *power){rc_c64 *c
 }
 struct rc_tape_deck *rc_c64_tape_deck(void *self,unsigned slot){rc_c64 *c=self;return (slot==0||slot==c->source)&&c->tape.deck.tape.image?&c->tape.deck:NULL;}
 void rc_c64_media_save(const rc_c64 *c,rc_state_writer *w){
-    rc_sw_begin(w,"CMED",0);rc_sw_u32(w,2);rc_sw_u8(w,c->source);rc_sw_u8(w,c->physical);
+    rc_sw_begin(w,"CMED",0);rc_sw_u32(w,3);rc_sw_u8(w,c->source);rc_sw_u8(w,c->physical);
     rc_sw_u64(w,c->drive_phase);rc_sw_bytes(w,c->disk_name,16);rc_sw_u16(w,c->disk_address);
-    for(unsigned i=0;i<3;++i){rc_sw_u32(w,c->selected[i]);rc_sw_u32(w,c->tape_bits[i]);rc_sw_u8(w,c->media[i]!=NULL);if(c->media[i])rc_image_save(c->media[i],w);}
+    for(unsigned i=0;i<4;++i){rc_sw_u32(w,c->selected[i]);rc_sw_u32(w,c->tape_bits[i]);rc_sw_u8(w,c->media[i]!=NULL);if(c->media[i])rc_image_save(c->media[i],w);}
     rc_sw_u16(w,c->program_address);rc_sw_bytes(w,c->program_name,16);rc_sw_packed(w,c->program,c->program_size);
     rc_sw_u8(w,c->synthetic!=NULL);if(c->synthetic)rc_image_save(c->synthetic,w);
     rc_sw_u64(w,c->tape_audio_phase);rc_sw_u32(w,c->tape_audio_count);for(unsigned i=0;i<c->tape_audio_count;++i)rc_sw_u16(w,(uint16_t)c->tape_audio[(c->tape_audio_head+i)%48000]);rc_sw_end(w);
@@ -172,12 +177,13 @@ void rc_c64_media_save(const rc_c64 *c,rc_state_writer *w){
     rc_sw_begin(w,"DSND",0);rc_drivesnd_save(&c->drive_sound,w);rc_sw_end(w);
 }
 int rc_c64_media_load(rc_c64 *c,rc_state_reader *r){
-    if(!rc_sr_chunk(r,"CMED",0))return 1;if(rc_sr_u32(r)!=2)return 0;
+    if(!rc_sr_chunk(r,"CMED",0))return 1;const unsigned version=rc_sr_u32(r);if(version<2||version>3)return 0;
     const unsigned source=rc_sr_u8(r),physical=rc_sr_u8(r);if((source>=3&&source!=255)||physical>1)return 0;
     c->drive_phase=rc_sr_u64(r);rc_sr_bytes(r,c->disk_name,16);c->disk_address=rc_sr_u16(r);if(c->drive_phase>=c->hz)return 0;
     if(!rc_c1541_mount(&c->drive,NULL,NULL,0))return 0;
+    if(!rc_c64_cart_insert(c,NULL,NULL,0))return 0;
     rc_datasette_eject(&c->tape);rc_media_close(c->synthetic);c->synthetic=NULL;free(c->program);c->program=NULL;c->program_size=0;
-    for(unsigned i=0;i<3;++i){c->selected[i]=rc_sr_u32(r);c->tape_bits[i]=rc_sr_u32(r);const unsigned present=rc_sr_u8(r);if(present>1||c->tape_bits[i]>15)return 0;
+    for(unsigned i=0;i<(version>=3?4u:3u);++i){c->selected[i]=rc_sr_u32(r);c->tape_bits[i]=rc_sr_u32(r);const unsigned present=rc_sr_u8(r);if(present>1||c->tape_bits[i]>15)return 0;
         rc_media *next=present?rc_image_load(r):NULL;if(present&&!next)return 0;rc_media *old=c->media[i];
         if(next&&old&&!c->media_owned[i]&&!strcmp(next->path,old->path)){free(old->data);*old=*next;free(next);next=old;}
         else {if(c->media_owned[i])rc_media_close(old);c->media_owned[i]=(uint8_t)(next!=NULL);}c->media[i]=next;

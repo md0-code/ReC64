@@ -57,7 +57,9 @@ add_library(rc_core STATIC core/config.c core/yamledit.c core/romdb.c core/state
     core/media.c core/font8x8.c core/palette.c core/keymap.c core/stick.c core/machine.c core/stub_machine.c core/machines/c64.c core/machines/c64_media.c hw/bus.c hw/sched.c hw/mos6510.c
     hw/traps.c hw/mouse1351.c hw/cia6526.c hw/pla.c hw/c64kbd.c hw/sid_resid.cpp hw/vic2.c hw/via6522.c
     core/media/image.c core/media/d64.c core/media/t64.c core/media/tap.c core/media/prg.c core/media/gcr.c
-    core/media/tapedeck.c hw/datasette.c hw/c1541.c hw/iec.c hw/fastload.c hw/drivesnd.c)
+    core/media/tapedeck.c hw/datasette.c hw/c1541.c hw/iec.c hw/fastload.c hw/drivesnd.c
+    core/media/crt.c hw/cart.c hw/cart_freezer.c hw/am29f040.c hw/easyflash.c
+    hw/reu.c hw/georam.c core/machines/c64_expansion.c)
 target_include_directories(rc_core PUBLIC core hw PRIVATE ${CMAKE_CURRENT_BINARY_DIR}/generated)
 target_link_libraries(rc_core PUBLIC rc_yaml rc_host rc_resid)
 if(NOT WIN32)
@@ -90,6 +92,11 @@ target_include_directories(rec64 PRIVATE ${CMAKE_CURRENT_BINARY_DIR}/generated)
 target_link_libraries(rec64 PRIVATE rc_platform)
 rc_set_warnings(rec64)
 enable_testing()
+foreach(part cart freezer easyflash expansions)
+    add_executable(test_${part} tests/test_${part}.c)
+    target_link_libraries(test_${part} PRIVATE rc_core)
+    rc_set_warnings(test_${part})
+endforeach()
 add_executable(test_foundation tests/test_foundation.c)
 target_link_libraries(test_foundation PRIVATE rc_core)
 rc_set_warnings(test_foundation)

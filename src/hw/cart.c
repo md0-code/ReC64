@@ -1,4 +1,5 @@
 #include "cart.h"
+#include <stdlib.h>
 #include <string.h>
 void rc_cart_init(rc_cart *c){memset(c,0,sizeof *c);c->ba=1;}
 void rc_cart_close(rc_cart *c){rc_crt_close(&c->crt);rc_cart_init(c);}
@@ -83,11 +84,10 @@ int rc_cart_load(rc_cart *c,rc_state_reader *r){
     if(rc_sr_u32(r)!=1)return 0;uint16_t bank=rc_sr_u16(r);uint8_t control=rc_sr_u8(r),locked=rc_sr_u8(r),ba=rc_sr_u8(r),external=rc_sr_u8(r);
     if(!rc_sr_ok(r)||locked>1||ba>1||external>1||external!=(c->ops!=NULL))return 0;
     rc_crt next;rc_crt_init(&next);if(!rc_crt_load(&next,r))return 0;
-    if(c->crt.image&&!c->crt.owned&&next.image&&c->crt.image->size!=next.image->size){rc_crt_close(&next);return 0;}
     if(external&&(!c->crt.image||!next.image||next.hardware!=c->crt.hardware||!c->ops->load||!c->ops->load(c->ctx,r))){rc_crt_close(&next);return 0;}
     if(c->crt.image&&!c->crt.owned&&next.image){
         rc_media *m=c->crt.image;
-        memcpy(m->data,next.image->data,m->size);m->dirty=next.image->dirty;rc_media_close(next.image);next.image=m;next.owned=0;
+        free(m->data);m->data=next.image->data;m->size=next.image->size;m->dirty=next.image->dirty;next.image->data=NULL;rc_media_close(next.image);next.image=m;next.owned=0;
     }
     rc_crt_close(&c->crt);c->crt=next;c->bank=bank;c->control=control;c->locked=locked;c->ba=ba;return rc_sr_ok(r);
 }

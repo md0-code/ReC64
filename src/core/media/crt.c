@@ -19,8 +19,8 @@ int rc_crt_attach(rc_crt *c,rc_media *m,char *error,size_t cap){
             (type==1?packet!=16&&packet!=16+bytes:packet<16+bytes))return rc_image_error(error,cap,"Invalid CRT CHIP length or type");
         ++count;at+=packet;
     }
-    if(!count)return rc_image_error(error,cap,"CRT has no CHIP packets");
-    rc_crt next;rc_crt_init(&next);next.chips=calloc(count,sizeof *next.chips);
+    if(!count&&be16(p+22)!=RC_CRT_EASYFLASH)return rc_image_error(error,cap,"CRT has no CHIP packets");
+    rc_crt next;rc_crt_init(&next);next.chips=calloc(count?count:1,sizeof *next.chips);
     if(!next.chips)return rc_image_error(error,cap,"Out of memory");
     next.image=m;next.count=count;next.version=be16(p+20);next.hardware=be16(p+22);next.exrom=p[24];next.game=p[25];memcpy(next.name,p+32,32);
     for(at=header,count=0;at<m->size;at+=be32(p+at+4),++count){rc_crt_chip *ch=&next.chips[count];ch->type=be16(p+at+8);ch->bank=be16(p+at+10);ch->address=be16(p+at+12);ch->size=be16(p+at+14);ch->offset=at+16;
@@ -51,9 +51,8 @@ int rc_crt_load(rc_crt *c,rc_state_reader *r){
     if(!rc_crt_attach(&next,m,error,sizeof error)){rc_media_close(m);return 0;}next.owned=1;
     if(c->image&&!c->owned){
         rc_media *borrowed=c->image;
-        /* The shell verified media identity; require matching storage geometry. */
-        if(borrowed->size!=m->size){rc_crt_close(&next);return 0;}
-        memcpy(borrowed->data,m->data,m->size);borrowed->dirty=m->dirty;
+        /* Sparse flash images may gain CHIP records after the snapshot. */
+        free(borrowed->data);borrowed->data=m->data;borrowed->size=m->size;borrowed->dirty=m->dirty;m->data=NULL;
         rc_media_close(m);next.image=borrowed;next.owned=0;
     }
     rc_crt_close(c);*c=next;return 1;

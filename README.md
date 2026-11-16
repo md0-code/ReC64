@@ -43,6 +43,11 @@ Ctrl+F5 saves the current snapshot slot; Ctrl+F6 restores it. The States
 page selects among ten slots per model and shows a preview of each save.
 Snapshot files (`.rcs`) also open through Ctrl+F1 or drag and drop.
 
+Load CRT cartridges through Ctrl+F1, drag and drop, or the Cartridge page.
+That page also selects REU or GeoRAM memory. Right Alt pressed and released
+alone activates supported freezer cartridges. EasyFlash writes are saved
+to the attached CRT image unless it is write protected.
+
 Create a portable Windows build in `dist/` with `./tools/build_dist.ps1`.
 Launch `dist/rec64.exe`; the native ARM64 copy is `dist/arm64/rec64.exe`.
 See [configuration and control](docs/CONFIGURATION.md) and

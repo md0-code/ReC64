@@ -7,6 +7,24 @@ to the configuration file. `src/app/rec64.yaml` is an example. Models are
 diagnostic model `test`. Run `python tools/fetch_roms.py` to obtain the pinned
 firmware. `machine.options.sid` accepts `default`, `6581`, or `8580`.
 
+The Cartridge page loads/ejects CRT images and selects expansion memory.
+Supported cartridges are Normal 8K/16K, Ultimax, Ocean, Magic Desk, Fun Play,
+Super Games, Dinamic, Zaxxon, System 3, Simons' BASIC, EasyFlash, Action
+Replay 4-6, Retro Replay and Final Cartridge III. Attaching or ejecting a
+cartridge resets the machine. Right Alt pressed and released alone triggers
+the physical freeze button; using AltGr with another key does not freeze.
+The page's Freeze row performs the same action. EasyFlash retains completed
+flash writes in the attached CRT, including banks omitted from a sparse
+image; write protection inhibits programming.
+
+`machine.options.reu` accepts `off`, `128k`, `256k`, `512k`, `1m`, `2m`,
+`4m`, `8m`, or `16m`. The first three sizes model the original 1700, 1764
+and 1750. Larger sizes use a contiguous 24-bit expansion. `georam` accepts
+`off`, `512k`, `1m`, `2m`, or `4m`. Selecting one expansion disables the
+other. Capacity changes restart on closing setup; snapshots retain RAM and
+transfers in progress. Cartridge images use `media.cartridge.image` and
+`media.cartridge.write_protect`.
+
 F12 opens setup. Left/Right or Tab changes page, Up/Down selects a row,
 Enter or +/- changes its value, and F12/Escape closes. Model and SID changes
 restart the machine on close; display and sound changes apply immediately.

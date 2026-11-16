@@ -20,8 +20,10 @@ void rc_bus_keyboard(rc_bus *b) {
         for(unsigned p=0;p<2;++p)rc_cia6526_port_input(b->cia[chip],p,pins[p]);}
 }
 uint8_t rc_bus_read(rc_bus *b,uint16_t a,int effects) {
-    if(a<2)return rc_mos6510_port_read(b->cpu,a);
+    if(b->expansion.observe)b->expansion.observe(b->expansion.ctx,a,0,effects,0);
+    if(a<2&&!b->dma)return rc_mos6510_port_read(b->cpu,a);
     const uint8_t selected=decode(b,a,1,effects);uint8_t data=b->vic_data;
+    const int driven=(selected&(RC_PLA_BASIC|RC_PLA_KERNAL|RC_PLA_CHAROM|RC_PLA_CASRAM))||((selected&RC_PLA_I_O)&&a<0xde00);
     if(selected&RC_PLA_BASIC)data=b->basic[a&8191u];
     else if(selected&RC_PLA_KERNAL)data=b->kernal[a&8191u];
     else if(selected&RC_PLA_CHAROM)data=b->chargen[a&4095u];
@@ -41,12 +43,15 @@ uint8_t rc_bus_read(rc_bus *b,uint16_t a,int effects) {
             else {rc_cia6526 copy=*c;copy.dev.host=NULL;inputs(b,(a>>8)&1u,copy.input);data=rc_cia6526_read(&copy,a&15u);}
         }
     } else if(selected&RC_PLA_CASRAM)data=b->ram[a];
+    if(b->expansion.read)data=b->expansion.read(b->expansion.ctx,a,selected,data,driven,effects,0);
     if(effects)b->data=data;return data;
 }
 void rc_bus_write(rc_bus *b,uint16_t a,uint8_t data) {
+    if(b->expansion.observe)b->expansion.observe(b->expansion.ctx,a,1,1,0);
     const uint8_t selected=decode(b,a,0,1);b->data=data;
-    if(a<2){rc_mos6510_port_write(b->cpu,a,data);b->ram[a]=b->vic_data;return;}
+    if(a<2&&!b->dma){rc_mos6510_port_write(b->cpu,a,data);b->ram[a]=b->vic_data;return;}
     if(selected&RC_PLA_CASRAM)b->ram[a]=data;
+    if(b->expansion.write)b->expansion.write(b->expansion.ctx,a,selected,data);
     if(!(selected&RC_PLA_I_O))return;
     if(a<0xd400)rc_vic2_write(b->vic,a&63u,data);
     else if(a<0xd800)rc_sid_write(b->sid,a&31u,data);
@@ -56,10 +61,17 @@ void rc_bus_write(rc_bus *b,uint16_t a,uint8_t data) {
 uint8_t rc_bus_vic(rc_bus *b,uint16_t address) {
     const uint8_t bank=rc_cia6526_port_output(b->cia[1],0)&3u;
     const uint16_t a=(uint16_t)((address&0x3fffu)|((bank^3u)<<14));
-    const uint16_t inputs=(uint16_t)(RC_PLA_AEC|RC_PLA_R__W|RC_PLA_GAME|RC_PLA_EXROM|
+    const uint16_t cart_address=(uint16_t)(0xe000u|(address&0x1fffu));
+    if(b->expansion.observe)b->expansion.observe(b->expansion.ctx,cart_address,0,1,1);
+    const uint16_t inputs=(uint16_t)(RC_PLA_AEC|RC_PLA_R__W|(b->game?RC_PLA_GAME:0)|(b->exrom?RC_PLA_EXROM:0)|
         (bank&1u?RC_PLA_VA14:0)|(address&0x2000u?RC_PLA_VA13:0)|(address&0x1000u?RC_PLA_VA12:0));
-    b->vic_data=rc_pla_decode(inputs)&RC_PLA_CHAROM?b->chargen[a&4095u]:b->ram[a];return b->vic_data;
+    const unsigned selected=rc_pla_decode(inputs);uint8_t data=b->vic_data;
+    if(selected&RC_PLA_CHAROM)data=b->chargen[a&4095u];else if(!(selected&RC_PLA_ROMH))data=b->ram[a];
+    if(b->expansion.read)data=b->expansion.read(b->expansion.ctx,cart_address,selected,data,!(selected&RC_PLA_ROMH),1,1);
+    b->vic_data=data;return data;
 }
+uint8_t rc_bus_dma_read(rc_bus *b,uint16_t a){b->dma=1;const uint8_t data=rc_bus_read(b,a,1);b->dma=0;return data;}
+void rc_bus_dma_write(rc_bus *b,uint16_t a,uint8_t v){b->dma=1;rc_bus_write(b,a,v);b->dma=0;}
 void rc_bus_save(const rc_bus *b,rc_state_writer *w){rc_sw_u32(w,2);rc_sw_u8(w,b->data);rc_sw_u8(w,b->vic_data);rc_sw_u8(w,b->game);rc_sw_u8(w,b->exrom);rc_sw_packed(w,b->ram,sizeof b->ram);rc_sw_packed(w,b->colour,sizeof b->colour);
     rc_sw_u16(w,b->pot_phase);rc_sw_bytes(w,b->pot_value,2);rc_sw_bytes(w,b->pot_charge,2);
     for(unsigned p=0;p<2;++p){rc_sw_u8(w,b->control_type[p]);rc_sw_bytes(w,b->paddle[p],2);rc_mouse1351_save(&b->mouse[p],w);}}
