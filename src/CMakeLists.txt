@@ -46,7 +46,8 @@ target_include_directories(rc_resid SYSTEM PUBLIC third_party/resid ${RC_RESID_G
 target_compile_definitions(rc_resid PRIVATE VERSION="1.0-pre2" _USE_MATH_DEFINES _CRT_SECURE_NO_WARNINGS)
 add_library(rc_core STATIC core/config.c core/yamledit.c core/romdb.c core/state.c
     core/media.c core/font8x8.c core/stick.c core/machine.c core/stub_machine.c hw/sched.c hw/mos6510.c
-    hw/cia6526.c hw/pla.c hw/c64kbd.c hw/sid_resid.cpp hw/vic2.c)
+    hw/cia6526.c hw/pla.c hw/c64kbd.c hw/sid_resid.cpp hw/vic2.c
+    core/media/image.c core/media/d64.c core/media/t64.c core/media/tap.c core/media/prg.c)
 target_include_directories(rc_core PUBLIC core hw PRIVATE ${CMAKE_CURRENT_BINARY_DIR}/generated)
 target_link_libraries(rc_core PUBLIC rc_yaml rc_host rc_resid)
 if(NOT WIN32)
@@ -101,3 +102,9 @@ target_link_libraries(test_vic2 PRIVATE rc_core rc_platform)
 target_compile_definitions(test_vic2 PRIVATE RC_WORK="${RC_WORK}")
 rc_set_warnings(test_vic2)
 add_test(NAME vic2 COMMAND test_vic2)
+add_executable(test_media tests/test_media.c)
+target_link_libraries(test_media PRIVATE rc_core)
+rc_set_warnings(test_media)
+foreach(format d64 t64 tap prg)
+    add_test(NAME media_${format} COMMAND test_media ${format})
+endforeach()

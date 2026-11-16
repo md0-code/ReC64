@@ -73,3 +73,22 @@ latches, raster IRQ and lightpen. The frame is the complete raw raster in
 time order (504x312 PAL or 520x263 NTSC); visible-area cropping belongs to
 the board/presenter. Every pipeline latch and the partially drawn frame
 are saved, including a save between the two bus phases.
+
+## Media containers
+
+The format modules parse and create byte images without host I/O. Their
+`image` member owns a portable media buffer, which the host may write through
+its existing media save path. Opened byte images are read-only; the caller
+sets their writable flag from the host file's permissions. Created images
+are writable. Close an image before opening a replacement.
+
+D64 supports 35/40/42 tracks and optional per-sector error bytes, bounded
+sector access and writes, directory enumeration and linked-file extraction.
+The blank-disk writer creates a standard 35-track DOS 2A BAM and directory.
+T64 reads the actual program entries, checks offsets, handles the common
+CONV64 $C3C6 end-address defect, and writes multi-entry containers. PRG/P00
+preserve the load address and PETSCII filename. TAP v0/v1 expose cycle-length
+pulses and a saved cursor. A v0 overflow is 2048 cycles; recording a pulse
+that v0 cannot represent upgrades the image losslessly to v1. Every format
+has a focused create/read/write/state check. Transport and KERNAL integration
+belong to the later loading packages.
