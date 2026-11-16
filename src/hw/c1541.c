@@ -4,7 +4,9 @@
 
 static unsigned current_track(const rc_c1541 *d){return (d->halftrack+1u)/2u;}
 static void serial_lines(rc_c1541 *d){
-    const uint8_t out=d->via[0].port[1]&d->via[0].ddr[1];
+    /* Input-configured VIA pins are pulled high at the inverter input;
+     * the 7406 remains connected and therefore pulls its IEC line low. */
+    const uint8_t out=rc_via6522_port_output(&d->via[0],1);
     const unsigned atn=!(d->iec_in&RC_IEC_ATN);
     unsigned pins=0xffu&~(1u|4u|0x80u|0x60u);
     if(!(d->iec_in&RC_IEC_DATA))pins|=1;
@@ -19,7 +21,7 @@ static void serial_lines(rc_c1541 *d){
     d->iec_out=(uint8_t)released;
 }
 static void mechanism_lines(rc_c1541 *d){
-    const uint8_t out=d->via[1].port[1]&d->via[1].ddr[1];
+    const uint8_t out=rc_via6522_port_output(&d->via[1],1);
     const unsigned phase=out&3u;
     if(phase!=d->phase){
         const unsigned before=current_track(d);
@@ -65,7 +67,7 @@ static void byte_ready(rc_c1541 *d){
     d->read_latch=d->read_shift;
     rc_via6522_port_input(&d->via[1],0,d->read_latch);
     /* CA2/SOE gates the active-low byte-ready pulse to CA1 and CPU SO. */
-    if(rc_via6522_control_output(&d->via[1],RC_VIA_CA2)==1){
+    if(rc_via6522_control_output(&d->via[1],RC_VIA_CA2)!=0){
         d->byte_ready=1;rc_via6522_input(&d->via[1],RC_VIA_CA1,0);rc_mos6510_input(&d->cpu,RC_CPU_SO,1);
     }
 }
@@ -94,7 +96,7 @@ void rc_c1541_tick(rc_c1541 *d){
     if(d->byte_ready){d->byte_ready=0;rc_via6522_input(&d->via[1],RC_VIA_CA1,1);rc_mos6510_input(&d->cpu,RC_CPU_SO,0);}
     rc_via6522_tick(&d->via[0]);rc_via6522_tick(&d->via[1]);
     if(d->motor){
-        const unsigned zone=(d->via[1].port[1]>>5)&3u;
+        const unsigned zone=(rc_via6522_port_output(&d->via[1],1)>>5)&3u;
         d->bit_ticks+=16;
         while(d->bit_ticks>=rc_gcr_bit_ticks(zone)){d->bit_ticks-=rc_gcr_bit_ticks(zone);disk_bit(d);}
     }
