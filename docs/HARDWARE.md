@@ -1,5 +1,15 @@
 # Hardware interfaces
 
+The status panel takes a read-only board status and composites four 8-pixel
+rows onto a copy of the indexed guest frame, retaining its palette, aspect
+and dimensions. Track display uses halftrack / 2 with odd halftracks shown
+as .5 (halftrack 2 is track 1). The LED is VIA2 PB3, independent of the
+motor at PB2. `TAPE POS` is the TAP data byte offset excluding its 20-byte
+header, rather than a mechanical reel counter; motor and PLAY/RECORD are
+independent transport values. The joystick field names the active keyboard
+joystick port, or OFF. The overlay owns no guest state and never advances,
+pauses or changes a device.
+
 `hw/hw.h` defines the chip operations (`read`, `write`, `event`, `reset`,
 `input`, `save`, `load`) and board callbacks. A chip never calls another chip
 or the bus. `rc_cpu_cycle` describes the address, byte, read/write direction
