@@ -39,7 +39,9 @@ void rc_datasette_motor(rc_datasette *s,int on){
 }
 void rc_datasette_write(rc_datasette *s,int high){
     high=high!=0;
-    if(s->motor&&s->deck.play&&s->deck.record&&s->write&&!high){
+    /* The C2N record/read path inverts polarity: a rising WRITE edge is
+     * the falling READ edge whose period a TAP stores. */
+    if(s->motor&&s->deck.play&&s->deck.record&&!s->write&&high){
         if(s->have_record_edge){char error[128];if(!rc_tap_append(&s->deck.tape,s->record_cycles,error,sizeof error))s->failed=1;else s->deck.tape.position=s->deck.tape.image->size;}
         s->record_cycles=0;s->have_record_edge=1;
     }
