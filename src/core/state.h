@@ -3,7 +3,7 @@
  *
  *   "REC64ST1"                      magic
  *   u32  format version             RC_STATE_VERSION
- *   str  family id, str model id    ("jet", "jet"); str is a u16 length and the bytes
+ *   str  family id, str model id    ("c64", "c64-pal"); str is a u16 length and the bytes
  *   u32  count, then count x 32     the SHA-256 of each ROM the machine runs
  *   chunks                          tag (4 bytes), u32 instance, u32 length, the bytes
  *   "END ", 0, 0

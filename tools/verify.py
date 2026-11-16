@@ -22,6 +22,8 @@ def main() -> int:
     parser.add_argument("--quick", action="store_true", help="the foundation has one short acceptance check")
     args = parser.parse_args()
     binary = args.binary.resolve()
+    version = subprocess.check_output([str(binary), "--version"], cwd=ROOT, text=True).strip()
+    assert version == (ROOT / "src/VERSION").read_text().strip(), (version, "stale executable")
     work = ROOT / "work/verify"
     work.mkdir(parents=True, exist_ok=True)
     script = work / "foundation.script"
@@ -37,7 +39,7 @@ def main() -> int:
                          cwd=ROOT, input="peek 0400\nrewind 1\nquit\n", text=True, capture_output=True, timeout=25)
     if run.returncode:
         raise RuntimeError(run.stderr or run.stdout)
-    replies = [json.loads(line) for line in run.stdout.splitlines() if line.startswith('{')]
+    replies = [json.loads(line) for line in run.stdout.splitlines()]
     assert len(replies) == 3 and replies[0]["ok"] and replies[0]["data"] == "42", replies
     assert not replies[1]["ok"] and replies[2]["ok"], replies
     before = (work / "before.png").read_bytes()

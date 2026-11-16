@@ -1,25 +1,7 @@
-/* rec64.yaml: the machine that runs, its options and media, and the
- * settings of the window. libyaml reads the YAML syntax; this module
- * enforces ReC64's schema (unknown keys, duplicates and bad values refused
- * with their line) and writes settings back through the comment-keeping
- * editor (yamledit.h). 
- *
- *   machine:
- *     model: test              a model of the registry (machine.h)
- *     options:                 the options of that model's family, by key
- *       interface1: on
- *   media:                     the media slots of the family, by key
- *     tape: { image: demo.tap, write_protect: false, fast: true, sound: true, autoload: true }
- *   video:   look, aspect, scale, filter, fullscreen, vsync
- *   sound:   enabled, volume
- *   controllers: joystick1, joystick2 (device), keys, keyboard_joystick
- *   ports:   the host end of each byte port of the model, by the key of its port table (serial, printer, user...)
- *   ui:      language, state_slot, setup_page
- *
- * The options and the media slots are the family's own (its tables), so
- * the reader checks them against the registry: a key the model does not
- * have and a value an option does not take are refused. */
-
+/* rec64.yaml: the machine and its table-defined options and media, plus
+ * host display, sound, controllers and UI settings. libyaml reads syntax;
+ * config.c rejects unknown or duplicate keys and yamledit preserves comments.
+ * Core code includes only portable interfaces, never SDL or OS headers. */
 #ifndef RC_CONFIG_H
 #define RC_CONFIG_H
 
@@ -121,8 +103,8 @@ typedef struct rc_config {
     char stick_keys[RC_CONFIG_STICK_KEYS][RC_CONFIG_KEY_NAME];
     int keyboard_joystick;
     /* ui */
-    uint32_t language;                  /* RC_LANG_*; the default is the host's own */
-    int state_slot;                     /* the slot F2 saves to and F3 loads from, 1 to 10 */
+    uint32_t language;                  /* RC_LANG_*; English only */
+    int state_slot;                     /* the slot Ctrl+F5 saves to and Ctrl+F6 loads from, 1 to 10 */
     char setup_page[RC_CONFIG_NAME];    /* the page of the setup screen that was open last ("media", "machine"...): F12 opens it again */
     /* the file this was read from (relative paths in it are relative to its folder) */
     char source[RC_CONFIG_PATH];

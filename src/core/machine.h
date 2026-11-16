@@ -1,22 +1,7 @@
-/* The machine interface: everything the shell (src/app, src/platform) knows
- * of an emulated computer (PLAN.md section 5).
- *
- * ReC64 runs many machines. Each is a board (core/machines/) that wires
- * chips together and describes itself in tables: its family and models,
- * the options of each model, its media slots, its ports, its keyboard and
- * how text is typed on it. The shell, the setup screen, the on-screen
- * keyboard and the harness read those tables, so a new machine adds no
- * shell code. The registry (rc_family_*) lists the families built in.
- *
- * The core has no SDL, no OS call and no wall clock. Guest time is a count
- * of periods of the board's master clock (rc_machine_clock): every run is
- * deterministic at any host speed, and the shell paces it to wall time (or,
- * headless, runs a frame period of guest time per frame).
- *
- * rc_machine_create builds the configured model; when one of its ROMs is
- * not in the index it builds the test machine (stub_machine.c) instead,
- * whose screen names what is missing. */
-
+/* Portable machine interface. Boards describe models, options, media and
+ * keyboards in tables, and implement machine_impl.h. The registry currently
+ * contains only the foundation test screen. Guest time is CPU cycles of the
+ * selected PAL or NTSC clock; the host handles pacing and presentation. */
 #ifndef RC_MACHINE_H
 #define RC_MACHINE_H
 
@@ -36,7 +21,7 @@ typedef struct rc_machine rc_machine;
 #define RC_MODELS_ALL 0xFFFFFFFFu       /* a `models` mask: every model of the family */
 #define RC_KEY_NONE 0xFFu
 
-/* A model: its id is what machine.model names ("test"), unique among all
+/* A model: its id is what machine.model names ("c64-pal"), unique among all
  * families. `roms` are the keys (romdb.h) of the ROMs it cannot run without,
  * NULL-terminated. `autoload` is what is typed to load from tape ("LOAD
  * \"\"\n" in the notation of the harness's `type`; NULL: nothing). */
@@ -206,10 +191,9 @@ void rc_machine_nmi(rc_machine *m);
 
 /* --- time ----------------------------------------------------------------------- */
 
-/* The master clock's rate in Hz: what a tick of guest time is. */
+/* The CPU clock's rate in Hz: what a tick of guest time is. */
 uint32_t rc_machine_clock(const rc_machine *m);
-/* Runs until guest time has advanced by at least `ticks` (the last
- * instruction may end past it). */
+/* Runs until guest time has advanced by at least `ticks` (cycle boundaries are exact). */
 rc_run_status rc_machine_run(rc_machine *m, uint64_t ticks);
 uint64_t rc_machine_time(const rc_machine *m);
 /* The video frame's period in ticks: the shell presents one frame per period. */
@@ -332,7 +316,7 @@ typedef void (*rc_trace_fn)(void *ctx, int kind, uint32_t address, uint32_t valu
 void rc_machine_set_trace(rc_machine *m, rc_trace_fn fn, void *ctx);
 /* A byte of the memory space as the CPU would read it (no side effects),
  * and one written as the CPU would write it. 0 when the machine has no
- * memory there (the test machine). */
+ * memory at that address. */
 int rc_machine_peek(rc_machine *m, uint32_t address, uint8_t *value);
 int rc_machine_poke(rc_machine *m, uint32_t address, uint8_t value);
 
