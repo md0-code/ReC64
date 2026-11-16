@@ -6,5 +6,5 @@ typedef struct rc_desktop_options {
     uint64_t frames;
     const char *script, *control, *screenshot, *audio;
 } rc_desktop_options;
-int rc_desktop_run(rc_machine *machine, const rc_config *config, const rc_desktop_options *options, char *error, size_t capacity);
+int rc_desktop_run(rc_machine **machine,rc_config *config,const rc_rom_index *roms,const rc_desktop_options *options,char *error,size_t capacity);
 #endif

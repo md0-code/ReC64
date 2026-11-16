@@ -167,6 +167,7 @@ static int execute(rc_harness *h, const char *line) {
     if (!strcmp(cmd, "type")) return start_typing(h, arg);
     if (!strcmp(cmd, "enter")) return start_typing(h, "\n");
     if (!strcmp(cmd, "key") || !strcmp(cmd, "release")) {
+        if(h->host.key){const int handled=h->host.key(h->host.ctx,arg,cmd[0]=='k');if(handled){if(handled>1)h->quit=1;return DONE;}}
         const int key = rc_family_key(rc_machine_family(m), arg);
         if (key < 0) return failf(h, "This keyboard has no key %s", arg);
         rc_machine_key(m, (unsigned)key, cmd[0] == 'k');

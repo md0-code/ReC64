@@ -2,8 +2,31 @@
 
 `--config FILE` reads a YAML configuration. Unknown keys, duplicate keys and
 invalid values are rejected with a line number. Paths inside it are relative
-to the configuration file. `src/app/rec64.yaml` is an example. The only current
-model is `test`, the firmware-free diagnostic screen.
+to the configuration file. `src/app/rec64.yaml` is an example. Models are
+`c64-pal` (default), `c64c-pal`, `c64-ntsc`, `c64c-ntsc`, and the firmware-free
+diagnostic model `test`. Run `python tools/fetch_roms.py` to obtain the pinned
+firmware. `machine.options.sid` accepts `default`, `6581`, or `8580`.
+
+F12 opens setup. Left/Right or Tab changes page, Up/Down selects a row,
+Enter or +/- changes its value, and F12/Escape closes. Model and SID changes
+restart the machine on close; display and sound changes apply immediately.
+Changes preserve comments in the selected YAML file. Unavailable controls
+are disabled.
+
+`video.look` is `crt` or `plain`; `video.filter` is `nearest` or `linear`.
+The Display page combines these into CRT, Nearest and Linear. Border is
+`full`, `minimal` (16 pixels around the picture), or `none`. Palette is
+`cjam` (Christopher Jam, default), `colodore`, `pepto-pal`, `pepto-ntsc`, or
+a `.vpl` filename in `palettes/` beside the configuration, working directory
+or executable. External palettes appear on the Display page automatically.
+VPL takes sixteen RGB hex triples with `#` comments (legacy dither columns
+are accepted). Full screen, integer scaling, pixel shape and vsync are live.
+
+Alt+F12 resets; Ctrl+F12 cold boots; Shift+F12 powers off. F10 switches
+100%/full speed (sound is muted at full speed), Pause stops/resumes, and
+Alt+Enter switches full screen. Print Screen writes a PNG under
+`work/screenshots/`. Setup and status messages use the same presenter as
+the machine, including its display filter.
 
 `--hidden` never opens a window or an audio device. Supply `--frames N`,
 `--script FILE` or `--control stdin|tcp:PORT`. TCP binds to localhost.
@@ -18,7 +41,8 @@ Supported commands are `wait SECONDS`, `frames N`, `type TEXT`, `enter`,
 `trace FILE|off`, `audio FILE.wav|off`, `reset [power]`, `speed full|normal`
 and `quit [STATUS]`. `type` accepts `\n`, `\b` and `\\` escapes. Ports are
 numbered from zero. Media commands report unavailable slots until the
-corresponding board hardware is implemented.
+corresponding devices are available. Host controls are accepted by `key`
+too, for example `key F12`, `key DOWN` and `key Ctrl+F12`.
 
 Control takes the same commands, one per line, and returns one JSON object
 per command: `{"ok":true,"frame":N}`, with `text` or `data` for a result,
@@ -28,4 +52,5 @@ Script errors stop the run with the failing line number and a nonzero status.
 The test screen echoes letters and digits, accepts two diagnostic joystick
 inputs and exposes 64 KiB of diagnostic RAM. Its bus trace is synthetic.
 States include time, RAM, keys, joystick input and audio timing. Model and ROM
-hash mismatches are rejected. These are foundation checks, not C64 execution.
+hash mismatches are rejected. The diagnostic trace is distinct from the
+C64 models' actual CPU bus trace.

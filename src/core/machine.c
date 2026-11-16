@@ -238,6 +238,7 @@ rc_run_status rc_machine_run(rc_machine *m, uint64_t ticks) { return m->impl->ru
 uint64_t rc_machine_time(const rc_machine *m) { return m->impl->time(m->self); }
 uint64_t rc_machine_frame_period(const rc_machine *m) { return m->impl->frame_period(m->self); }
 int rc_machine_frame(rc_machine *m, rc_frame *frame) { return m->impl->frame(m->self, frame); }
+void rc_machine_border(rc_machine *m,unsigned border){if(m->impl->border)m->impl->border(m->self,border);}
 size_t rc_machine_text(rc_machine *m, char *out, size_t capacity) {
     if (capacity) out[0] = 0;
     return m->impl->text ? m->impl->text(m->self, out, capacity) : 0;

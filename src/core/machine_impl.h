@@ -58,6 +58,7 @@ typedef struct rc_machine_impl {
     const char *(*autoload)(const void *self, unsigned slot, int *power_cycle);
     /* The tape slot's settings (rc_machine_tape_options); NULL: no tape recorder with any. */
     unsigned (*tape_options)(void *self, unsigned slot, unsigned bits);
+    void (*border)(void *self,unsigned mode);                   /* NULL: fixed frame */
 } rc_machine_impl;
 
 /* The families built in (machine.c lists them). */

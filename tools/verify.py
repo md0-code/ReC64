@@ -34,7 +34,7 @@ def main() -> int:
         "poke 0400 FF", "enter", "state load work/verify/stub.rcs", "expect REC64A",
         "shot work/verify/after.png", "text", ""
     ]), encoding="ascii")
-    run = subprocess.run([str(binary), "--hidden", "--script", str(script), "--control", "stdin",
+    run = subprocess.run([str(binary), "--model", "test", "--hidden", "--script", str(script), "--control", "stdin",
                           "--screenshot", str(work / "final.png")],
                          cwd=ROOT, input="peek 0400\nrewind 1\nquit\n", text=True, capture_output=True, timeout=25)
     if run.returncode:
@@ -52,7 +52,7 @@ def main() -> int:
     with socket.socket() as reservation:
         reservation.bind(("127.0.0.1", 0))
         port = reservation.getsockname()[1]
-    proc = subprocess.Popen([str(binary), "--hidden", "--control", f"tcp:{port}"], cwd=ROOT,
+    proc = subprocess.Popen([str(binary), "--model", "test", "--hidden", "--control", f"tcp:{port}"], cwd=ROOT,
                             stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
     try:
         deadline = time.monotonic() + 10

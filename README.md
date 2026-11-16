@@ -26,6 +26,8 @@ python tools/verify.py
 Use `--list-models` to see the model identifiers. The `test` model is a
 diagnostic screen that runs without firmware. The optional configuration is
 `rec64.yaml`; an example is in `src/app/`.
+F12 opens setup; Alt+F12 resets and Ctrl+F12 cold boots. F10 switches speed,
+Pause stops/resumes, and Alt+Enter switches full screen.
 See [configuration and control](docs/CONFIGURATION.md) and
 [component notices](docs/THIRD_PARTY.md). Licensed under
 [GPL-3.0-or-later](docs/LICENSE). Firmware retains its owners' rights.

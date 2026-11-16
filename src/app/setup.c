@@ -1,0 +1,64 @@
+#include "setup.h"
+#include "rc_version.h"
+#include <stdio.h>
+#include <string.h>
+static const char *const PAGES[]={"MACHINE","MEDIA","DISPLAY","SOUND","CONTROLLERS","CARTRIDGE","STATES","ABOUT"};
+static const char *const IDS[]={"machine","media","display","sound","controllers","cartridge","states","about"};
+void rc_setup_palette(rc_setup *s,const char *name){if(s->palette_count==40||strlen(name)>=128)return;for(unsigned i=0;i<s->palette_count;++i)if(!strcmp(s->palettes[i],name))return;snprintf(s->palettes[s->palette_count++],128,"%s",name);}
+void rc_setup_init(rc_setup *s,rc_config *c){memset(s,0,sizeof *s);s->config=c;s->crt_available=1;rc_tui_init(&s->tui);
+    for(unsigned i=0;i<8;++i)if(!strcmp(c->setup_page,IDS[i]))s->page=i;
+    rc_setup_palette(s,"cjam");rc_setup_palette(s,"colodore");rc_setup_palette(s,"pepto-pal");rc_setup_palette(s,"pepto-ntsc");rc_setup_palette(s,c->palette);
+}
+static unsigned rows(const rc_setup *s){return s->page==RC_SETUP_MACHINE?5u:s->page==RC_SETUP_DISPLAY?7u:s->page==RC_SETUP_SOUND?2u:0;}
+static unsigned cycle(unsigned value,unsigned count,int direction){return (value+count+(direction<0?count-1u:1u))%count;}
+unsigned rc_setup_key(rc_setup *s,const char *key){
+    if(!strcmp(key,"ESCAPE")||!strcmp(key,"F12")){s->active=0;return RC_SETUP_CLOSE;}
+    if(!strcmp(key,"LEFT")||!strcmp(key,"RIGHT")||!strcmp(key,"TAB")){
+        s->page=cycle(s->page,8,!strcmp(key,"LEFT")?-1:1);s->row=0;snprintf(s->config->setup_page,sizeof s->config->setup_page,"%s",IDS[s->page]);return 0;}
+    const unsigned count=rows(s);if(!count)return 0;
+    if(!strcmp(key,"UP")||!strcmp(key,"DOWN")){s->row=cycle(s->row,count,!strcmp(key,"UP")?-1:1);return 0;}
+    int direction=1;
+    if(!strcmp(key,"-")||!strcmp(key,"PAGEDOWN"))direction=-1;
+    else if(strcmp(key,"RETURN")&&strcmp(key,"ENTER")&&strcmp(key,"+")&&strcmp(key,"=")&&strcmp(key,"PAGEUP"))return 0;
+    rc_config *c=s->config;
+    if(s->page==RC_SETUP_MACHINE){
+        if(!s->row){const rc_family *f=rc_family_at(0);unsigned model=0;const rc_family *old=rc_family_of_model(c->model,&model);if(old!=f)model=direction>0?f->model_count-1u:0;model=cycle(model,f->model_count,direction);snprintf(c->model,sizeof c->model,"%s",f->models[model].id);return RC_SETUP_RESTART;}
+        if(s->row==1){if(!strcmp(c->model,"test"))return 0;const char *current=rc_config_option_value(c,"sid");unsigned v=current&&!strcmp(current,"6581")?1u:current&&!strcmp(current,"8580")?2u:0u;const char *values[]={"default","6581","8580"};rc_config_set_option(c,"sid",values[cycle(v,3,direction)]);return RC_SETUP_RESTART;}
+        return s->row==2?RC_SETUP_RESET:s->row==3?RC_SETUP_COLD:RC_SETUP_OFF;
+    }
+    if(s->page==RC_SETUP_DISPLAY){
+        switch(s->row){
+        case 0:{unsigned v=c->look==RC_LOOK_CRT?0u:c->filter==RC_CONFIG_FILTER_LINEAR?2u:1u;v=cycle(v,3,direction);if(!v&&!s->crt_available)v=direction>0?1u:2u;c->look=v?RC_LOOK_PLAIN:RC_LOOK_CRT;c->filter=v==2?RC_CONFIG_FILTER_LINEAR:RC_CONFIG_FILTER_NEAREST;break;}
+        case 1:{unsigned v=0;for(unsigned i=0;i<s->palette_count;++i)if(!strcmp(c->palette,s->palettes[i]))v=i;snprintf(c->palette,sizeof c->palette,"%s",s->palettes[cycle(v,s->palette_count,direction)]);break;}
+        case 2:c->border=cycle(c->border,3,direction);break;
+        case 3:c->fullscreen=!c->fullscreen;break;
+        case 4:c->scale=!c->scale;break;
+        case 5:c->aspect=!c->aspect;break;
+        case 6:c->vsync=!c->vsync;break;
+        }return RC_SETUP_VIDEO;
+    }
+    if(s->page==RC_SETUP_SOUND){if(!s->row)c->sound=!c->sound;else c->volume=(int)cycle((unsigned)c->volume/5,21,direction)*5;return RC_SETUP_AUDIO;}
+    return 0;
+}
+static void row(rc_setup *s,unsigned index,const char *label,const char *value,int enabled){char line[37];snprintf(line,sizeof line," %-16.16s %15.15s ",label,value);const int selected=enabled&&s->row==index;
+    rc_tui_put(&s->tui,6+index*2,2,line,(uint8_t)(enabled?(selected?6:14):12),(uint8_t)(selected?14:6));}
+void rc_setup_draw(rc_setup *s,const uint32_t palette[16],rc_frame *f){
+    rc_tui_clear(&s->tui);char title[40];snprintf(title,sizeof title,"REC64  %s",PAGES[s->page]);rc_tui_bar(&s->tui,0,title);
+    char page[40];snprintf(page,sizeof page,"< %s %u/8 >",PAGES[s->page],s->page+1);rc_tui_put(&s->tui,2,2,page,14,6);rc_tui_box(&s->tui,4,1,17,38);
+    rc_config *c=s->config;
+    switch(s->page){
+    case RC_SETUP_MACHINE:{unsigned model=0;const rc_family *family=rc_family_of_model(c->model,&model);const char *sid=rc_config_option_value(c,"sid");
+        row(s,0,"MODEL",family?family->models[model].name:c->model,1);row(s,1,"SID",sid?sid:"DEFAULT",strcmp(c->model,"test")!=0);row(s,2,"RESET","ENTER",1);row(s,3,"COLD BOOT","ENTER",1);row(s,4,"POWER OFF","ENTER",1);break;}
+    case RC_SETUP_DISPLAY:row(s,0,"FILTER",c->look==RC_LOOK_CRT?"CRT":c->filter==RC_CONFIG_FILTER_LINEAR?"LINEAR":"NEAREST",1);
+        row(s,1,"COLOURS",c->palette,1);row(s,2,"BORDER",c->border==RC_BORDER_NONE?"NONE":c->border==RC_BORDER_MINIMAL?"MINIMAL":"FULL",1);
+        row(s,3,"FULL SCREEN",c->fullscreen?"ON":"OFF",1);row(s,4,"SCALE",c->scale?"INTEGER":"FIT",1);row(s,5,"PIXEL SHAPE",c->aspect?"SQUARE":"ORIGINAL",1);row(s,6,"VSYNC",c->vsync?"ON":"OFF",1);break;
+    case RC_SETUP_SOUND:{char volume[16];snprintf(volume,sizeof volume,"%d%%",c->volume);row(s,0,"SOUND",c->sound?"ON":"OFF",1);row(s,1,"VOLUME",volume,1);break;}
+    case RC_SETUP_MEDIA:row(s,0,"LOAD IMAGE","UNAVAILABLE",0);row(s,1,"SAVE","UNAVAILABLE",0);rc_tui_put(&s->tui,12,3,"NO MEDIA DEVICE AVAILABLE",12,6);break;
+    case RC_SETUP_CONTROLLERS:row(s,0,"PORT 1","UNAVAILABLE",0);row(s,1,"PORT 2","UNAVAILABLE",0);break;
+    case RC_SETUP_CARTRIDGE:row(s,0,"CARTRIDGE","NONE",0);rc_tui_put(&s->tui,12,3,"NO CARTRIDGE ATTACHED",12,6);break;
+    case RC_SETUP_STATES:row(s,0,"SNAPSHOT SLOTS","UNAVAILABLE",0);break;
+    case RC_SETUP_ABOUT:rc_tui_put(&s->tui,7,3,"REC64 " RC_VERSION,14,6);rc_tui_put(&s->tui,10,3,"COMMODORE 64 / C64C",14,6);rc_tui_put(&s->tui,12,3,"GPL-3.0-OR-LATER",14,6);rc_tui_put(&s->tui,15,3,"SID: RESID 1.0-PRE2",14,6);break;
+    }
+    rc_tui_put(&s->tui,22,1,"LEFT/RIGHT PAGE  UP/DOWN SELECT",14,6);rc_tui_put(&s->tui,24,1,"ENTER CHANGE  +/- VALUE  F12 CLOSE",14,6);
+    rc_tui_frame(&s->tui,palette,f);
+}

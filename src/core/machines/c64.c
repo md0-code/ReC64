@@ -1,5 +1,6 @@
 /* Board wiring from Commodore's schematics, PRG and Mapping the C64. */
 #include "c64.h"
+#include "../palette.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -92,11 +93,15 @@ static void nmi(void *self){rc_c64 *c=self;rc_mos6510_input(&c->cpu,RC_CPU_NMI,1
 static uint32_t clock_hz(const void *self){return ((const rc_c64 *)self)->hz;}
 static uint64_t time_now(const void *self){return ((const rc_c64 *)self)->sched.now;}
 static uint64_t period(const void *self){const rc_c64 *c=self;return rc_vic2_cycles_per_line(&c->vic)*rc_vic2_height(&c->vic);}
-static const uint32_t COLORS[16]={0,0xffffff,0x880000,0xaaffee,0xcc44cc,0x00cc55,0xaa,0xeeee77,0xdd8855,0x664400,0xff7777,0x333333,0x777777,0xaaff66,0x0088ff,0xbbbbbb};
+static void border(void *self,unsigned mode){if(mode<=RC_BORDER_NONE)((rc_c64 *)self)->border=(uint8_t)mode;}
 static int frame(void *self,rc_frame *f){
-    rc_c64 *c=self;const unsigned w=384,h=c->model>=2?247u:272u,raw=rc_vic2_width(&c->vic),top=c->model>=2?8u:16u;
-    for(unsigned y=0;y<h;++y)for(unsigned x=0;x<w;++x)c->frame[y*w+x]=c->vic.pixels[(y+top)*raw+(x+100u)%raw];
-    *f=(rc_frame){w,h,w,c->frame,COLORS,16,4,3,c->vic.frames};return 1;
+    rc_c64 *c=self;const unsigned full_h=c->model>=2?247u:272u,raw=rc_vic2_width(&c->vic),raw_h=rc_vic2_height(&c->vic);
+    const unsigned w=c->border==RC_BORDER_NONE?320u:c->border==RC_BORDER_MINIMAL?352u:384u;
+    const unsigned h=c->border==RC_BORDER_NONE?200u:c->border==RC_BORDER_MINIMAL?232u:full_h;
+    const unsigned top=c->border==RC_BORDER_NONE?51u:c->border==RC_BORDER_MINIMAL?35u:c->model>=2?8u:16u;
+    const unsigned left=c->border==RC_BORDER_NONE?132u:c->border==RC_BORDER_MINIMAL?116u:100u;
+    for(unsigned y=0;y<h;++y)for(unsigned x=0;x<w;++x)c->frame[y*w+x]=c->vic.pixels[((y+top)%raw_h)*raw+(x+left)%raw];
+    *f=(rc_frame){w,h,w,c->frame,rc_palette_builtin("cjam"),16,w*4u*full_h,h*3u*384u,c->vic.frames};return 1;
 }
 static size_t text(void *self,char *out,size_t capacity){
     rc_c64 *c=self;size_t n=0;const unsigned bank=(rc_cia6526_port_output(&c->cia[1],0)^3u)&3u;
@@ -138,7 +143,7 @@ static int load(void *self,rc_state_reader *r){
 static const rc_machine_impl IMPL={.destroy=destroy,.description=description,.error=error_text,.reset=reset,.nmi=nmi,
     .clock=clock_hz,.run=rc_c64_run,.time=time_now,.frame_period=period,.frame=frame,.text=text,
     .audio_rate=audio_rate,.audio_pull=audio_pull,.key=key,.joystick=joystick,.activity=activity,
-    .save=save,.load=load,.rom_hashes=hashes,.set_trace=trace,.peek=peek,.poke=poke};
+    .save=save,.load=load,.rom_hashes=hashes,.set_trace=trace,.peek=peek,.poke=poke,.border=border};
 const rc_family rc_c64_family={.id="c64",.name="Commodore 64",.models=MODELS,.model_count=4,
     .options=OPTIONS,.option_count=sizeof OPTIONS/sizeof OPTIONS[0],.keys=KEYS,.key_count=65,
     .typing=TYPING,.typing_count=sizeof TYPING/sizeof TYPING[0],.joysticks=2,.impl=&IMPL,.create=rc_c64_create};

@@ -93,6 +93,8 @@ typedef struct rc_config {
     unsigned port_count;
     /* video */
     uint32_t look, aspect, scale, filter;
+    uint32_t border;                    /* full, sixteen-pixel margin, no border */
+    char palette[128];                  /* built-in id or .vpl name in palettes/ */
     int fullscreen, vsync;
     /* sound: enabled is the mute switch, volume 0 to 100 percent */
     int sound, volume;
@@ -111,7 +113,7 @@ typedef struct rc_config {
 } rc_config;
 
 /* The model a new configuration runs. */
-#define RC_CONFIG_DEFAULT_MODEL "test"
+#define RC_CONFIG_DEFAULT_MODEL "c64-pal"
 
 void rc_config_defaults(rc_config *config);
 /* Reads a file; 0 with a message naming the line when it is not valid. */

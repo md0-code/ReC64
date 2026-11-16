@@ -215,6 +215,8 @@ typedef struct rc_frame {
 } rc_frame;
 /* 0 when the machine shows nothing (the frame is then black). */
 int rc_machine_frame(rc_machine *m, rc_frame *frame);
+enum {RC_BORDER_FULL,RC_BORDER_MINIMAL,RC_BORDER_NONE};
+void rc_machine_border(rc_machine *m,unsigned border);
 /* The frame as ARGB8888 into out (width x height). */
 void rc_frame_argb(const rc_frame *frame, uint32_t *out);
 /* The characters on the screen as text, a line of the screen a line of the

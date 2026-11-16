@@ -7,8 +7,8 @@
 static void usage(void) {
     puts("ReC64 " RC_VERSION "\nUsage: rec64 [--hidden] [--frames N] [--script FILE] [--control stdin|tcp:PORT]\n"
         "             [--screenshot FILE.png] [--audio FILE.wav] [--config FILE]\n"
-        "             [--model test] [--list-models] [--list-roms] [--version]\n"
-        "The foundation test screen runs without firmware.");
+        "             [--model MODEL] [--list-models] [--list-roms] [--version]\n"
+        "F12 opens setup. The test model runs without firmware.");
 }
 int main(int argc,char **argv) {
     rc_desktop_options o={0};const char *yaml=NULL,*model=NULL;int list_roms=0;
@@ -78,7 +78,7 @@ int main(int argc,char **argv) {
         rc_rom_index_free(&roms);return 0;
     }
     rc_machine *m=rc_machine_create(&c,&roms,error,sizeof error);
-    const int status=m?rc_desktop_run(m,&c,&o,error,sizeof error):1;
+    const int status=m?rc_desktop_run(&m,&c,&roms,&o,error,sizeof error):1;
     if(status) fprintf(stderr,"%s\n",error);
     rc_machine_destroy(m);rc_rom_index_free(&roms);return status;
 }

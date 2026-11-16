@@ -54,7 +54,7 @@ add_library(rc_resid STATIC third_party/resid/sid.cc third_party/resid/voice.cc
 target_include_directories(rc_resid SYSTEM PUBLIC third_party/resid ${RC_RESID_GENERATED})
 target_compile_definitions(rc_resid PRIVATE VERSION="1.0-pre2" _USE_MATH_DEFINES _CRT_SECURE_NO_WARNINGS)
 add_library(rc_core STATIC core/config.c core/yamledit.c core/romdb.c core/state.c
-    core/media.c core/font8x8.c core/stick.c core/machine.c core/stub_machine.c core/machines/c64.c hw/bus.c hw/sched.c hw/mos6510.c
+    core/media.c core/font8x8.c core/palette.c core/stick.c core/machine.c core/stub_machine.c core/machines/c64.c hw/bus.c hw/sched.c hw/mos6510.c
     hw/cia6526.c hw/pla.c hw/c64kbd.c hw/sid_resid.cpp hw/vic2.c hw/via6522.c
     core/media/image.c core/media/d64.c core/media/t64.c core/media/tap.c core/media/prg.c core/media/gcr.c)
 target_include_directories(rc_core PUBLIC core hw PRIVATE ${CMAKE_CURRENT_BINARY_DIR}/generated)
@@ -79,7 +79,7 @@ add_library(rc_platform STATIC platform/video.c platform/audio.c platform/audios
 target_link_libraries(rc_platform PUBLIC rc_shell SDL2::SDL2-static)
 target_compile_definitions(rc_platform PUBLIC SDL_MAIN_HANDLED)
 rc_set_warnings(rc_platform)
-add_executable(rec64 app/rec64.c app/desktop.c)
+add_executable(rec64 app/rec64.c app/desktop.c app/tui.c app/setup.c)
 target_include_directories(rec64 PRIVATE ${CMAKE_CURRENT_BINARY_DIR}/generated)
 target_link_libraries(rec64 PRIVATE rc_platform)
 rc_set_warnings(rec64)
@@ -95,7 +95,7 @@ add_executable(cpu_test tests/cpu_test.c)
 target_link_libraries(cpu_test PRIVATE rc_core)
 rc_set_warnings(cpu_test)
 add_test(NAME cpu COMMAND cpu_test)
-foreach(part cia pla keyboard via gcr)
+foreach(part cia pla keyboard via gcr palette)
     add_executable(test_${part} tests/test_${part}.c)
     target_link_libraries(test_${part} PRIVATE rc_core)
     rc_set_warnings(test_${part})

@@ -1,9 +1,11 @@
 # Copy to rec64.yaml beside the program, or select with --config FILE.
 machine:
-  model: test
+  model: c64-pal
 video:
   look: crt
   filter: nearest
+  palette: cjam
+  border: full
   aspect: original
   scale: fit
   fullscreen: false

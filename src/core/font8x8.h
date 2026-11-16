@@ -1,4 +1,4 @@
-/* Diagnostic 8x8 glyphs and shell drawing marks. */
+/* Original Commodore-style 8x8 glyphs and shell drawing marks. */
 #ifndef RC_FONT8X8_H
 #define RC_FONT8X8_H
 
