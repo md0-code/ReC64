@@ -44,6 +44,11 @@ static int block_at(rc_tap *t,uint8_t *out,size_t length){
     /* End marker is not another byte: long followed by short. */
     return next_class(t)==LONG&&next_class(t)==SHORT;
 }
+static int skip_block(rc_tap *t,size_t length){
+    uint32_t pulse;
+    for(size_t i=0;i<(length+1)*20+2;++i)if(!rc_tap_next(t,&pulse))return 0;
+    return 1;
+}
 typedef struct program {rc_tape_entry entry;size_t body;uint8_t header[192];} program;
 static int next_program(rc_tap *t,program *p){
     unsigned copy;size_t pilot;
@@ -56,8 +61,10 @@ static int next_program(rc_tap *t,program *p){
         p->entry.address=(uint16_t)address;p->entry.length=length;p->entry.offset=pilot;
         *t=candidate;
         /* A first-copy header is followed by the repeated header. */
-        if(copy){rc_tap repeat=*t;uint8_t other[192];unsigned repeat_copy;size_t repeat_pilot;
-            if(sync_at(&repeat,&repeat_copy,&repeat_pilot)&&!repeat_copy&&block_at(&repeat,other,sizeof other)&&!memcmp(other,header,sizeof other))*t=repeat;
+        if(copy){rc_tap repeat=*t;unsigned repeat_copy;size_t repeat_pilot;
+            /* The first header is already verified. Its redundant copy may
+             * itself have parity/checksum errors without losing the file. */
+            if(sync_at(&repeat,&repeat_copy,&repeat_pilot)&&!repeat_copy&&skip_block(&repeat,sizeof header))*t=repeat;
         }
         p->body=t->position;p->entry.end_offset=t->position;return 1;
     }

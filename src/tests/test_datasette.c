@@ -13,6 +13,11 @@ int main(void){
     char error[128];rc_tap tap={0};CHECK(rc_tape_encode(&tap,0x0801,bytes,sizeof bytes,name,error,sizeof error));
     rc_tape_entry entry;size_t count=0;CHECK(rc_tape_directory(&tap,&entry,1,&count,error,sizeof error)&&count==1&&entry.address==0x0801&&entry.length==sizeof bytes&&entry.offset==20&&!memcmp(entry.name,name,16));
     uint8_t *decoded=NULL;size_t length=0;uint16_t address;CHECK(rc_tape_extract(&tap,0,&address,&decoded,&length,error,sizeof error)&&address==0x0801&&length==sizeof bytes&&!memcmp(bytes,decoded,length));free(decoded);
+    /* A bad checksum/parity in the redundant header must not discard a
+     * verified first header and two good copies of the program data. */
+    const size_t repeat_checksum=20+0x6a00+(9+192+1)*20+2+0x4f+(9+192)*20;
+    uint8_t *pair=tap.image->data+repeat_checksum+2;const uint8_t a=pair[0],b=pair[1];pair[0]=b;pair[1]=a;
+    CHECK(rc_tape_extract(&tap,0,&address,&decoded,&length,error,sizeof error)&&length==sizeof bytes&&!memcmp(bytes,decoded,length));free(decoded);pair[0]=a;pair[1]=b;
     FILE *file=fopen(RC_WORK "/tests/p4c-synthetic.tap","wb");CHECK(file);CHECK(fwrite(tap.image->data,1,tap.image->size,file)==tap.image->size);fclose(file);
     host h={0};rc_hw_host callbacks={.ctx=&h,.line=line};rc_datasette s;rc_datasette_init(&s,&callbacks);CHECK(rc_datasette_insert(&s,tap.image,error,sizeof error));CHECK(rc_datasette_sense(&s));
     CHECK(rc_datasette_control(&s,RC_MEDIA_PLAY,0)&&!rc_datasette_sense(&s));rc_datasette_motor(&s,1);tick(&s,&h,384);CHECK(h.falls==1&&h.first_period==384&&!rc_datasette_read(&s));tick(&s,&h,192);CHECK(rc_datasette_read(&s));
