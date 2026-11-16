@@ -269,3 +269,35 @@ A bus line held low without further transitions becomes idle after that
 interval. Motor stop adds no independent delay. The shell applies the user's
 fast-loading switch and returns to 100% when the request ends. The guest
 cycle, IEC counter, last-edge cycle and activity flags are saved exactly.
+
+## Cartridge port and game mappers
+
+The board supplies already-decoded ROML, ROMH, I/O1 and I/O2 selects and
+the bus value. GAME, EXROM, NMI, IRQ and DMA are physical levels (one is
+released); BA is a board input. Optional access observation occurs before
+PLA decode, and a drive mask distinguishes floating I/O from driven data
+when an expansion shares I/O2. CPU peeks cause no register or bank changes.
+VIC ROMH reads in Ultimax use the same file-backed cartridge bytes.
+
+CRT CHIP packets retain their bank, address, type and offset within the
+borrowed media. Normal 8K, 16K and Ultimax images follow their physical
+header lines. Ocean selects banks with the low six data bits; 256K files
+describe the low and high ROM halves using the respective 0-15 and 16-31
+CHIP bank numbers. Fun Play preserves literal CRT bank patterns (00, 08,
+10 through 39), and 86 disconnects it. Magic Desk uses seven bank bits and
+bit 7 disconnects EXROM. System 3 selects by I/O1 write address and resets
+the bank on an I/O1 read; Dinamic selects by I/O1 read address. Zaxxon
+mirrors its low 4K and latches its high bank from the low-ROM read address.
+
+The current hardware programming manual resolves two errors in the 2007
+CRT notes: Simons' BASIC selects 16K on a DE00 write and 8K on a DE00 read,
+independent of data; Super Games bit 2 controls the joined GAME/EXROM lines
+and bit 3 locks its bank register until reset. No firmware is patched.
+Snapshots retain the image bytes, dirty flag, bank, control, lock and BA;
+restoring a borrowed image retains its media pointer and write protection.
+External flash/freezer mappers bind callbacks to this same port.
+
+`test_cart --fixtures <existing-work-folder>` emits original test CRTs that
+display each mapper's name. Their firmware and Ultimax glyphs are original
+test material, not real cartridge software; mapper-register and exact-state
+checks accompany these startup fixtures.
