@@ -578,7 +578,7 @@ int rc_desktop_run(rc_machine **owner,rc_config *c,const rc_rom_index *roms,cons
         if(o->control) { host.control_read=control_read;host.control_write=control_write; }
         h=rc_harness_open(&host,o->script,error,cap);if(!h) goto done;
     }
-    rc_pace pace;rc_pace_init(&pace,SDL_GetPerformanceFrequency(),rc_machine_clock(m),100);
+    m=d.machine;rc_pace pace;rc_pace_init(&pace,SDL_GetPerformanceFrequency(),rc_machine_clock(m),100);
     rc_pace_reset(&pace,SDL_GetPerformanceCounter(),rc_machine_time(m));
     for(;;) {
         if(d.quit||(o->frames&&d.frames>=o->frames)) { status=0;break; }

@@ -29,9 +29,32 @@ def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--workspace', type=Path, default=ROOT)
     parser.add_argument('--binary', type=Path)
+    parser.add_argument('--startup-only', action='store_true', help='saved SID startup and model-restart controls only')
     args = parser.parse_args(); root = args.workspace.resolve()
     binary = (args.binary or root/'work/build-x64/rec64.exe').resolve()
     work = root/'work/p8/sid-acceptance'; work.mkdir(parents=True, exist_ok=True)
+    if args.startup_only:
+        target=root/'work/p8/release';target.mkdir(parents=True,exist_ok=True)
+        config=target/'startup.yaml'
+        config.write_text(json.dumps({'machine':{'model':'c64c-ntsc'},'media':{'sid':{'image':(root/'work/p8/Commando.sid').as_posix(),'write_protect':True}},'ui':{'setup_page':'machine'}}))
+        commands=['frames 200','expect COMMANDO','key Right','frames 200','expect SUB-TUNE 2 / 19',
+                  'key Space','expect PAUSED','key F12','key Return','key F12','frames 1',
+                  'expect SUB-TUNE 2 / 19','expect PAUSED','key Space','frames 200','expect PLAYING',
+                  'key F9','expect REC64 STATUS','key Shift+F9','expect ON-SCREEN KEYBOARD OPEN',
+                  'key Right','key Pad A','frames 3','release Pad A',
+                  'shot '+(target/'player-overlays.png').as_posix(),'key Shift+F9','key Escape',
+                  'frames 200','expect READY.','quit']
+        run=subprocess.run([str(binary),'--hidden','--config',str(config),'--control','stdin'],cwd=target,
+                           input='\n'.join(commands)+'\n',text=True,capture_output=True,timeout=45)
+        (target/'commands.jsonl').write_text(run.stdout)
+        assert run.returncode==0,(run.returncode,run.stderr)
+        replies=[json.loads(line) for line in run.stdout.splitlines()]
+        assert len(replies)==len(commands),(len(replies),run.stderr)
+        assert all(reply['ok'] for reply in replies),[(cmd,reply) for cmd,reply in zip(commands,replies) if not reply['ok']]
+        (target/'result.json').write_text(json.dumps({'status':'passed','checks':['saved SID startup from empty cwd',
+            'subsong and pause across model restart','live player overlays','controller accept/release','close to BASIC']},indent=2)+'\n')
+        print('SID startup, model restart and packaged overlay controls passed')
+        return
     pins = json.loads((root/'docs/sources.lock.json').read_text())['sid_test_tunes']
     for name in ('Commando.sid', 'Arkanoid.sid'):
         source = root/'work/p8'/name
