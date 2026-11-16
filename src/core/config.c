@@ -638,7 +638,7 @@ static int check_machine(reader *r, const rc_config *c) {
         r->line = r->media_line[i];
         const int s = rc_family_media(f, c->media[i].key);
         if (s < 0 || !(f->media[s].models >> model & 1u)) return failf(r, "media: %s has no slot %s", f->models[model].name, c->media[i].key);
-        if (f->media[s].kind != RC_MEDIA_TAPE && f->media[s].kind != RC_MEDIA_PROGRAM && !(c->media[i].sound && c->media[i].autoload && c->media[i].full_speed && c->media[i].traps &&
+        if (strcmp(f->id,"c64") && f->media[s].kind != RC_MEDIA_TAPE && f->media[s].kind != RC_MEDIA_PROGRAM && !(c->media[i].sound && c->media[i].autoload && c->media[i].full_speed && c->media[i].traps &&
                                                    c->media[i].save_traps && c->media[i].accelerate))
             return failf(r, "media.%s: sound, autoload, full_speed, traps, save_traps and accelerate are a tape's settings", c->media[i].key);
     }
