@@ -94,3 +94,18 @@ inputs and exposes 64 KiB of diagnostic RAM. Its bus trace is synthetic.
 States include time, RAM, keys, joystick input and audio timing. Model and ROM
 hash mismatches are rejected. The diagnostic trace is distinct from the
 C64 models' actual CPU bus trace.
+
+The Load browser uses Up/Down, Page Up/Down and Home/End to select a file;
+Enter opens a folder or image directory and loads the selected program.
+Left or Backspace goes back; at a filesystem root it lists the available
+roots. Typing a name searches the list. Space inserts a selected image
+without loading it. D64 and T64 contents show their PETSCII names, including
+reverse controls; TAP contents use the machine's tape-directory decoder.
+Cartridge, SID and snapshot files stay disabled until their handlers exist.
+
+The Save page uses Tab to switch between the file list, format and name.
+Left/Right or Enter changes the format (PRG program, TAP recording or blank
+D64). In the name field, Ctrl+A selects the whole name for replacement,
+Backspace edits it and Enter saves. The matching extension is added when
+missing. Replacing an existing file requires a separate Enter/Y confirmation;
+Escape/N cancels that replacement. Escape closes either browser.
