@@ -15,7 +15,7 @@ _Static_assert(sizeof(uint16_t) == 2 && sizeof(uint32_t) == 4 && sizeof(uint64_t
 /* --- the registry ---------------------------------------------------------------------- */
 
 /* Every family built in; a board's package adds its own here. */
-static const rc_family *const FAMILIES[] = {&rc_stub_family};
+static const rc_family *const FAMILIES[] = {&rc_c64_family,&rc_stub_family};
 #define FAMILY_COUNT (sizeof FAMILIES / sizeof FAMILIES[0])
 #define MAX_HASHES 8u
 
@@ -54,6 +54,7 @@ static int same_name(const char *a, const char *b) {
     return *a == *b;
 }
 int rc_family_key(const rc_family *f, const char *name) {
+    if(!strcmp(f->id,"c64")&&same_name(name,"ENTER"))name="RETURN";
     for (unsigned i = 0; i < f->key_count; ++i) if (same_name(f->keys[i].name, name)) return (int)i;
     return -1;
 }

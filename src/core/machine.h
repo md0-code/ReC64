@@ -1,6 +1,6 @@
 /* Portable machine interface. Boards describe models, options, media and
  * keyboards in tables, and implement machine_impl.h. The registry currently
- * contains only the foundation test screen. Guest time is CPU cycles of the
+ * contains the C64 family and a firmware-free diagnostic board. Guest time is CPU cycles of the
  * selected PAL or NTSC clock; the host handles pacing and presentation. */
 #ifndef RC_MACHINE_H
 #define RC_MACHINE_H

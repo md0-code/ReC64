@@ -19,7 +19,7 @@ static int timer_tick(rc_cia_timer *t,int source) {
     t->load_pipe=(uint8_t)(((t->load_pipe<<1)|t->force)&3u);t->force=0;
     if(t->count_pipe&4u)--t->counter;
     const int underflow=t->counter==0&&(t->count_pipe&2u);
-    if(underflow){t->pulse=1;t->toggle^=1;if((t->control&8u)||t->oneshot)t->control&=0xfeu;}
+    if(underflow){t->pulse=1;t->toggle^=1;if((t->control&8u)||t->oneshot){t->control&=0xfeu;t->count_pipe&=0xfeu;}}
     if(underflow||(t->load_pipe&2u)){t->counter=t->latch;t->count_pipe&=0xfdu;}
     t->oneshot=(uint8_t)(t->control&8u);return underflow;
 }
@@ -31,7 +31,7 @@ static void serial_clock(rc_cia6526 *c) {
     line(c,RC_CIA_CNT_OUT,c->cnt_out);
 }
 void rc_cia6526_tick(rc_cia6526 *c) {
-    ++c->cycles;if(c->irq_delay){c->irq_delay=0;if(c->icr&c->mask)set_irq(c,1);}
+    ++c->cycles;if(c->irq_delay&&!--c->irq_delay){if(c->icr&c->mask)set_irq(c,1);}
     if(!c->pc){c->pc=1;line(c,RC_CIA_PC_OUT,1);}
     const int a=timer_tick(&c->timer[0],c->timer[0].control&32u?c->cnt_edge:1);
     const unsigned mode=c->timer[1].control>>5&3u;
@@ -66,13 +66,14 @@ void rc_cia6526_write(rc_cia6526 *c,unsigned reg,uint8_t value) {
     reg&=15u;
     if(reg<2){c->port[reg]=value;if(reg==1){c->pc=0;line(c,RC_CIA_PC_OUT,0);}outputs(c);return;}
     if(reg<4){c->ddr[reg-2]=value;outputs(c);return;}
-    if(reg<8){rc_cia_timer *t=&c->timer[(reg-4)/2];if(reg&1u){t->latch=(uint16_t)((t->latch&255u)|value<<8);if(!(t->control&1u))t->counter=t->latch;}else t->latch=(uint16_t)((t->latch&0xff00u)|value);return;}
+    if(reg<8){rc_cia_timer *t=&c->timer[(reg-4)/2];if(reg&1u){t->latch=(uint16_t)((t->latch&255u)|value<<8);if(!(t->control&1u)||t->pulse)t->counter=t->latch;}else {t->latch=(uint16_t)((t->latch&0xff00u)|value);if(t->pulse)t->counter=t->latch;}return;}
     if(reg<12){static const uint8_t MASK[4]={15,127,127,159};value&=MASK[reg-8];
         if(c->timer[1].control&128u)c->alarm[reg-8]=value;
         else {if(reg==11){c->tod_stopped=1;if((value&31u)==0x12)value^=128u;}c->tod[reg-8]=value;if(reg==8){c->tod_stopped=0;c->tod_divider=0;}}
         alarm(c);return;}
     if(reg==12){c->sdr=value;if(c->timer[0].control&64u)c->serial_pending=1;return;}
-    if(reg==13){if(value&128u)c->mask|=value&31u;else c->mask&=(uint8_t)~(value&31u);if(c->icr&c->mask)request(c,0);return;}
+    if(reg==13){if(value&128u)c->mask|=value&31u;else c->mask&=(uint8_t)~(value&31u);
+        if(c->icr&c->mask){if(c->model==RC_CIA_6526&&!c->irq)c->irq_delay=2;else request(c,0);}return;}
     rc_cia_timer *t=&c->timer[reg-14];const uint8_t old=t->control;
     if((value&1u)&&!(old&1u))t->toggle=1;
     if(value&16u)t->force=1;t->control=value&0xefu;

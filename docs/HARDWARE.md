@@ -34,6 +34,36 @@ are supplied by the board. State includes every in-flight microcycle latch.
 `python tools/cpu_suite.py run` checks registers, RAM and every bus cycle.
 The JSON and lossless binary conversion stay under `work/cpu/`.
 
+IRQ recognition uses the penultimate-cycle sample, with the early sample
+of a taken branch that stays on its page. NMI keeps its edge latch and
+instruction-boundary decision separately, including BRK/IRQ vector hijacks.
+These latches are part of snapshots. Lorenz's unmodified interrupt programs
+exercise them on the running board, alongside the CIA register interactions.
+
+## C64 board
+
+The C64/C64C PAL/NTSC models wire the 6510, VIC-II, two CIAs, PLA, keyboard
+and reSID to the published address/data/control signals. The PLA selects
+ROM, RAM and mirrored I/O; writes reach the RAM under ROM. CIA2 selects the
+VIC bank, including the character-ROM windows. BA stops CPU reads before
+AEC gives phi2 to VIC DMA. Colour RAM drives only the low four data bits.
+The keyboard and joystick switches resolve in both scan directions.
+The unconnected cassette input and retained 6510 port charge are modelled
+on the board. TOD derives from the model's mains rate with integer timing.
+
+The unchanged KERNAL and BASIC perform RAM initialization and reach READY.
+RESET retains RAM and the VIC raster (VIC has no reset pin); a cold boot
+initializes the complete board. States contain the clock, memories, bus
+latches, port charge and every chip, with model/ROM checks at the machine
+interface. Text readback uses screen RAM in the selected VIC bank. Debug
+reads leave chip flags and saved state unchanged.
+
+`python tools/lorenz_suite.py fetch` retrieves the public-domain programs
+from SVN revision 46417. `run` executes the C64 programs on the booted board
+without ROM traps; `run --new-cia` selects the corresponding CIA variants.
+Disk-change prompts are transport helpers. Results and downloaded binaries
+stay in `work/testprogs/`.
+
 ## CIA, PLA and keyboard
 
 The 6526/8521 has cycle-pipelined timers with CNT/cascade sources, force load,

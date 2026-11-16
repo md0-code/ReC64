@@ -125,6 +125,7 @@ static void access(rc_mos6510 *c,unsigned op) {
 void rc_mos6510_start(rc_mos6510 *c) {c->step=0;read_at(c,c->pc);c->pins.sync=1;}
 static void finish(rc_mos6510 *c) {
     c->irq_pending=c->irq_poll;
+    c->nmi_take=c->nmi_pending;
     rc_mos6510_start(c);
 }
 static void operand(rc_mos6510 *c,unsigned op,uint8_t v) {
@@ -137,9 +138,8 @@ static int branch(const rc_mos6510 *c,unsigned op) {
     case BCC:return !(c->p&RC_P_C);case BCS:return c->p&RC_P_C;case BNE:return !(c->p&RC_P_Z);default:return c->p&RC_P_Z;}
 }
 static uint16_t stack(const rc_mos6510 *c) {return (uint16_t)(0x100u|c->s);}
-void rc_mos6510_clock(rc_mos6510 *c,uint8_t v,int ready) {
+static void clock_cycle(rc_mos6510 *c,uint8_t v,int ready) {
     ++c->cycles;if(!ready&&!c->pins.write)return;
-    c->irq_poll=(uint8_t)(c->irq&&!(c->p&RC_P_I));
     if(c->resetting) {
         switch(c->resetting++) {
         case 1:read_at(c,c->pc);break;case 2:read_at(c,stack(c));break;
@@ -157,8 +157,9 @@ void rc_mos6510_clock(rc_mos6510 *c,uint8_t v,int ready) {
     }
     if(c->step==0) {
         c->interrupt=0;
-        if(c->nmi_pending||c->irq_pending) {
-            c->interrupt=1;c->vector=c->nmi_pending?0xfffa:0xfffe;c->nmi_pending=0;c->opcode=0;
+        if(c->nmi_take||c->irq_pending) {
+            c->interrupt=1;c->vector=c->nmi_take?0xfffa:0xfffe;
+            if(c->nmi_take)c->nmi_pending=c->nmi_take=0;c->opcode=0;
         } else {
             if(rc_cpu_watched(c->hooks,c->pc)&&c->hooks->before_fetch&&c->hooks->before_fetch(c->hooks->ctx,c->pc)) {rc_mos6510_start(c);return;}
             c->opcode=v;
@@ -173,7 +174,7 @@ void rc_mos6510_clock(rc_mos6510 *c,uint8_t v,int ready) {
         case 1:if(!c->interrupt)++c->pc;write_at(c,stack(c),(uint8_t)(c->pc>>8));break;
         case 2:--c->s;write_at(c,stack(c),(uint8_t)c->pc);break;
         case 3:--c->s;write_at(c,stack(c),(uint8_t)((c->p|RC_P_U)|(c->interrupt?0:RC_P_B)));if(c->interrupt)c->pins.data&=(uint8_t)~RC_P_B;break;
-        case 4:--c->s;c->p|=RC_P_I;if(c->nmi_pending){c->vector=0xfffa;c->nmi_pending=0;}else if(!c->interrupt)c->vector=0xfffe;read_at(c,c->vector);break;
+        case 4:--c->s;c->p|=RC_P_I;if(c->nmi_pending){c->vector=0xfffa;c->nmi_pending=c->nmi_take=0;}else if(!c->interrupt)c->vector=0xfffe;read_at(c,c->vector);break;
         case 5:c->lo=v;read_at(c,(uint16_t)(c->vector+1));break;
         default:c->pc=(uint16_t)(v<<8|c->lo);c->irq_pending=0;rc_mos6510_start(c);break;
         }return;
@@ -211,9 +212,9 @@ void rc_mos6510_clock(rc_mos6510 *c,uint8_t v,int ready) {
     case ACC:c->a=modify(c,op,c->a);finish(c);break;
     case IMM:++c->pc;execute(c,op,v);finish(c);break;
     case REL:
-        if(c->step==1){++c->pc;c->address=(uint16_t)(c->pc+(v<128?(int)v:(int)v-256));if(!branch(c,op))finish(c);else {c->step=2;read_at(c,c->pc);}}
+        if(c->step==1){++c->pc;c->address=(uint16_t)(c->pc+(v<128?(int)v:(int)v-256));c->irq_pending=c->irq_poll;c->nmi_take=c->nmi_pending;if(!branch(c,op))finish(c);else {c->step=2;read_at(c,c->pc);}}
         else if(c->step==2&&((c->pc^c->address)&0xff00u)){read_at(c,(uint16_t)((c->pc&0xff00u)|(c->address&255u)));c->step=3;}
-        else {c->pc=c->address;finish(c);}break;
+        else {c->pc=c->address;if(c->step==2)rc_mos6510_start(c);else finish(c);}break;
     case ZP:case ZX:case ZY:
         if(c->step==1){c->address=v;++c->pc;c->step=2;if(mode==ZP)access(c,op);else read_at(c,v);}
         else if(c->step==2&&mode!=ZP){c->address=(uint8_t)(c->address+(mode==ZX?c->x:c->y));c->step=3;access(c,op);}
@@ -247,12 +248,20 @@ void rc_mos6510_clock(rc_mos6510 *c,uint8_t v,int ready) {
     }
 }
 void rc_mos6510_reset(rc_mos6510 *c) {
-    c->resetting=1;c->jammed=0;c->nmi_pending=c->irq_pending=0;read_at(c,c->pc);
+    c->resetting=1;c->jammed=0;c->nmi_pending=c->nmi_edge=c->nmi_take=c->irq_pending=0;read_at(c,c->pc);
+}
+void rc_mos6510_clock(rc_mos6510 *c,uint8_t value,int ready) {
+    /* An instruction recognizes the IRQ sample from its penultimate cycle.
+     * Sample I before the current operation (CLI/SEI/PLP retain NMOS timing). */
+    const uint8_t sample=(uint8_t)(c->irq&&!(c->p&RC_P_I));
+    const int held=!ready&&!c->pins.write;clock_cycle(c,value,ready);
+    if(!held)c->irq_poll=sample;
+    if(c->nmi_edge){c->nmi_pending=1;c->nmi_edge=0;}
 }
 void rc_mos6510_input(rc_mos6510 *c,int pin,int level) {
     level=level!=0;
     if(pin==RC_CPU_IRQ)c->irq=(uint8_t)level;
-    else if(pin==RC_CPU_NMI){if(level&&!c->nmi)c->nmi_pending=1;c->nmi=(uint8_t)level;}
+    else if(pin==RC_CPU_NMI){if(level&&!c->nmi)c->nmi_edge=1;c->nmi=(uint8_t)level;}
     else if(pin==RC_CPU_RESET&&level)rc_mos6510_reset(c);
     else if(pin==RC_CPU_SO){if(level&&!c->so)c->p|=RC_P_V;c->so=(uint8_t)level;}
 }
@@ -281,6 +290,8 @@ void rc_mos6510_save(const rc_mos6510 *c,rc_state_writer *w) {
     B(irq);B(nmi);B(nmi_pending);B(irq_pending);B(irq_poll);B(resetting);B(interrupt);B(jammed);B(so);
 #undef B
     rc_sw_u16(w,c->pins.address);rc_sw_u8(w,c->pins.data);rc_sw_u8(w,c->pins.write);rc_sw_u8(w,c->pins.sync);
+    rc_sw_u8(w,c->nmi_edge);
+    rc_sw_u8(w,c->nmi_take);
 }
 int rc_mos6510_load(rc_mos6510 *c,rc_state_reader *r) {
     if(r->end-r->at<48||rc_sr_u32(r)!=1)return 0;
@@ -290,5 +301,7 @@ int rc_mos6510_load(rc_mos6510 *c,rc_state_reader *r) {
     B(irq);B(nmi);B(nmi_pending);B(irq_pending);B(irq_poll);B(resetting);B(interrupt);B(jammed);B(so);
 #undef B
     c->pins.address=rc_sr_u16(r);c->pins.data=rc_sr_u8(r);c->pins.write=rc_sr_u8(r);c->pins.sync=rc_sr_u8(r);
+    c->nmi_edge=r->at<r->end?rc_sr_u8(r):0;
+    c->nmi_take=r->at<r->end?rc_sr_u8(r):c->nmi_pending;
     return rc_sr_ok(r)&&c->model<=RC_MOS6510&&c->step<=21&&c->resetting<=7&&c->pins.write<=1&&c->pins.sync<=1;
 }

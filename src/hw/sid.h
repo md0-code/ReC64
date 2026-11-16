@@ -12,6 +12,7 @@ int rc_sid_init(rc_sid *s,const rc_hw_host *host,unsigned model,uint32_t clock_h
 void rc_sid_release(rc_sid *s);
 void rc_sid_reset(rc_sid *s);
 uint8_t rc_sid_read(rc_sid *s,unsigned reg);
+uint8_t rc_sid_peek(rc_sid *s,unsigned reg);
 void rc_sid_write(rc_sid *s,unsigned reg,uint8_t value);
 int rc_sid_clock(rc_sid *s,uint32_t cycles);
 size_t rc_sid_audio_pull(rc_sid *s,int16_t *mono,size_t frames);

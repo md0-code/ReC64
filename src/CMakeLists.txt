@@ -39,13 +39,22 @@ foreach(wave ${RC_RESID_WAVES})
     execute_process(COMMAND ${RC_PERL} ${CMAKE_CURRENT_SOURCE_DIR}/third_party/resid/samp2src.pl
         ${name} ${wave} ${RC_RESID_GENERATED}/${name}.h COMMAND_ERROR_IS_FATAL ANY)
 endforeach()
+add_executable(test_c64 tests/test_c64.c)
+target_link_libraries(test_c64 PRIVATE rc_core rc_platform)
+target_compile_definitions(test_c64 PRIVATE RC_WORK="${RC_WORK}" RC_ROM_DIR="${CMAKE_CURRENT_SOURCE_DIR}/../roms")
+rc_set_warnings(test_c64)
+add_test(NAME c64 COMMAND test_c64)
+add_executable(lorenz_suite tests/lorenz_suite.c)
+target_link_libraries(lorenz_suite PRIVATE rc_core)
+target_compile_definitions(lorenz_suite PRIVATE RC_ROM_DIR="${CMAKE_CURRENT_SOURCE_DIR}/../roms")
+rc_set_warnings(lorenz_suite)
 add_library(rc_resid STATIC third_party/resid/sid.cc third_party/resid/voice.cc
     third_party/resid/wave.cc third_party/resid/envelope.cc third_party/resid/filter.cc
     third_party/resid/dac.cc third_party/resid/extfilt.cc third_party/resid/pot.cc third_party/resid/version.cc)
 target_include_directories(rc_resid SYSTEM PUBLIC third_party/resid ${RC_RESID_GENERATED})
 target_compile_definitions(rc_resid PRIVATE VERSION="1.0-pre2" _USE_MATH_DEFINES _CRT_SECURE_NO_WARNINGS)
 add_library(rc_core STATIC core/config.c core/yamledit.c core/romdb.c core/state.c
-    core/media.c core/font8x8.c core/stick.c core/machine.c core/stub_machine.c hw/sched.c hw/mos6510.c
+    core/media.c core/font8x8.c core/stick.c core/machine.c core/stub_machine.c core/machines/c64.c hw/bus.c hw/sched.c hw/mos6510.c
     hw/cia6526.c hw/pla.c hw/c64kbd.c hw/sid_resid.cpp hw/vic2.c hw/via6522.c
     core/media/image.c core/media/d64.c core/media/t64.c core/media/tap.c core/media/prg.c core/media/gcr.c)
 target_include_directories(rc_core PUBLIC core hw PRIVATE ${CMAKE_CURRENT_BINARY_DIR}/generated)

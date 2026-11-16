@@ -62,5 +62,6 @@ typedef struct rc_machine_impl {
 
 /* The families built in (machine.c lists them). */
 extern const rc_family rc_stub_family;
+extern const rc_family rc_c64_family;
 
 #endif /* RC_MACHINE_IMPL_H */

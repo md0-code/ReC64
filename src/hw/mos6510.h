@@ -17,7 +17,7 @@ typedef struct rc_mos6510 {
     uint16_t pc, address, base, vector;
     uint8_t a,x,y,s,p,opcode,step,lo,value,result;
     uint8_t model,ddr,port,port_input;
-    uint8_t irq,nmi,nmi_pending,irq_pending,irq_poll,resetting,interrupt,jammed,so;
+    uint8_t irq,nmi,nmi_pending,irq_pending,irq_poll,resetting,interrupt,jammed,so,nmi_edge,nmi_take;
     rc_cpu_cycle pins;
 } rc_mos6510;
 void rc_mos6510_init(rc_mos6510 *c,const rc_hw_host *host,unsigned model);

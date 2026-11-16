@@ -61,6 +61,7 @@ int rc_sid_init(rc_sid *s,const rc_hw_host *host,unsigned model,uint32_t hz,uint
 void rc_sid_release(rc_sid *s){delete get(s);s->engine=nullptr;}
 void rc_sid_reset(rc_sid *s){engine *e=get(s);if(!e)return;try{std::unique_ptr<engine> next(new engine(e->model,e->hz,e->rate));delete e;s->engine=next.release();}catch(...){e->failed=true;}}
 uint8_t rc_sid_read(rc_sid *s,unsigned reg){engine *e=get(s);if(!e||e->failed)return 255;try{e->record(entry{READ,static_cast<uint8_t>(reg&31u),0,0});return static_cast<uint8_t>(e->sid.read(reg&31u));}catch(...){e->failed=true;return 255;}}
+uint8_t rc_sid_peek(rc_sid *s,unsigned reg){engine *e=get(s);if(!e||e->failed)return 255;const reSID::SID::State state=e->sid.read_state();reg&=31u;return static_cast<uint8_t>(reg>=25&&reg<=28?state.sid_register[reg]:state.bus_value);}
 void rc_sid_write(rc_sid *s,unsigned reg,uint8_t v){engine *e=get(s);if(!e||e->failed)return;try{e->record(entry{WRITE,static_cast<uint8_t>(reg&31u),v,0});e->sid.write(reg&31u,v);}catch(...){e->failed=true;}}
 int rc_sid_clock(rc_sid *s,uint32_t cycles){engine *e=get(s);if(!e||e->failed)return 0;try{if(cycles){e->record(entry{CLOCK,0,0,cycles});e->clock(cycles,true);}return 1;}catch(...){e->failed=true;return 0;}}
 size_t rc_sid_audio_pull(rc_sid *s,int16_t *mono,size_t frames){engine *e=get(s);if(!e||e->failed)return 0;size_t n=0;while(n<frames&&!e->samples.empty()){mono[n++]=e->samples.front();e->samples.pop_front();}return n;}
