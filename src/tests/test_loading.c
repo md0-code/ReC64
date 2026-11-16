@@ -26,10 +26,22 @@ int main(int argc,char **argv){
         memcpy(c->bus.ram+0x0801,PROGRAM,sizeof PROGRAM);rc_put16(c->bus.ram+0x2b,0x0801);rc_put16(c->bus.ram+0x2d,(uint16_t)(0x0801+sizeof PROGRAM));
         CHECK(rc_c64_control(c,0,RC_MEDIA_RECORD,0));CHECK(type(c,"SAVE\"PHASE4\",1\n"));
     }else CHECK(type(c,"LOAD\"\",1,1\n"));
-    unsigned frames=0;while(!ready(c)&&frames++<6000){CHECK(rc_c64_run(c,period(c))==RC_RUN_OK);}
+    unsigned frames=0;while(!ready(c)&&frames++<6000){CHECK(rc_c64_run(c,period(c))==RC_RUN_OK);
+        if(!strcmp(kind,"tap")&&!fast&&frames==300){
+            rc_state_writer saved,expected,actual;rc_sw_init(&saved);rc_sw_header(&saved,"c64","c64-pal",NULL,0);rc_c64_family.impl->save(c,&saved);CHECK(rc_sw_finish(&saved));
+            CHECK(rc_c64_run(c,12345)==RC_RUN_OK);rc_sw_init(&expected);rc_sw_header(&expected,"c64","c64-pal",NULL,0);rc_c64_family.impl->save(c,&expected);CHECK(rc_sw_finish(&expected));
+            rc_state_reader r;CHECK(rc_sr_open(&r,saved.data,saved.size,error,sizeof error)&&rc_c64_family.impl->load(c,&r));CHECK(rc_c64_run(c,12345)==RC_RUN_OK);
+            rc_sw_init(&actual);rc_sw_header(&actual,"c64","c64-pal",NULL,0);rc_c64_family.impl->save(c,&actual);CHECK(rc_sw_finish(&actual));
+            CHECK(expected.size==actual.size&&!memcmp(expected.data,actual.data,actual.size));rc_sw_free(&saved);rc_sw_free(&expected);rc_sw_free(&actual);
+            int16_t samples[1024];const size_t count=rc_c64_family.impl->audio_pull(c,samples,512);int heard=0;for(size_t i=0;i<count*2;++i)if(samples[i])heard=1;CHECK(count&&heard);
+            puts("Tape board partial-state and audible loading signal OK");
+        }
+    }
     if(!ready(c)){char text[2048];rc_c64_family.impl->text(c,text,sizeof text);fprintf(stderr,"%s\n",text);}CHECK(ready(c));
     if(!strcmp(kind,"save")){
-        CHECK(rc_c64_control(c,0,RC_MEDIA_STOP,0));rc_tap t={0};CHECK(rc_tap_open(&t,media->data,media->size,error,sizeof error));uint16_t address;uint8_t *data=NULL;size_t length;CHECK(rc_tape_extract(&t,0,&address,&data,&length,error,sizeof error));CHECK(address==0x0801&&length==sizeof PROGRAM&&!memcmp(data,PROGRAM,length));free(data);rc_tap_close(&t);
+        CHECK(rc_c64_control(c,0,RC_MEDIA_STOP,0));
+        FILE *recorded=fopen(RC_WORK "/p4-loading/recorded.tap","wb");CHECK(recorded);CHECK(fwrite(media->data,1,media->size,recorded)==media->size);CHECK(!fclose(recorded));
+        rc_tap t={0};CHECK(rc_tap_open(&t,media->data,media->size,error,sizeof error));uint16_t address;uint8_t *data=NULL;size_t length;CHECK(rc_tape_extract(&t,0,&address,&data,&length,error,sizeof error));CHECK(address==0x0801&&length==sizeof PROGRAM&&!memcmp(data,PROGRAM,length));free(data);rc_tap_close(&t);
         CHECK(rc_c64_control(c,0,RC_MEDIA_REWIND,0));memset(c->bus.ram+0x0801,0,sizeof PROGRAM);CHECK(type(c,"LOAD\"\",1,1\n"));frames=0;while(!ready(c)&&frames++<6000)CHECK(rc_c64_run(c,period(c))==RC_RUN_OK);CHECK(ready(c));
     }
     CHECK(!memcmp(c->bus.ram+0x0801,PROGRAM,sizeof PROGRAM));CHECK(type(c,"RUN\n"));char text[2048];rc_c64_family.impl->text(c,text,sizeof text);CHECK(strstr(text,"PHASE FOUR"));

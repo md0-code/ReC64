@@ -79,8 +79,8 @@ static int before_fetch(void *self,uint16_t pc){
 void rc_c64_media_init(rc_c64 *c){
     rc_datasette_init(&c->tape,&c->host);rc_traps_init(&c->traps,c->rom_hashes);c->source=255;
     for(unsigned i=0;i<3;++i)c->tape_bits[i]=RC_TAPE_SOUND|RC_TAPE_TRAPS|RC_TAPE_SAVE_TRAPS|RC_TAPE_ACCELERATE;
-    if(c->traps.known)c->traps.watch[0xf817>>3]|=(uint8_t)(1u<<(0xf817&7));
-    c->hooks=(rc_cpu_hooks){c,c->traps.watch,before_fetch,NULL};c->cpu.hooks=&c->hooks;
+    if(c->traps.known){const unsigned addresses[]={0xf4a5,0xf5ed,0xf817};for(unsigned i=0;i<3;++i)c->fetch_watch[addresses[i]>>3]|=(uint8_t)(1u<<(addresses[i]&7));}
+    c->hooks=(rc_cpu_hooks){c,c->fetch_watch,before_fetch,NULL};c->cpu.hooks=&c->hooks;
 }
 void rc_c64_media_lines(rc_c64 *c){
     rc_mos6510_port_input(&c->cpu,(uint8_t)(7u|c->port_charge|(rc_datasette_sense(&c->tape)?16u:0)));
@@ -145,5 +145,5 @@ int rc_c64_media_load(rc_c64 *c,rc_state_reader *r){
     if(!rc_sr_ok(r))return 0;
     rc_media *tape=c->synthetic?c->synthetic:source<3&&physical?c->media[source]:NULL;char error[128];if(tape&&!rc_datasette_insert(&c->tape,tape,error,sizeof error))return 0;
     if(!rc_sr_chunk(r,"DSET",0)||!rc_datasette_load(&c->tape,r)||!rc_sr_chunk(r,"TRAP",0)||!rc_traps_load(&c->traps,r))return 0;
-    if(c->traps.known)c->traps.watch[0xf817>>3]|=(uint8_t)(1u<<(0xf817&7));return 1;
+    return 1;
 }
