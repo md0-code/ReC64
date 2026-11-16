@@ -260,7 +260,9 @@ unsigned rc_machine_activity(const rc_machine *m);
 /* The transport of a slot: the tape recorder's keys. `value` is the block
  * for RC_MEDIA_SEEK. Returns 0 when the slot has no such control. */
 enum { RC_MEDIA_PLAY, RC_MEDIA_STOP, RC_MEDIA_REWIND, RC_MEDIA_NEXT, RC_MEDIA_PREVIOUS, RC_MEDIA_SEEK, RC_MEDIA_RECORD,
-       RC_MEDIA_PROTECT };
+       RC_MEDIA_PROTECT, RC_MEDIA_FLUSH };
+/* RC_MEDIA_FLUSH transfers completed device writes to the borrowed image before
+ * the host saves it. It does not advance the guest clock. */
 /* RC_MEDIA_PROTECT: the write-protect tab of a slot whose file the machine uses in place (a card) moved: `value` 1 protects it
  * at once, 0 lets it be written as the file allows. Returns 1 when the image can be written now, 0 when it cannot (or when the
  * slot is not such a one). */

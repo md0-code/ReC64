@@ -150,3 +150,8 @@ add_executable(test_loading tests/test_loading.c)
 target_link_libraries(test_loading PRIVATE rc_core)
 target_compile_definitions(test_loading PRIVATE RC_ROM_DIR="${CMAKE_CURRENT_SOURCE_DIR}/../roms" RC_WORK="${RC_WORK}")
 rc_set_warnings(test_loading)
+
+add_executable(test_disk tests/test_disk.c)
+target_link_libraries(test_disk PRIVATE rc_core rc_platform)
+target_compile_definitions(test_disk PRIVATE RC_ROM_DIR="${CMAKE_CURRENT_SOURCE_DIR}/../roms" RC_WORK="${RC_WORK}")
+rc_set_warnings(test_disk)

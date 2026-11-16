@@ -5,13 +5,15 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-static const char *const ROMS[]={"kernal","basic","chargen",NULL};
+static const char *const ROMS[]={"kernal","basic","chargen","dos1541",NULL};
 static const rc_model_desc MODELS[]={
     {"c64-pal","C64 PAL",ROMS,NULL},{"c64c-pal","C64C PAL",ROMS,NULL},
     {"c64-ntsc","C64 NTSC",ROMS,NULL},{"c64c-ntsc","C64C NTSC",ROMS,NULL}};
 static const char *const SID_MODELS[]={"default","6581","8580",NULL};
+static const char *const DRIVE_DEVICES[]={"8","9","10","11",NULL};
 static const rc_option_desc OPTIONS[]={
-    {.key="sid",.values=SID_MODELS,.models=RC_MODELS_ALL,.flags=RC_OPTION_RESET}};
+    {.key="sid",.values=SID_MODELS,.models=RC_MODELS_ALL,.flags=RC_OPTION_RESET},
+    {.key="drive_device",.values=DRIVE_DEVICES,.models=RC_MODELS_ALL,.flags=RC_OPTION_RESET}};
 static const rc_media_desc MEDIA[]={
     {.key="tape",.kind=RC_MEDIA_TAPE,.extensions="tap,t64",.models=RC_MODELS_ALL},
     {.key="program",.kind=RC_MEDIA_PROGRAM,.extensions="prg,p00",.models=RC_MODELS_ALL},
@@ -98,6 +100,7 @@ static void reset(void *self,int power){
     c->cpu.hooks=&c->hooks;c->tape_audio_phase=0;c->tape_audio_head=c->tape_audio_count=0;
     if(power){rc_vic2_reset(&c->vic);c->bus.pot_phase=0;memset(c->bus.pot_value,255,2);memset(c->bus.pot_charge,255,2);for(unsigned p=0;p<2;++p)rc_mouse1351_init(&c->bus.mouse[p]);}rc_cia6526_reset(&c->cia[0]);rc_cia6526_reset(&c->cia[1]);rc_sid_reset(&c->sid);
     c->keyboard.dev.ops->reset(&c->keyboard);c->restore=0;c->bus.data=c->bus.vic_data=255;c->bus.game=c->bus.exrom=1;
+    rc_c1541_reset(&c->drive);c->drive_phase=0;rc_iec_init(&c->iec);rc_c64_iec_lines(c);
     rc_c64_media_lines(c);interrupts(c);
 }
 static void nmi(void *self){rc_c64 *c=self;rc_mos6510_input(&c->cpu,RC_CPU_NMI,1);rc_mos6510_input(&c->cpu,RC_CPU_NMI,c->cia[1].irq);}
@@ -133,7 +136,7 @@ static void pointer(void *self,unsigned port,unsigned type,int x,int y,unsigned 
     else if(type==RC_CONTROL_NONE)rc_c64kbd_joystick(&c->keyboard,port,255);
 }
 
-static uint32_t hashes(const void *self,uint8_t *out,uint32_t max){if(max<3)return 0;memcpy(out,((const rc_c64 *)self)->rom_hashes,96);return 3;}
+static uint32_t hashes(const void *self,uint8_t *out,uint32_t max){if(max<4)return 0;memcpy(out,((const rc_c64 *)self)->rom_hashes,128);return 4;}
 static void trace(void *self,rc_trace_fn fn,void *ctx){rc_c64 *c=self;c->trace=fn;c->trace_ctx=ctx;}
 static int peek(void *self,uint32_t address,uint8_t *value){if(address>65535)return 0;*value=rc_bus_read(&((rc_c64 *)self)->bus,(uint16_t)address,0);return 1;}
 static int poke(void *self,uint32_t address,uint8_t value){if(address>65535)return 0;rc_bus_write(&((rc_c64 *)self)->bus,(uint16_t)address,value);return 1;}
@@ -155,7 +158,7 @@ static int load(void *self,rc_state_reader *r){
 #undef LOAD
     for(unsigned i=0;i<2;++i)if(!rc_sr_chunk(r,"CIA ",i)||!rc_cia6526_load(&c->cia[i],r))return 0;
     if(!rc_sr_chunk(r,"CPU ",0)||!rc_mos6510_load(&c->cpu,r))return 0;
-    interrupts(c);return 1;
+    rc_c64_iec_lines(c);interrupts(c);return 1;
 }
 static const rc_machine_impl IMPL={.destroy=destroy,.description=description,.error=error_text,.reset=reset,.nmi=nmi,
     .clock=clock_hz,.run=rc_c64_run,.time=time_now,.frame_period=period,.frame=frame,.text=text,
@@ -179,5 +182,8 @@ void *rc_c64_create(const rc_machine_setup *setup,char *error,size_t capacity){
     rc_c64kbd_init(&c->keyboard,&c->host);rc_pla_init(&c->pla,&c->host);
     const unsigned sid=setup->options[0]?setup->options[0]-1u:c->model&1u;
     if(!rc_sid_init(&c->sid,&c->host,sid,c->hz,48000)){if(capacity)snprintf(error,capacity,"Cannot initialise SID");free(c);return NULL;}
+    const rc_rom_file *drive_rom=rc_rom_index_find(setup->roms,rc_romdb_find("dos1541"));
+    if(!drive_rom||drive_rom->size!=16384){if(capacity)snprintf(error,capacity,"Missing 1541 DOS ROM");rc_sid_release(&c->sid);free(c);return NULL;}
+    rc_c1541_init(&c->drive,drive_rom->data,8u+setup->options[1]);rc_sha256(drive_rom->data,drive_rom->size,c->rom_hashes+96);rc_iec_init(&c->iec);
     rc_c64_media_init(c);reset(c,1);return c;
 }

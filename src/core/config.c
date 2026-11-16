@@ -252,7 +252,7 @@ rc_config_media *rc_config_media_slot(rc_config *c, const char *key) {
 void rc_config_media_settings(const rc_config *c,const char *key,rc_config_media *out){
     memset(out,0,sizeof *out);snprintf(out->key,sizeof out->key,"%s",key);
     out->fast=out->sound=out->autoload=out->full_speed=out->traps=out->save_traps=out->accelerate=1;
-    const rc_config_media *shared=strcmp(key,"tape")?rc_config_media_find(c,"tape"):NULL,*own=rc_config_media_find(c,key);
+    const rc_config_media *shared=!strcmp(key,"program")?rc_config_media_find(c,"tape"):NULL,*own=rc_config_media_find(c,key);
     if(shared){out->fast=shared->fast;out->sound=shared->sound;out->autoload=shared->autoload;out->full_speed=shared->full_speed;out->traps=shared->traps;out->save_traps=shared->save_traps;out->accelerate=shared->accelerate;}
     if(own){snprintf(out->image,sizeof out->image,"%s",own->image);out->write_protect=own->write_protect;out->explicit_flags=own->explicit_flags;
 #define OVERRIDE(field,flag) if(!shared||(own->explicit_flags&flag))out->field=own->field

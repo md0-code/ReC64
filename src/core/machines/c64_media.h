@@ -5,6 +5,7 @@ void rc_c64_media_init(rc_c64 *c);
 void rc_c64_media_release(rc_c64 *c);
 void rc_c64_media_lines(rc_c64 *c);
 void rc_c64_media_tick(rc_c64 *c);
+void rc_c64_iec_lines(rc_c64 *c);
 int rc_c64_insert(void *self,unsigned slot,rc_media *image,char *error,size_t cap);
 rc_media *rc_c64_media(const void *self,unsigned slot);
 int rc_c64_eject(void *self,unsigned slot);

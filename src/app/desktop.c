@@ -145,14 +145,16 @@ static int store_config(desktop *d,char *error,size_t cap){
 }
 static int media_available(const desktop *d){return !strcmp(rc_machine_family(d->machine)->id,"c64");}
 static void media_status(desktop *d){
-    d->setup.media_available=media_available(d);d->setup.has_tape=d->setup.tape_writable=d->setup.tape_playing=d->setup.tape_recording=0;
+    d->setup.media_available=media_available(d);d->setup.has_disk=0;d->setup.has_tape=d->setup.tape_writable=d->setup.tape_playing=d->setup.tape_recording=0;
     if(!d->setup.media_available)return;rc_media *media=rc_machine_media(d->machine,0);rc_tape_deck *deck=rc_machine_tape_deck(d->machine,0);
     d->setup.has_tape=media!=NULL;d->setup.tape_writable=media&&media->writable&&rc_media_extension_in(media->path,"tap");d->setup.tape_playing=deck&&deck->play;d->setup.tape_recording=deck&&deck->record;
+    d->setup.has_disk=rc_machine_media(d->machine,2)!=NULL;
 }
 static void media_options(desktop *d){const rc_family *f=rc_machine_family(d->machine);for(unsigned i=0;i<f->media_count;++i){rc_config_media effective;rc_config_media_settings(d->config,f->media[i].key,&effective);rc_machine_tape_options(d->machine,i,rc_config_tape_bits(&effective));}}
 static int flush_media(desktop *d,char *error,size_t cap){
     const rc_family *f=rc_machine_family(d->machine);
     for(unsigned i=0;i<RC_CONFIG_MEDIA;++i){rc_media *mounted=i<f->media_count?rc_machine_media(d->machine,i):NULL,*owned=d->media[i];
+        if(mounted&&f->media[i].kind==RC_MEDIA_FLOPPY&&!rc_machine_control(d->machine,i,RC_MEDIA_FLUSH,0)){snprintf(error,cap,"Cannot update disk image");return 0;}
         if(mounted&&!rc_media_save(mounted)){snprintf(error,cap,"%s: %s",mounted->path,mounted->error);return 0;}
         if(owned&&owned!=mounted&&!rc_media_save(owned)){snprintf(error,cap,"%s: %s",owned->path,owned->error);return 0;}}
     return 1;
@@ -162,7 +164,9 @@ static int mount_media(desktop *d,unsigned slot,const char *path,char *error,siz
     char absolute[RC_MEDIA_PATH];if(!rc_host_full_path(path,absolute,sizeof absolute)){snprintf(error,cap,"Path is too long");return 0;}
     rc_config_media effective;rc_config_media_settings(d->config,f->media[slot].key,&effective);
     rc_media *next=rc_media_open(absolute,effective.write_protect,error,cap);if(!next)return 0;
-    rc_media *old=rc_machine_media(d->machine,slot);if(old&&!rc_media_save(old)){snprintf(error,cap,"%s",old->error);rc_media_close(next);return 0;}
+    rc_media *old=rc_machine_media(d->machine,slot);
+    if(old&&f->media[slot].kind==RC_MEDIA_FLOPPY&&!rc_machine_control(d->machine,slot,RC_MEDIA_FLUSH,0)){snprintf(error,cap,"Cannot update disk image");rc_media_close(next);return 0;}
+    if(old&&!rc_media_save(old)){snprintf(error,cap,"%s",old->error);rc_media_close(next);return 0;}
     if(!rc_machine_insert(d->machine,slot,next,error,cap)){rc_media_close(next);return 0;}
     rc_media_close(d->media[slot]);d->media[slot]=next;d->media_entry[slot]=UINT32_MAX;
     rc_config_media *setting=rc_config_media_slot(d->config,f->media[slot].key);if(setting)snprintf(setting->image,sizeof setting->image,"%s",absolute);
@@ -171,7 +175,9 @@ static int mount_media(desktop *d,unsigned slot,const char *path,char *error,siz
 static int insert(void *ctx,unsigned slot,const char *path,char *error,size_t cap){desktop *d=ctx;release_keys(d);return mount_media(d,slot,path,error,cap);}
 static int eject(void *ctx,unsigned slot){
     desktop *d=ctx;const rc_family *f=rc_machine_family(d->machine);if(slot>=f->media_count||slot>=RC_CONFIG_MEDIA)return 0;
-    rc_media *mounted=rc_machine_media(d->machine,slot);if(!mounted)return 0;if(!rc_media_save(mounted)){message(d,mounted->error);return 0;}
+    rc_media *mounted=rc_machine_media(d->machine,slot);if(!mounted)return 0;
+    if(f->media[slot].kind==RC_MEDIA_FLOPPY&&!rc_machine_control(d->machine,slot,RC_MEDIA_FLUSH,0)){message(d,"Cannot update disk image");return 0;}
+    if(!rc_media_save(mounted)){message(d,mounted->error);return 0;}
     if(!rc_machine_eject(d->machine,slot))return 0;if(d->source_slot==(int)slot)d->source_slot=-1;release_keys(d);rc_media_close(d->media[slot]);d->media[slot]=NULL;d->media_entry[slot]=UINT32_MAX;
     rc_config_media *setting=rc_config_media_slot(d->config,f->media[slot].key);if(setting)setting->image[0]=0;char error[128];if(!store_config(d,error,sizeof error))message(d,error);media_status(d);return 1;
 }
@@ -279,6 +285,10 @@ static int shell_key(void *ctx,const char *name,int down){
         return 1;
     }
     if(ctrl&&(!strcmp(bare,"F1")||!strcmp(bare,"F2"))){if(down&&!browser_open(d,!strcmp(bare,"F2"),error,sizeof error))message(d,error);return 1;}
+    if(alt&&(!strcmp(bare,"F")||!strcmp(bare,"S"))){if(!media_available(d)){if(down)message(d,"No drive available");return 1;}if(down){rc_config_media effective;rc_config_media_settings(d->config,"disk",&effective);rc_config_media *disk=rc_config_media_slot(d->config,"disk");if(disk){
+        if(!strcmp(bare,"F")){disk->fast=!effective.fast;disk->explicit_flags|=RC_MEDIA_SETTING_FAST;message(d,disk->fast?"Drive fast loading on":"Drive fast loading off");d->pace_dirty=1;}
+        else {disk->sound=!effective.sound;disk->explicit_flags|=RC_MEDIA_SETTING_SOUND;message(d,disk->sound?"Drive sounds on":"Drive sounds off");}
+        media_options(d);if(!store_config(d,error,sizeof error))message(d,error);}}return 1;}
     if(alt&&!strcmp(bare,"T")){if(!media_available(d)){if(down)message(d,"No tape available");return 1;}if(down){rc_config_media *tape=rc_config_media_slot(d->config,"tape");if(tape){tape->sound=!tape->sound;tape->explicit_flags|=RC_MEDIA_SETTING_SOUND;media_options(d);message(d,tape->sound?"Tape sound on":"Tape sound off");if(!store_config(d,error,sizeof error))message(d,error);}}return 1;}
     if(d->browser.active&&strcmp(bare,"F12")){
         if(!down)return 1;const int confirm=d->browser.confirm;const unsigned action=rc_browser_key(&d->browser,ctrl?key:bare);
@@ -299,6 +309,7 @@ static int shell_key(void *ctx,const char *name,int down){
         if(action&(RC_SETUP_LOAD|RC_SETUP_SAVE)){if(!browser_open(d,(action&RC_SETUP_SAVE)!=0,error,sizeof error))message(d,error);}
         if(action&RC_SETUP_MEDIA_OPTIONS)media_options(d);
         if(action&RC_SETUP_EJECT){if(!eject(d,0))message(d,"Cannot eject tape");}
+        if(action&RC_SETUP_EJECT_DISK){if(!eject(d,2))message(d,"Cannot eject disk");}
         if(action&(RC_SETUP_PLAY|RC_SETUP_STOP|RC_SETUP_REWIND|RC_SETUP_RECORD)){const unsigned command=action&RC_SETUP_PLAY?RC_MEDIA_PLAY:action&RC_SETUP_STOP?RC_MEDIA_STOP:action&RC_SETUP_REWIND?RC_MEDIA_REWIND:RC_MEDIA_RECORD;if(!rc_machine_control(d->machine,0,command,0))message(d,"Tape control unavailable");media_status(d);}
         if(action&RC_SETUP_INPUT)input_config(d);
         if(action&RC_SETUP_VIDEO){if(!apply_video(d,error,sizeof error)){*d->config=before;message(d,error);}}
