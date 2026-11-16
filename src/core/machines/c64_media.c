@@ -95,9 +95,9 @@ void rc_c64_media_lines(rc_c64 *c){
     const uint8_t port=rc_mos6510_port_read(&c->cpu,1);rc_datasette_motor(&c->tape,!(port&32u));rc_datasette_write(&c->tape,(port&8u)!=0);
 }
 void rc_c64_iec_lines(rc_c64 *c){
-    /* CIA2 outputs pass through the board's inverting open-collector buffers.
-     * Input-configured PA3..5 release the bus. PA6/7 sense physical levels. */
-    const unsigned pa=c->cia[1].port[0]&c->cia[1].ddr[0];
+    /* The inverting buffers remain connected when PA3..5 become inputs:
+     * their pull-ups then pull the corresponding IEC line low. */
+    const unsigned pa=rc_cia6526_port_output(&c->cia[1],0);
     const unsigned output=RC_IEC_RESET|(!(pa&8u)?RC_IEC_ATN:0u)|(!(pa&16u)?RC_IEC_CLK:0u)|(!(pa&32u)?RC_IEC_DATA:0u);
     rc_iec_output(&c->iec,0,output);rc_c1541_iec_input(&c->drive,rc_iec_lines(&c->iec));
     rc_iec_output(&c->iec,1,rc_c1541_iec_output(&c->drive));rc_c1541_iec_input(&c->drive,rc_iec_lines(&c->iec));
