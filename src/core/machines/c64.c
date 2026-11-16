@@ -23,7 +23,8 @@ static const rc_media_desc MEDIA[]={
     {.key="tape",.kind=RC_MEDIA_TAPE,.extensions="tap,t64",.models=RC_MODELS_ALL},
     {.key="program",.kind=RC_MEDIA_PROGRAM,.extensions="prg,p00",.models=RC_MODELS_ALL},
     {.key="disk",.kind=RC_MEDIA_FLOPPY,.extensions="d64",.models=RC_MODELS_ALL},
-    {.key="cartridge",.kind=RC_MEDIA_CART,.extensions="crt",.models=RC_MODELS_ALL}};
+    {.key="cartridge",.kind=RC_MEDIA_CART,.extensions="crt",.models=RC_MODELS_ALL},
+    {.key="sid",.kind=RC_MEDIA_SID,.extensions="sid",.models=RC_MODELS_ALL}};
 /* Matrix order: CIA1 PA bit selects the row; PB bit selects the column. */
 static const rc_key_desc KEYS[]={
     {"DELETE","Backspace","DEL",0,0,4,4},{"RETURN","Return","RETURN",0,0,4,4},
@@ -95,12 +96,12 @@ static void phi2(void *ctx,uint64_t time){
         rc_vic2_clock(&c->vic,1,rc_bus_vic(&c->bus,a.address),c->bus.colour[a.address&1023u]);
     }
     rc_reu_tick(&c->reu,c->vic.ba,accepted,dma_data);interrupts(c);
-    rc_bus_pot_tick(&c->bus);rc_sid_clock(&c->sid,1);rc_c64_media_tick(c);
+    rc_bus_pot_tick(&c->bus);rc_sid_clock(&c->sid,1);rc_c64_media_tick(c);rc_c64_sid_tick(c);
     /* The PAL/NTSC board's mains-derived TOD input is independent of frames. */
     c->tod_at+=c->model>=2?60u:50u;
     if(c->tod_at>=c->hz){c->tod_at-=c->hz;rc_cia6526_tod_pulse(&c->cia[0]);rc_cia6526_tod_pulse(&c->cia[1]);}
 }
-rc_run_status rc_c64_run(void *self,uint64_t cycles){rc_c64 *c=self;const rc_cycle_host board={c,phi1,phi2,NULL};return rc_sched_cycles(&c->sched,&board,cycles)&&rc_sid_ok(&c->sid)&&rc_datasette_ok(&c->tape)?RC_RUN_OK:RC_RUN_ERROR;}
+rc_run_status rc_c64_run(void *self,uint64_t cycles){rc_c64 *c=self;if(rc_c64_sid_paused(c))return RC_RUN_OK;const rc_cycle_host board={c,phi1,phi2,NULL};return rc_sched_cycles(&c->sched,&board,cycles)&&rc_sid_ok(&c->sid)&&rc_datasette_ok(&c->tape)?RC_RUN_OK:RC_RUN_ERROR;}
 static void destroy(void *self){rc_c64 *c=self;rc_c64_expansion_release(c);rc_c64_media_release(c);rc_sid_release(&c->sid);free(c);}
 static const char *description(const void *self){return MODELS[((const rc_c64 *)self)->model].name;}
 static const char *error_text(const void *self){(void)self;return "C64 clock overflow, SID allocation or tape recording failed";}
@@ -113,7 +114,7 @@ static void reset(void *self,int power){
     c->keyboard.dev.ops->reset(&c->keyboard);c->restore=0;c->bus.data=c->bus.vic_data=255;c->bus.game=c->bus.exrom=1;
     rc_c1541_reset(&c->drive);c->drive_phase=0;rc_iec_init(&c->iec);rc_c64_iec_lines(c);
     rc_fastload_reset(&c->fastload,c->sched.now,c->iec.edges);
-    rc_c64_media_lines(c);rc_c64_expansion_reset(c);
+    rc_c64_media_lines(c);rc_c64_expansion_reset(c);rc_c64_sid_reset(c);
 }
 static void nmi(void *self){rc_c64 *c=self;rc_mos6510_input(&c->cpu,RC_CPU_NMI,1);interrupts(c);}
 static uint32_t clock_hz(const void *self){return ((const rc_c64 *)self)->hz;}
@@ -152,8 +153,16 @@ static uint32_t hashes(const void *self,uint8_t *out,uint32_t max){if(max<4)retu
 static void trace(void *self,rc_trace_fn fn,void *ctx){rc_c64 *c=self;c->trace=fn;c->trace_ctx=ctx;}
 static int peek(void *self,uint32_t address,uint8_t *value){if(address>65535)return 0;*value=rc_bus_read(&((rc_c64 *)self)->bus,(uint16_t)address,0);return 1;}
 static int poke(void *self,uint32_t address,uint8_t value){if(address>65535)return 0;rc_bus_write(&((rc_c64 *)self)->bus,(uint16_t)address,value);return 1;}
+static int status(const void *self,rc_machine_status *s){
+    const rc_c64 *c=self;const rc_c1541_status d=rc_c1541_get_status(&c->drive);
+    s->drive_present=c->drive.enabled;s->drive_device=d.device;s->drive_halftrack=d.halftrack;s->drive_led=d.led;s->drive_motor=d.motor;
+    s->tape_present=c->tape.deck.tape.image!=NULL;s->tape_counter=c->tape.deck.tape.position>=20?c->tape.deck.tape.position-20:0;
+    s->tape_motor=c->tape.motor;s->tape_play=c->tape.deck.play;s->tape_record=c->tape.deck.record;
+    s->sid_loaded=c->sid_session.active;s->sid_song=c->sid_session.song;s->sid_songs=c->sid_session.file.songs;s->sid_paused=c->sid_session.paused;
+    s->sid_cycles=c->sid_session.elapsed_cycles;s->sid_hz=c->hz;return 1;
+}
 static void save(const void *self,rc_state_writer *w){
-    const rc_c64 *c=self;rc_c64_media_save(c,w);rc_c64_expansion_save(c,w);rc_sw_begin(w,"C64 ",0);rc_sw_u32(w,1);rc_sw_u64(w,c->sched.now);rc_sw_u64(w,c->tod_at);rc_sw_u8(w,c->restore);rc_sw_u8(w,c->port_charge);rc_sw_end(w);
+    const rc_c64 *c=self;rc_c64_media_save(c,w);rc_c64_expansion_save(c,w);rc_c64_sid_save(c,w);rc_sw_begin(w,"C64 ",0);rc_sw_u32(w,1);rc_sw_u64(w,c->sched.now);rc_sw_u64(w,c->tod_at);rc_sw_u8(w,c->restore);rc_sw_u8(w,c->port_charge);rc_sw_end(w);
 #define SAVE(tag,object,fn) rc_sw_begin(w,tag,0);fn(&c->object,w);rc_sw_end(w)
     SAVE("BUS ",bus,rc_bus_save);SAVE("CPU ",cpu,rc_mos6510_save);SAVE("VIC2",vic,rc_vic2_save);
     SAVE("SID ",sid,rc_sid_save);SAVE("PLA ",pla,rc_pla_save);SAVE("KBD ",keyboard,rc_c64kbd_save);
@@ -161,7 +170,7 @@ static void save(const void *self,rc_state_writer *w){
     for(unsigned i=0;i<2;++i){rc_sw_begin(w,"CIA ",i);rc_cia6526_save(&c->cia[i],w);rc_sw_end(w);}
 }
 static int load(void *self,rc_state_reader *r){
-    rc_c64 *c=self;if(!rc_c64_media_load(c,r)||!rc_c64_expansion_load(c,r))return 0;if(!rc_sr_chunk(r,"C64 ",0)||rc_sr_u32(r)!=1)return 0;
+    rc_c64 *c=self;if(!rc_c64_media_load(c,r)||!rc_c64_expansion_load(c,r)||!rc_c64_sid_load(c,r))return 0;if(!rc_sr_chunk(r,"C64 ",0)||rc_sr_u32(r)!=1)return 0;
     rc_sched_init(&c->sched);c->sched.now=rc_sr_u64(r);c->tod_at=rc_sr_u64(r);c->restore=rc_sr_u8(r);c->port_charge=rc_sr_u8(r);
     if(!rc_sr_ok(r)||c->sched.now==RC_NEVER||c->tod_at>=c->hz||c->restore>1)return 0;
 #define LOAD(tag,object,fn) if(!rc_sr_chunk(r,tag,0)||!fn(&c->object,r))return 0
@@ -175,9 +184,9 @@ static int load(void *self,rc_state_reader *r){
 static const rc_machine_impl IMPL={.destroy=destroy,.description=description,.error=error_text,.reset=reset,.nmi=nmi,
     .clock=clock_hz,.run=rc_c64_run,.time=time_now,.frame_period=period,.frame=frame,.text=text,
     .audio_rate=audio_rate,.audio_pull=audio_pull,.key=key,.joystick=joystick,.activity=rc_c64_activity,.insert=rc_c64_insert,.media=rc_c64_media,.eject=rc_c64_eject,.control=rc_c64_control,.tape_options=rc_c64_tape_options,.tape_deck=rc_c64_tape_deck,.autoload=rc_c64_autoload,
-    .save=save,.load=load,.rom_hashes=hashes,.set_trace=trace,.peek=peek,.poke=poke,.border=border,.pointer=pointer};
+    .save=save,.load=load,.rom_hashes=hashes,.set_trace=trace,.peek=peek,.poke=poke,.border=border,.pointer=pointer,.status=status};
 const rc_family rc_c64_family={.id="c64",.name="Commodore 64",.models=MODELS,.model_count=4,
-    .media=MEDIA,.media_count=4,.options=OPTIONS,.option_count=sizeof OPTIONS/sizeof OPTIONS[0],.keys=KEYS,.key_count=65,
+    .media=MEDIA,.media_count=5,.options=OPTIONS,.option_count=sizeof OPTIONS/sizeof OPTIONS[0],.keys=KEYS,.key_count=65,
     .combos=COMBOS,.combo_count=sizeof COMBOS/sizeof COMBOS[0],.typing=TYPING,.typing_count=sizeof TYPING/sizeof TYPING[0],.joysticks=2,.impl=&IMPL,.create=rc_c64_create};
 void *rc_c64_create(const rc_machine_setup *setup,char *error,size_t capacity){
     rc_c64 *c=calloc(1,sizeof *c);if(!c){if(capacity)snprintf(error,capacity,"Out of memory");return NULL;}

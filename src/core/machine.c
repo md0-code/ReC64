@@ -356,3 +356,4 @@ void rc_frame_argb(const rc_frame *f, uint32_t *out) {
 }
 
 void rc_machine_pointer(rc_machine *m,unsigned port,unsigned type,int x,int y,unsigned buttons){if(m->impl->pointer)m->impl->pointer(m->self,port,type,x,y,buttons);}
+int rc_machine_get_status(const rc_machine *m,rc_machine_status *status){memset(status,0,sizeof *status);return m->impl->status?m->impl->status(m->self,status):0;}

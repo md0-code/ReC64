@@ -6,7 +6,7 @@
 #define RC_KEYMAP_QUEUE 256
 typedef struct rc_keymap {
     rc_machine *machine;const rc_config *config;
-    uint8_t keys[RC_KEYMAP_HOSTS][2],held[256],sent[256];
+    uint8_t keys[RC_KEYMAP_HOSTS][2],held[256],virtual_keys[256],sent[256];
     rc_typing_desc queue[RC_KEYMAP_QUEUE];unsigned read,count,phase;
 } rc_keymap;
 void rc_keymap_init(rc_keymap *k,rc_machine *machine,const rc_config *config);
@@ -16,6 +16,7 @@ int rc_keymap_key(rc_keymap *k,unsigned host,const char *name,int down);
 /* UTF-8, translated using the family's typing table; 0: unsupported or full. */
 int rc_keymap_text(rc_keymap *k,const char *text);
 void rc_keymap_frame(rc_keymap *k);
+void rc_keymap_virtual(rc_keymap *k,unsigned key,int down);
 /* Snapshot the pending text queue, retaining its exact press/release phase.
  * Physical host keys are reconciled as released when restored. */
 void rc_keymap_save(const rc_keymap *k,rc_state_writer *w);

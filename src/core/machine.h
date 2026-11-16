@@ -68,7 +68,7 @@ typedef struct rc_option_desc {
 
 /* A media slot (media.KEY in rec64.yaml): `extensions` are the file name
  * endings it takes, lower case, separated by commas ("d64,t64,tap"). */
-enum { RC_MEDIA_TAPE, RC_MEDIA_FLOPPY, RC_MEDIA_CART, RC_MEDIA_PROGRAM, RC_MEDIA_KINDS };
+enum { RC_MEDIA_TAPE, RC_MEDIA_FLOPPY, RC_MEDIA_CART, RC_MEDIA_PROGRAM, RC_MEDIA_SID, RC_MEDIA_KINDS };
 typedef struct rc_media_desc {
     const char *key;                    /* "tape", "a", "b", "card" */
     int label;
@@ -260,7 +260,7 @@ unsigned rc_machine_activity(const rc_machine *m);
 /* The transport of a slot: the tape recorder's keys. `value` is the block
  * for RC_MEDIA_SEEK. Returns 0 when the slot has no such control. */
 enum { RC_MEDIA_PLAY, RC_MEDIA_STOP, RC_MEDIA_REWIND, RC_MEDIA_NEXT, RC_MEDIA_PREVIOUS, RC_MEDIA_SEEK, RC_MEDIA_RECORD,
-       RC_MEDIA_PROTECT, RC_MEDIA_FLUSH, RC_MEDIA_FREEZE };
+       RC_MEDIA_PROTECT, RC_MEDIA_FLUSH, RC_MEDIA_FREEZE, RC_MEDIA_SONG, RC_MEDIA_PAUSE };
 /* RC_MEDIA_FLUSH transfers completed device writes to the borrowed image before
  * the host saves it. It does not advance the guest clock. */
 /* RC_MEDIA_PROTECT: the write-protect tab of a slot whose file the machine uses in place (a card) moved: `value` 1 protects it
@@ -328,5 +328,11 @@ int rc_machine_poke(rc_machine *m, uint32_t address, uint8_t value);
 
 /* Host byte order accepted by the supported targets. */
 int rc_machine_host_ok(void);
+typedef struct rc_machine_status {
+    unsigned drive_present,drive_device,drive_halftrack,drive_led,drive_motor;
+    uint64_t tape_counter;unsigned tape_present,tape_motor,tape_play,tape_record;
+    unsigned sid_loaded,sid_song,sid_songs,sid_paused;uint64_t sid_cycles;uint32_t sid_hz;
+} rc_machine_status;
+int rc_machine_get_status(const rc_machine *m,rc_machine_status *status);
 
 #endif /* RC_MACHINE_H */

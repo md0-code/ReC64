@@ -10,12 +10,13 @@ int rc_keymap_action(const rc_family *f,const char *name,uint8_t out[2]){
 static int is_shift(const rc_family *f,unsigned key){return same(f->keys[key].name,"LEFT SHIFT")||same(f->keys[key].name,"RIGHT SHIFT");}
 static void apply(rc_keymap *k){
     const rc_family *f=rc_machine_family(k->machine);const rc_typing_desc *ch=k->count?&k->queue[k->read]:NULL;
-    for(unsigned i=0;i<f->key_count&&i<256;++i){int down=k->held[i]!=0;
+    for(unsigned i=0;i<f->key_count&&i<256;++i){int down=k->held[i]!=0||k->virtual_keys[i]!=0;
         if(ch){if(is_shift(f,i))down=0;if(k->phase<3&&(ch->key==i||ch->shift==i))down=1;}
         if(k->sent[i]!=down){rc_machine_key(k->machine,i,down);k->sent[i]=(uint8_t)down;}}
 }
 void rc_keymap_init(rc_keymap *k,rc_machine *m,const rc_config *c){memset(k,0,sizeof *k);memset(k->keys,RC_KEY_NONE,sizeof k->keys);k->machine=m;k->config=c;}
-void rc_keymap_clear(rc_keymap *k){memset(k->held,0,sizeof k->held);memset(k->keys,RC_KEY_NONE,sizeof k->keys);k->count=k->read=k->phase=0;apply(k);}
+void rc_keymap_clear(rc_keymap *k){memset(k->held,0,sizeof k->held);memset(k->virtual_keys,0,sizeof k->virtual_keys);memset(k->keys,RC_KEY_NONE,sizeof k->keys);k->count=k->read=k->phase=0;apply(k);}
+void rc_keymap_virtual(rc_keymap *k,unsigned key,int down){if(key<rc_machine_family(k->machine)->key_count&&key<256){k->virtual_keys[key]=(uint8_t)(down!=0);apply(k);}}
 int rc_keymap_key(rc_keymap *k,unsigned host,const char *name,int down){
     if(host>=RC_KEYMAP_HOSTS)return 0;uint8_t *keys=k->keys[host];
     if(!down){const int used=keys[0]!=RC_KEY_NONE;for(unsigned i=0;i<2;++i)if(keys[i]!=RC_KEY_NONE&&k->held[keys[i]])--k->held[keys[i]];keys[0]=keys[1]=RC_KEY_NONE;apply(k);return used;}

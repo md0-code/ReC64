@@ -60,6 +60,7 @@ typedef struct rc_machine_impl {
     unsigned (*tape_options)(void *self, unsigned slot, unsigned bits);
     void (*pointer)(void *self,unsigned port,unsigned type,int x,int y,unsigned buttons);
     void (*border)(void *self,unsigned mode);                   /* NULL: fixed frame */
+    int (*status)(const void *self,rc_machine_status *status);
 } rc_machine_impl;
 
 /* The families built in (machine.c lists them). */
