@@ -269,3 +269,34 @@ A bus line held low without further transitions becomes idle after that
 interval. Motor stop adds no independent delay. The shell applies the user's
 fast-loading switch and returns to 100% when the request ends. The guest
 cycle, IEC counter, last-edge cycle and activity flags are saved exactly.
+
+## REU and GeoRAM
+
+The REU presents the original 8726 register file throughout I/O2, mirrored
+at 32-byte intervals. The 1700, 1764 and 1750 use the original three-bit
+bank register, jumper-dependent size flag and address-counter behavior.
+Sizes above 512 KiB select the modern contiguous address extension, with
+an eight-bit readable bank register, through 16 MiB. The unpopulated upper
+DRAM bank of a 1764 does not alias its installed memory; its floating data
+is represented by the retained REU data latch. The original hardware's
+analogue value in that unpopulated bank is not specified.
+
+The board grants a requested DMA access only after pending CPU writes and
+when VIC BA/AEC permit it. The REU exposes address, direction, data and DMA
+pins and consumes only accepted accesses. Store, fetch and verify consume
+one accepted cycle per byte; swap consumes a read and a write cycle.
+Registers are hidden from the REU's own DMA engine. DMA uses the board's
+normal PLA mapping, including I/O and ROM, while addresses zero and one
+access the RAM behind the suspended 6510's internal port. The deferred
+FF00 trigger works independently of whether I/O is mapped. End-of-block,
+verify and interrupt status acknowledge only on an ordinary status read;
+debug reads preserve all state. Shadow register pairs preserve the 8726's
+half-autoload effect. States retain RAM, selectors, shadows and an unfinished
+swap, so a VIC stall can be saved and resumed exactly.
+
+GeoRAM exposes a 256-byte window at DE00-DEFF, selected by a six-bit page
+and a bank of 16 KiB. The original board decodes its write-only page/bank
+registers at every even/odd address in DF80-DFFF. Undriven register reads
+retain the board's bus value. Sizes of 512 KiB, 1, 2 and 4 MiB mask the bank
+to the installed memory; the 4 MiB option extends the bank latch to eight
+bits. Reset preserves RAM and the original non-resettable page/bank latches.
