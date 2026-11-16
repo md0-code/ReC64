@@ -10,6 +10,19 @@ independent transport values. The joystick field names the active keyboard
 joystick port, or OFF. The overlay owns no guest state and never advances,
 pauses or changes a device.
 
+The on-screen keyboard maps 66 physical keycaps to the 64 CIA matrix
+contacts and RESTORE. SHIFT LOCK shares the left SHIFT contact. The
+quarter-key layout also supplies family keyboard geometry. Independent
+pointer IDs hold counted contacts; sliding releases the previous cap and
+cancel releases without latching. SHIFT, C= and CTRL latch on release and
+toggle off on the next tap; closing or focus loss releases every contact.
+Controller accept holds the selected cap until release. Callbacks feed the
+keymap's virtual contacts, combined with physical host input. Snapshots
+retain visibility, selection and latched modifiers, release transient
+fingers and accept, and bind the restored keyboard only after the snapshot
+machine is accepted. The 320 by 96 indexed overlay preserves the running
+guest and can reserve a lower margin for the status panel.
+
 `hw/hw.h` defines the chip operations (`read`, `write`, `event`, `reset`,
 `input`, `save`, `load`) and board callbacks. A chip never calls another chip
 or the bus. `rc_cpu_cycle` describes the address, byte, read/write direction
