@@ -60,3 +60,16 @@ Backend construction uses cleared storage, avoiding an uninitialised filter
 lookup observed with the pinned release on Windows. Vendored files are
 unchanged. The focused check requires non-silent audio and identical samples
 across a state round trip for both chip models.
+
+## VIC-II
+
+The 6569/8565 and 6567R8/8562 models expose phi1/phi2 memory requests and
+BA/AEC/IRQ outputs. The board supplies RAM, character ROM and colour RAM;
+the VIC never calls the bus. Address generation includes matrix/graphics,
+sprite pointer/data, refresh and idle accesses. The sequencers cover the
+text/bitmap modes, multicolour, ECM, invalid-mode priority data, scrolling,
+border flip-flops, eight sprites with expansion and priority, collision
+latches, raster IRQ and lightpen. The frame is the complete raw raster in
+time order (504x312 PAL or 520x263 NTSC); visible-area cropping belongs to
+the board/presenter. Every pipeline latch and the partially drawn frame
+are saved, including a save between the two bus phases.

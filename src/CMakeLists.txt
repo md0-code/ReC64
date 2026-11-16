@@ -46,7 +46,7 @@ target_include_directories(rc_resid SYSTEM PUBLIC third_party/resid ${RC_RESID_G
 target_compile_definitions(rc_resid PRIVATE VERSION="1.0-pre2" _USE_MATH_DEFINES _CRT_SECURE_NO_WARNINGS)
 add_library(rc_core STATIC core/config.c core/yamledit.c core/romdb.c core/state.c
     core/media.c core/font8x8.c core/stick.c core/machine.c core/stub_machine.c hw/sched.c hw/mos6510.c
-    hw/cia6526.c hw/pla.c hw/c64kbd.c hw/sid_resid.cpp)
+    hw/cia6526.c hw/pla.c hw/c64kbd.c hw/sid_resid.cpp hw/vic2.c)
 target_include_directories(rc_core PUBLIC core hw PRIVATE ${CMAKE_CURRENT_BINARY_DIR}/generated)
 target_link_libraries(rc_core PUBLIC rc_yaml rc_host rc_resid)
 if(NOT WIN32)
@@ -95,3 +95,9 @@ add_executable(test_sid tests/test_sid.c)
 target_link_libraries(test_sid PRIVATE rc_core)
 rc_set_warnings(test_sid)
 add_test(NAME sid COMMAND test_sid)
+file(MAKE_DIRECTORY ${RC_WORK}/tests)
+add_executable(test_vic2 tests/test_vic2.c)
+target_link_libraries(test_vic2 PRIVATE rc_core rc_platform)
+target_compile_definitions(test_vic2 PRIVATE RC_WORK="${RC_WORK}")
+rc_set_warnings(test_vic2)
+add_test(NAME vic2 COMMAND test_vic2)
