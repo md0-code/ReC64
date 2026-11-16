@@ -92,3 +92,22 @@ pulses and a saved cursor. A v0 overflow is 2048 cycles; recording a pulse
 that v0 cannot represent upgrades the image losslessly to v1. Every format
 has a focused create/read/write/state check. Transport and KERNAL integration
 belong to the later loading packages.
+
+## VIA and GCR
+
+The 6522 ticks before the drive CPU's phi2 register access. It exposes port
+directions, live or edge-latched input, CA/CB handshake and pulse outputs,
+independent interrupt inputs, IFR/IER, both timers, PB7 timing output and
+PB6 pulse counting. All eight shift modes use CB1/CB2, with the T2 low-byte
+reload controlling the divided shift clock. Control outputs report -1 when
+released; IRQ reports 1 when asserted. State preserves counters, reload
+delays, handshake pulses and an incomplete serial transfer. Reset preserves
+the timer and shift-register contents specified as unaffected by RES.
+
+GCR helpers encode and validate the 4-to-5-byte groups, sector headers and
+256-byte data blocks, including block identifiers and XOR checksums. A
+circular raw-bit buffer retains its exact bit length, position, density,
+write protection and modified data in states. Density timing uses integer
+16 MHz ticks (52/56/60/64), avoiding drift between the four speed zones.
+Sync detection and drive wiring belong to the 1541 package. The GCR check
+includes the worked conversion from Inside Commodore DOS.
