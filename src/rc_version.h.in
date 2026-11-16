@@ -1,0 +1,4 @@
+#ifndef RC_VERSION_H
+#define RC_VERSION_H
+#define RC_VERSION "@PROJECT_VERSION@"
+#endif

@@ -1,0 +1,15 @@
+# Copy to rec64.yaml beside the program, or select with --config FILE.
+machine:
+  model: test
+video:
+  look: crt
+  filter: nearest
+  aspect: original
+  scale: fit
+  fullscreen: false
+  vsync: true
+sound:
+  enabled: true
+  volume: 100
+ui:
+  language: en
