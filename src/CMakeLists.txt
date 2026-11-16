@@ -56,7 +56,8 @@ target_compile_definitions(rc_resid PRIVATE VERSION="1.0-pre2" _USE_MATH_DEFINES
 add_library(rc_core STATIC core/config.c core/yamledit.c core/romdb.c core/state.c
     core/media.c core/font8x8.c core/palette.c core/keymap.c core/stick.c core/machine.c core/stub_machine.c core/machines/c64.c hw/bus.c hw/sched.c hw/mos6510.c
     hw/mouse1351.c hw/cia6526.c hw/pla.c hw/c64kbd.c hw/sid_resid.cpp hw/vic2.c hw/via6522.c
-    core/media/image.c core/media/d64.c core/media/t64.c core/media/tap.c core/media/prg.c core/media/gcr.c)
+    core/media/image.c core/media/d64.c core/media/t64.c core/media/tap.c core/media/prg.c core/media/gcr.c
+    core/media/tapedeck.c hw/datasette.c)
 target_include_directories(rc_core PUBLIC core hw PRIVATE ${CMAKE_CURRENT_BINARY_DIR}/generated)
 target_link_libraries(rc_core PUBLIC rc_yaml rc_host rc_resid)
 if(NOT WIN32)
@@ -134,3 +135,8 @@ target_link_libraries(test_browser PRIVATE rc_platform)
 target_compile_definitions(test_browser PRIVATE RC_WORK="${RC_WORK}")
 rc_set_warnings(test_browser)
 add_test(NAME browser COMMAND test_browser)
+add_executable(test_datasette tests/test_datasette.c)
+target_link_libraries(test_datasette PRIVATE rc_core)
+target_compile_definitions(test_datasette PRIVATE RC_WORK="${RC_WORK}")
+rc_set_warnings(test_datasette)
+add_test(NAME datasette COMMAND test_datasette)

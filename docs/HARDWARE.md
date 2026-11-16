@@ -154,3 +154,26 @@ discharge plus 256-cycle conversion through the CIA1 PA6/PA7-controlled
 serialized in BUS version 2; version 1 states load with disconnected inputs.
 The SID adapter overlays external ADC read data and its data-bus lifetime,
 leaving the vendored reSID and its analogue history unchanged.
+
+## Datasette and KERNAL tape blocks
+
+`rc_datasette` takes logical motor-on and the electrical CPU write level;
+the board maps 6510 P5 (active low) and P3 into them. Its sense is low while
+PLAY or RECORD is latched, even with the motor off. The read callback is
+an electrical level for CIA1 FLAG: each TAP duration has one falling edge,
+with an intermediate rise. Stopping the motor freezes the exact remainder
+of a pulse. Recording measures write falling-edge periods while the motor
+runs and marks the mounted TAP image dirty. No device calls another chip.
+The deck borrows a mounted `rc_media`; loading a state updates the existing
+borrowed media object, or owns the restored image when none was mounted.
+Media, transport, waveform phase and partial recording periods are saved.
+
+The portable tape codec recognizes original KERNAL headers, nine-byte
+countdowns, LSB-first data and odd parity, the XOR checksum, repeated header
+and data blocks, and the long/short end marker. Directory entries keep the
+pilot's TAP byte offset for genuine tape seeking. The encoder emits the
+same format with 384/528/688-cycle short/medium/long nominal pulses. Pilot
+counts are derived from the original ROM: header `$69` plus rollover gives
+`$6A00` short periods; data `$14` gives `$1500`; the repeated-copy pilot
+includes the end marker's short period. The original SAVE code, not the
+encoder, produces recorded waveforms during guest execution.
