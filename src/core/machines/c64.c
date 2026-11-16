@@ -1,5 +1,6 @@
 /* Board wiring from Commodore's schematics, PRG and Mapping the C64. */
 #include "c64.h"
+#include "c64_media.h"
 #include "../palette.h"
 #include <stdio.h>
 #include <stdlib.h>
@@ -11,6 +12,10 @@ static const rc_model_desc MODELS[]={
 static const char *const SID_MODELS[]={"default","6581","8580",NULL};
 static const rc_option_desc OPTIONS[]={
     {.key="sid",.values=SID_MODELS,.models=RC_MODELS_ALL,.flags=RC_OPTION_RESET}};
+static const rc_media_desc MEDIA[]={
+    {.key="tape",.kind=RC_MEDIA_TAPE,.extensions="tap,t64",.models=RC_MODELS_ALL},
+    {.key="program",.kind=RC_MEDIA_PROGRAM,.extensions="prg,p00",.models=RC_MODELS_ALL},
+    {.key="disk",.kind=RC_MEDIA_FLOPPY,.extensions="d64",.models=RC_MODELS_ALL}};
 /* Matrix order: CIA1 PA bit selects the row; PB bit selects the column. */
 static const rc_key_desc KEYS[]={
     {"DELETE","Backspace","DEL",0,0,4,4},{"RETURN","Return","RETURN",0,0,4,4},
@@ -50,8 +55,9 @@ static void host_line(void *ctx,void *dev,int pin,int level){
     rc_c64 *c=ctx;
     if(dev==&c->cpu&&pin>=RC_CPU_PORT0){
         c->port_charge=(uint8_t)(((c->port_charge&~c->cpu.ddr)|(c->cpu.port&c->cpu.ddr))&0xc8u);
-        rc_mos6510_port_input(&c->cpu,(uint8_t)(0x17u|c->port_charge));
+        rc_c64_media_lines(c);
     }
+    if(dev==&c->tape&&pin==RC_DATASETTE_READ)rc_cia6526_input(&c->cia[0],RC_CIA_FLAG,level);
     if(dev==&c->keyboard&&pin==RC_KBD_RESTORE_LINE)c->restore=(uint8_t)level;
     if((dev==&c->vic&&pin==RC_VIC_IRQ)||(dev==&c->cia[0]&&pin==RC_CIA_IRQ)||
        (dev==&c->cia[1]&&pin==RC_CIA_IRQ)||dev==&c->keyboard)interrupts(c);
@@ -76,22 +82,23 @@ static void phi2(void *ctx,uint64_t time){
         const rc_vic_access a=c->vic.bus[1];
         rc_vic2_clock(&c->vic,1,rc_bus_vic(&c->bus,a.address),c->bus.colour[a.address&1023u]);
     }
-    rc_bus_pot_tick(&c->bus);rc_sid_clock(&c->sid,1);
+    rc_bus_pot_tick(&c->bus);rc_sid_clock(&c->sid,1);rc_c64_media_tick(c);
     /* The PAL/NTSC board's mains-derived TOD input is independent of frames. */
     c->tod_at+=c->model>=2?60u:50u;
     if(c->tod_at>=c->hz){c->tod_at-=c->hz;rc_cia6526_tod_pulse(&c->cia[0]);rc_cia6526_tod_pulse(&c->cia[1]);}
 }
-rc_run_status rc_c64_run(void *self,uint64_t cycles){rc_c64 *c=self;const rc_cycle_host board={c,phi1,phi2,NULL};return rc_sched_cycles(&c->sched,&board,cycles)&&rc_sid_ok(&c->sid)?RC_RUN_OK:RC_RUN_ERROR;}
-static void destroy(void *self){rc_c64 *c=self;rc_sid_release(&c->sid);free(c);}
+rc_run_status rc_c64_run(void *self,uint64_t cycles){rc_c64 *c=self;const rc_cycle_host board={c,phi1,phi2,NULL};return rc_sched_cycles(&c->sched,&board,cycles)&&rc_sid_ok(&c->sid)&&rc_datasette_ok(&c->tape)?RC_RUN_OK:RC_RUN_ERROR;}
+static void destroy(void *self){rc_c64 *c=self;rc_c64_media_release(c);rc_sid_release(&c->sid);free(c);}
 static const char *description(const void *self){return MODELS[((const rc_c64 *)self)->model].name;}
 static const char *error_text(const void *self){(void)self;return "C64 clock overflow or SID allocation failed";}
 static void reset(void *self,int power){
     rc_c64 *c=self;
     if(power){for(unsigned i=0;i<65536;++i)c->bus.ram[i]=(uint8_t)((i&64u)?255:0);memset(c->bus.colour,0,1024);rc_sched_init(&c->sched);c->tod_at=0;c->port_charge=0;rc_mos6510_init(&c->cpu,&c->host,RC_MOS6510);}
     else {c->cpu.ddr=0;rc_mos6510_reset(&c->cpu);}
+    c->cpu.hooks=&c->hooks;c->tape_audio_phase=0;c->tape_audio_head=c->tape_audio_count=0;
     if(power){rc_vic2_reset(&c->vic);c->bus.pot_phase=0;memset(c->bus.pot_value,255,2);memset(c->bus.pot_charge,255,2);for(unsigned p=0;p<2;++p)rc_mouse1351_init(&c->bus.mouse[p]);}rc_cia6526_reset(&c->cia[0]);rc_cia6526_reset(&c->cia[1]);rc_sid_reset(&c->sid);
     c->keyboard.dev.ops->reset(&c->keyboard);c->restore=0;c->bus.data=c->bus.vic_data=255;c->bus.game=c->bus.exrom=1;
-    rc_mos6510_port_input(&c->cpu,(uint8_t)(0x17u|c->port_charge));interrupts(c);
+    rc_c64_media_lines(c);interrupts(c);
 }
 static void nmi(void *self){rc_c64 *c=self;rc_mos6510_input(&c->cpu,RC_CPU_NMI,1);rc_mos6510_input(&c->cpu,RC_CPU_NMI,c->cia[1].irq);}
 static uint32_t clock_hz(const void *self){return ((const rc_c64 *)self)->hz;}
@@ -116,7 +123,7 @@ static size_t text(void *self,char *out,size_t capacity){
     if(capacity)out[n]=0;return n;
 }
 static uint32_t audio_rate(const void *self){(void)self;return 48000;}
-static size_t audio_pull(void *self,int16_t *out,size_t frames){rc_c64 *c=self;int16_t mono[1024];size_t done=0;while(done<frames){const size_t count=frames-done<1024?frames-done:1024;const size_t n=rc_sid_audio_pull(&c->sid,mono,count);for(size_t i=0;i<n;++i)out[(done+i)*2]=out[(done+i)*2+1]=mono[i];done+=n;if(n<count)break;}return done;}
+static size_t audio_pull(void *self,int16_t *out,size_t frames){rc_c64 *c=self;int16_t mono[1024];size_t done=0;while(done<frames){const size_t count=frames-done<1024?frames-done:1024;const size_t n=rc_sid_audio_pull(&c->sid,mono,count);for(size_t i=0;i<n;++i){int sample=mono[i]+rc_c64_tape_audio(c);if(sample>32767)sample=32767;if(sample< -32768)sample= -32768;out[(done+i)*2]=out[(done+i)*2+1]=(int16_t)sample;}done+=n;if(n<count)break;}return done;}
 static void key(void *self,unsigned keycode,int down){rc_c64kbd_key(&((rc_c64 *)self)->keyboard,keycode,down);}
 static void joystick(void *self,unsigned port,unsigned held){rc_c64kbd_joystick(&((rc_c64 *)self)->keyboard,port,(uint8_t)~held);}
 static void pointer(void *self,unsigned port,unsigned type,int x,int y,unsigned buttons){
@@ -125,13 +132,13 @@ static void pointer(void *self,unsigned port,unsigned type,int x,int y,unsigned 
     else if(type==RC_CONTROL_PADDLES){c->bus.paddle[port][0]=(uint8_t)x;c->bus.paddle[port][1]=(uint8_t)y;rc_c64kbd_joystick(&c->keyboard,port,(uint8_t)~((buttons&1u?4u:0)|(buttons&2u?8u:0)));}
     else if(type==RC_CONTROL_NONE)rc_c64kbd_joystick(&c->keyboard,port,255);
 }
-static unsigned activity(const void *self){(void)self;return 0;}
+
 static uint32_t hashes(const void *self,uint8_t *out,uint32_t max){if(max<3)return 0;memcpy(out,((const rc_c64 *)self)->rom_hashes,96);return 3;}
 static void trace(void *self,rc_trace_fn fn,void *ctx){rc_c64 *c=self;c->trace=fn;c->trace_ctx=ctx;}
 static int peek(void *self,uint32_t address,uint8_t *value){if(address>65535)return 0;*value=rc_bus_read(&((rc_c64 *)self)->bus,(uint16_t)address,0);return 1;}
 static int poke(void *self,uint32_t address,uint8_t value){if(address>65535)return 0;rc_bus_write(&((rc_c64 *)self)->bus,(uint16_t)address,value);return 1;}
 static void save(const void *self,rc_state_writer *w){
-    const rc_c64 *c=self;rc_sw_begin(w,"C64 ",0);rc_sw_u32(w,1);rc_sw_u64(w,c->sched.now);rc_sw_u64(w,c->tod_at);rc_sw_u8(w,c->restore);rc_sw_u8(w,c->port_charge);rc_sw_end(w);
+    const rc_c64 *c=self;rc_c64_media_save(c,w);rc_sw_begin(w,"C64 ",0);rc_sw_u32(w,1);rc_sw_u64(w,c->sched.now);rc_sw_u64(w,c->tod_at);rc_sw_u8(w,c->restore);rc_sw_u8(w,c->port_charge);rc_sw_end(w);
 #define SAVE(tag,object,fn) rc_sw_begin(w,tag,0);fn(&c->object,w);rc_sw_end(w)
     SAVE("BUS ",bus,rc_bus_save);SAVE("CPU ",cpu,rc_mos6510_save);SAVE("VIC2",vic,rc_vic2_save);
     SAVE("SID ",sid,rc_sid_save);SAVE("PLA ",pla,rc_pla_save);SAVE("KBD ",keyboard,rc_c64kbd_save);
@@ -139,7 +146,7 @@ static void save(const void *self,rc_state_writer *w){
     for(unsigned i=0;i<2;++i){rc_sw_begin(w,"CIA ",i);rc_cia6526_save(&c->cia[i],w);rc_sw_end(w);}
 }
 static int load(void *self,rc_state_reader *r){
-    rc_c64 *c=self;if(!rc_sr_chunk(r,"C64 ",0)||rc_sr_u32(r)!=1)return 0;
+    rc_c64 *c=self;if(!rc_c64_media_load(c,r))return 0;if(!rc_sr_chunk(r,"C64 ",0)||rc_sr_u32(r)!=1)return 0;
     rc_sched_init(&c->sched);c->sched.now=rc_sr_u64(r);c->tod_at=rc_sr_u64(r);c->restore=rc_sr_u8(r);c->port_charge=rc_sr_u8(r);
     if(!rc_sr_ok(r)||c->sched.now==RC_NEVER||c->tod_at>=c->hz||c->restore>1)return 0;
 #define LOAD(tag,object,fn) if(!rc_sr_chunk(r,tag,0)||!fn(&c->object,r))return 0
@@ -152,10 +159,10 @@ static int load(void *self,rc_state_reader *r){
 }
 static const rc_machine_impl IMPL={.destroy=destroy,.description=description,.error=error_text,.reset=reset,.nmi=nmi,
     .clock=clock_hz,.run=rc_c64_run,.time=time_now,.frame_period=period,.frame=frame,.text=text,
-    .audio_rate=audio_rate,.audio_pull=audio_pull,.key=key,.joystick=joystick,.activity=activity,
+    .audio_rate=audio_rate,.audio_pull=audio_pull,.key=key,.joystick=joystick,.activity=rc_c64_activity,.insert=rc_c64_insert,.media=rc_c64_media,.eject=rc_c64_eject,.control=rc_c64_control,.tape_options=rc_c64_tape_options,.tape_deck=rc_c64_tape_deck,.autoload=rc_c64_autoload,
     .save=save,.load=load,.rom_hashes=hashes,.set_trace=trace,.peek=peek,.poke=poke,.border=border,.pointer=pointer};
 const rc_family rc_c64_family={.id="c64",.name="Commodore 64",.models=MODELS,.model_count=4,
-    .options=OPTIONS,.option_count=sizeof OPTIONS/sizeof OPTIONS[0],.keys=KEYS,.key_count=65,
+    .media=MEDIA,.media_count=3,.options=OPTIONS,.option_count=sizeof OPTIONS/sizeof OPTIONS[0],.keys=KEYS,.key_count=65,
     .combos=COMBOS,.combo_count=sizeof COMBOS/sizeof COMBOS[0],.typing=TYPING,.typing_count=sizeof TYPING/sizeof TYPING[0],.joysticks=2,.impl=&IMPL,.create=rc_c64_create};
 void *rc_c64_create(const rc_machine_setup *setup,char *error,size_t capacity){
     rc_c64 *c=calloc(1,sizeof *c);if(!c){if(capacity)snprintf(error,capacity,"Out of memory");return NULL;}
@@ -172,5 +179,5 @@ void *rc_c64_create(const rc_machine_setup *setup,char *error,size_t capacity){
     rc_c64kbd_init(&c->keyboard,&c->host);rc_pla_init(&c->pla,&c->host);
     const unsigned sid=setup->options[0]?setup->options[0]-1u:c->model&1u;
     if(!rc_sid_init(&c->sid,&c->host,sid,c->hz,48000)){if(capacity)snprintf(error,capacity,"Cannot initialise SID");free(c);return NULL;}
-    reset(c,1);return c;
+    rc_c64_media_init(c);reset(c,1);return c;
 }

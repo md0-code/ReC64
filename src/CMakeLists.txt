@@ -54,7 +54,7 @@ add_library(rc_resid STATIC third_party/resid/sid.cc third_party/resid/voice.cc
 target_include_directories(rc_resid SYSTEM PUBLIC third_party/resid ${RC_RESID_GENERATED})
 target_compile_definitions(rc_resid PRIVATE VERSION="1.0-pre2" _USE_MATH_DEFINES _CRT_SECURE_NO_WARNINGS)
 add_library(rc_core STATIC core/config.c core/yamledit.c core/romdb.c core/state.c
-    core/media.c core/font8x8.c core/palette.c core/keymap.c core/stick.c core/machine.c core/stub_machine.c core/machines/c64.c hw/bus.c hw/sched.c hw/mos6510.c
+    core/media.c core/font8x8.c core/palette.c core/keymap.c core/stick.c core/machine.c core/stub_machine.c core/machines/c64.c core/machines/c64_media.c hw/bus.c hw/sched.c hw/mos6510.c
     hw/traps.c hw/mouse1351.c hw/cia6526.c hw/pla.c hw/c64kbd.c hw/sid_resid.cpp hw/vic2.c hw/via6522.c
     core/media/image.c core/media/d64.c core/media/t64.c core/media/tap.c core/media/prg.c core/media/gcr.c
     core/media/tapedeck.c hw/datasette.c)
@@ -145,3 +145,8 @@ target_link_libraries(test_traps PRIVATE rc_shell)
 target_compile_definitions(test_traps PRIVATE RC_ROM_DIR="${CMAKE_CURRENT_SOURCE_DIR}/../roms")
 rc_set_warnings(test_traps)
 add_test(NAME traps COMMAND test_traps)
+
+add_executable(test_loading tests/test_loading.c)
+target_link_libraries(test_loading PRIVATE rc_core)
+target_compile_definitions(test_loading PRIVATE RC_ROM_DIR="${CMAKE_CURRENT_SOURCE_DIR}/../roms")
+rc_set_warnings(test_loading)

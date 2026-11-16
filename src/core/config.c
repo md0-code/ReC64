@@ -249,6 +249,18 @@ rc_config_media *rc_config_media_slot(rc_config *c, const char *key) {
     return m;
 }
 
+void rc_config_media_settings(const rc_config *c,const char *key,rc_config_media *out){
+    memset(out,0,sizeof *out);snprintf(out->key,sizeof out->key,"%s",key);
+    out->fast=out->sound=out->autoload=out->full_speed=out->traps=out->save_traps=out->accelerate=1;
+    const rc_config_media *shared=strcmp(key,"tape")?rc_config_media_find(c,"tape"):NULL,*own=rc_config_media_find(c,key);
+    if(shared){out->fast=shared->fast;out->sound=shared->sound;out->autoload=shared->autoload;out->full_speed=shared->full_speed;out->traps=shared->traps;out->save_traps=shared->save_traps;out->accelerate=shared->accelerate;}
+    if(own){snprintf(out->image,sizeof out->image,"%s",own->image);out->write_protect=own->write_protect;out->explicit_flags=own->explicit_flags;
+#define OVERRIDE(field,flag) if(!shared||(own->explicit_flags&flag))out->field=own->field
+        OVERRIDE(fast,RC_MEDIA_SETTING_FAST);OVERRIDE(sound,RC_MEDIA_SETTING_SOUND);OVERRIDE(autoload,RC_MEDIA_SETTING_AUTOLOAD);OVERRIDE(full_speed,RC_MEDIA_SETTING_FULL_SPEED);
+        OVERRIDE(traps,RC_MEDIA_SETTING_TRAPS);OVERRIDE(save_traps,RC_MEDIA_SETTING_SAVE_TRAPS);OVERRIDE(accelerate,RC_MEDIA_SETTING_ACCELERATE);
+#undef OVERRIDE
+    }
+}
 unsigned rc_config_tape_bits(const rc_config_media *m) {
     if (!m) return RC_TAPE_SOUND | RC_TAPE_TRAPS | RC_TAPE_SAVE_TRAPS | RC_TAPE_ACCELERATE;
     return (m->sound ? RC_TAPE_SOUND : 0u) | (m->fast && m->traps ? RC_TAPE_TRAPS : 0u) | (m->fast && m->save_traps ? RC_TAPE_SAVE_TRAPS : 0u) |
@@ -417,6 +429,8 @@ static int media_section(reader *r, yaml_node_t *v, const char *base, rc_config 
             else if (!strcmp(key, "accelerate")) ok = boolean(r, x, &m->accelerate);
             else ok = fail(r, "Unknown media key; expected image, write_protect, fast, sound, autoload, full_speed, traps, save_traps or accelerate");
             if (!ok) return 0;
+            static const char *const fields[]={"fast","sound","autoload","full_speed","traps","save_traps","accelerate","write_protect"};
+            for(unsigned bit=0;bit<8;++bit)if(!strcmp(key,fields[bit]))m->explicit_flags|=1u<<bit;
         }
     }
     return 1;
@@ -624,7 +638,7 @@ static int check_machine(reader *r, const rc_config *c) {
         r->line = r->media_line[i];
         const int s = rc_family_media(f, c->media[i].key);
         if (s < 0 || !(f->media[s].models >> model & 1u)) return failf(r, "media: %s has no slot %s", f->models[model].name, c->media[i].key);
-        if (f->media[s].kind != RC_MEDIA_TAPE && !(c->media[i].sound && c->media[i].autoload && c->media[i].full_speed && c->media[i].traps &&
+        if (f->media[s].kind != RC_MEDIA_TAPE && f->media[s].kind != RC_MEDIA_PROGRAM && !(c->media[i].sound && c->media[i].autoload && c->media[i].full_speed && c->media[i].traps &&
                                                    c->media[i].save_traps && c->media[i].accelerate))
             return failf(r, "media.%s: sound, autoload, full_speed, traps, save_traps and accelerate are a tape's settings", c->media[i].key);
     }
@@ -805,15 +819,13 @@ int rc_config_store(const rc_config *c, struct rc_ydoc *doc) {
     }
     for (unsigned i = 0; ok && i < c->media_count; ++i) {
         const rc_config_media *m = &c->media[i];
-        const char *image[3] = {"media", m->key, "image"}, *protect[3] = {"media", m->key, "write_protect"}, *fast[3] = {"media", m->key, "fast"};
-        ok = set_unless_default(doc, image, 3, m->image[0] ? stored_path(c, m->image) : "", 1, !m->image[0]) &&
-             set_unless_default(doc, protect, 3, m->write_protect ? "true" : "false", 2, !m->write_protect) &&
-             set_unless_default(doc, fast, 3, m->fast ? "true" : "false", 2, m->fast);
-        static const char *const NAMES[] = {"sound", "autoload", "full_speed", "traps", "save_traps", "accelerate"};
-        const int values[] = {m->sound, m->autoload, m->full_speed, m->traps, m->save_traps, m->accelerate};
-        for (size_t k = 0; ok && k < sizeof NAMES / sizeof *NAMES; ++k) {
-            const char *path[3] = {"media", m->key, NAMES[k]};
-            ok = set_unless_default(doc, path, 3, values[k] ? "true" : "false", 2, values[k]);
+        const char *image[3]={"media",m->key,"image"};
+        ok=set_unless_default(doc,image,3,m->image[0]?stored_path(c,m->image):"",1,!m->image[0]);
+        static const char *const names[]={"fast","sound","autoload","full_speed","traps","save_traps","accelerate","write_protect"};
+        const int values[]={m->fast,m->sound,m->autoload,m->full_speed,m->traps,m->save_traps,m->accelerate,m->write_protect};
+        for(unsigned bit=0;ok&&bit<8;++bit){const char *path[3]={"media",m->key,names[bit]};
+            if(!strcmp(m->key,"tape")||bit==7||(m->explicit_flags&(1u<<bit)))
+                ok=set_unless_default(doc,path,3,values[bit]?"true":"false",2,(bit==7?!values[bit]:values[bit])&&!(m->explicit_flags&(1u<<bit)));
         }
     }
     ok = ok && set(doc, "video", "look", rc_config_look_name(c->look)) && set(doc, "video", "aspect", rc_config_aspect_name(c->aspect)) &&

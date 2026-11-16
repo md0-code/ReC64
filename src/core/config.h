@@ -51,6 +51,8 @@ typedef struct rc_config_option {
     char key[RC_CONFIG_NAME], value[RC_CONFIG_NAME];
 } rc_config_option;
 
+enum {RC_MEDIA_SETTING_FAST=1,RC_MEDIA_SETTING_SOUND=2,RC_MEDIA_SETTING_AUTOLOAD=4,RC_MEDIA_SETTING_FULL_SPEED=8,
+      RC_MEDIA_SETTING_TRAPS=16,RC_MEDIA_SETTING_SAVE_TRAPS=32,RC_MEDIA_SETTING_ACCELERATE=64,RC_MEDIA_SETTING_PROTECT=128};
 typedef struct rc_config_media {
     char key[RC_CONFIG_NAME];
     char image[RC_CONFIG_PATH];         /* empty: an empty slot */
@@ -64,6 +66,7 @@ typedef struct rc_config_media {
      * has the one switch; the file may take a part out): the shell's full speed, the ROM's load and save routines done at
      * once (hw/traps.h), the waits of other loaders skipped (hw/loadaccel.h). */
     int full_speed, traps, save_traps, accelerate;
+    unsigned explicit_flags;            /* keys actually supplied, for shared tape defaults */
 } rc_config_media;
 /* What a tape slot's settings ask of the machine, for rc_machine_tape_options (machine.h). NULL: a slot the configuration
  * does not mention (all on). */
@@ -143,6 +146,8 @@ int rc_config_set_option(rc_config *config, const char *key, const char *value);
  * rc_config_media_slot adds an empty one when missing (NULL: table full). */
 const rc_config_media *rc_config_media_find(const rc_config *config, const char *key);
 rc_config_media *rc_config_media_slot(rc_config *config, const char *key);
+/* Effective slot settings, inheriting unspecified tape controls from media.tape. */
+void rc_config_media_settings(const rc_config *config,const char *key,rc_config_media *out);
 
 /* The end of a port by its key; NULL when the configuration has none (the port is then not connected). The slot form adds
  * an unconnected one when missing (NULL: the table is full). */
