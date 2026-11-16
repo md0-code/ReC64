@@ -27,9 +27,9 @@ unsigned rc_setup_key(rc_setup *s,const char *key){
         if(s->row<3)return !s->row?RC_SETUP_LOAD:s->row==1?(s->has_cartridge?RC_SETUP_EJECT_CART:0):(s->can_freeze?RC_SETUP_FREEZE:0);
         const rc_family *family=rc_family_of_model(c->model,NULL);const unsigned index=s->row==3?2u:3u,other=index==2?3u:2u;
         if(!family||family->option_count<=other)return 0;
-        const rc_option_desc *option=&family->options[index];const char *current=rc_config_option_value(c,option->key);unsigned value=option->initial,count=0;
-        while(option->values[count]){if(current&&!strcmp(current,option->values[count]))value=count;++count;}
-        value=cycle(value,count,direction);rc_config_set_option(c,option->key,option->values[value]);
+        const rc_option_desc *option=&family->options[index];const char *current=rc_config_option_value(c,option->key);unsigned value=option->initial,value_count=0;
+        while(option->values[value_count]){if(current&&!strcmp(current,option->values[value_count]))value=value_count;++value_count;}
+        value=cycle(value,value_count,direction);rc_config_set_option(c,option->key,option->values[value]);
         if(value)rc_config_set_option(c,family->options[other].key,"off");return RC_SETUP_RESTART;
     }
     if(s->page==RC_SETUP_STATES){if(s->row<10){c->state_slot=(int)s->row+1;return RC_SETUP_STATE_REFRESH;}return s->row==10?RC_SETUP_STATE_SAVE:s->state_status[c->state_slot-1]==1?RC_SETUP_STATE_LOAD:0;}
