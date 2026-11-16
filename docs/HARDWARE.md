@@ -208,3 +208,5 @@ mixed with SID audio at the board's output rate. The board saves mounted
 media and synthetic data, selected entries, recorder phase, loading-hook
 state and pending tape audio along with the chips. A separate, fixed board
 fetch mask keeps tape-prompt handling available when fast hooks are off.
+The board presses PLAY at the known KERNAL prompt, rather than on motor
+changes during reset, so an idle auto-load cannot consume the tape first.

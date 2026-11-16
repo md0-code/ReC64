@@ -83,7 +83,7 @@ static int before_fetch(void *self,uint16_t pc){
     if(!rc_traps_fetch(&c->traps,&io,pc,c->cpu.a,&next))return 0;c->cpu.pc=next;return 1;
 }
 void rc_c64_media_init(rc_c64 *c){
-    rc_datasette_init(&c->tape,&c->host);rc_traps_init(&c->traps,c->rom_hashes);c->source=255;
+    rc_datasette_init(&c->tape,&c->host);rc_datasette_auto_play(&c->tape,0);rc_traps_init(&c->traps,c->rom_hashes);c->source=255;
     for(unsigned i=0;i<3;++i)c->tape_bits[i]=RC_TAPE_SOUND|RC_TAPE_TRAPS|RC_TAPE_SAVE_TRAPS|RC_TAPE_ACCELERATE;
     if(c->traps.known){const unsigned addresses[]={0xf4a5,0xf5ed,0xf817};for(unsigned i=0;i<3;++i)c->fetch_watch[addresses[i]>>3]|=(uint8_t)(1u<<(addresses[i]&7));}
     c->hooks=(rc_cpu_hooks){c,c->fetch_watch,before_fetch,NULL};c->cpu.hooks=&c->hooks;

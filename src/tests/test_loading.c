@@ -22,6 +22,10 @@ int main(int argc,char **argv){
     else CHECK(0);
     const unsigned slot=!strcmp(kind,"prg")||!strcmp(kind,"fastsave")?1u:0u;CHECK(rc_c64_insert(c,slot,media,error,sizeof error));
     rc_c64_tape_options(c,slot,RC_TAPE_SOUND|(fast?RC_TAPE_TRAPS|RC_TAPE_SAVE_TRAPS|RC_TAPE_ACCELERATE:0));
+    if(!strcmp(kind,"tap")&&!fast){
+        rc_c64_family.impl->reset(c,1);CHECK(rc_c64_run(c,period(c)*200)==RC_RUN_OK&&ready(c));
+        CHECK(c->tape.deck.tape.position==20&&!rc_c64_activity(c));
+    }
     if(!strcmp(kind,"save")){
         memcpy(c->bus.ram+0x0801,PROGRAM,sizeof PROGRAM);rc_put16(c->bus.ram+0x2b,0x0801);rc_put16(c->bus.ram+0x2d,(uint16_t)(0x0801+sizeof PROGRAM));
         CHECK(rc_c64_control(c,0,RC_MEDIA_RECORD,0));CHECK(type(c,"SAVE\"PHASE4\",1\n"));
