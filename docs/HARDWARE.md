@@ -162,7 +162,8 @@ the board maps 6510 P5 (active low) and P3 into them. Its sense is low while
 PLAY or RECORD is latched, even with the motor off. The read callback is
 an electrical level for CIA1 FLAG: each TAP duration has one falling edge,
 with an intermediate rise. Stopping the motor freezes the exact remainder
-of a pulse. Recording measures write falling-edge periods while the motor
+of a pulse. Recording measures WRITE rising-edge periods (READ falls after
+the recorder's inverted signal path) while the motor
 runs and marks the mounted TAP image dirty. No device calls another chip.
 The deck borrows a mounted `rc_media`; loading a state updates the existing
 borrowed media object, or owns the restored image when none was mounted.
