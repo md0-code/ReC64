@@ -69,6 +69,9 @@ static int trap_save(void *self,unsigned device,unsigned secondary,const uint8_t
     if(!m||!rc_media_extension_in(m->path,"prg,p00"))return 0;if(device!=1&&device!=8)return -9;if(!m->writable)return -5;
     const size_t size=(uint16_t)(end-start);uint8_t *bytes=malloc(size?size:1);if(!bytes)return -5;for(size_t i=0;i<size;++i)bytes[i]=read_byte(c,(uint16_t)(start+i));
     rc_prg p={0};char error[128];const int ok=rc_prg_create(&p,start,bytes,size,name,rc_media_extension_in(m->path,"p00"),error,sizeof error);free(bytes);if(!ok)return -5;
+    const unsigned slot=c->source;snprintf(p.image->path,sizeof p.image->path,"%s",m->path);c->media[slot]=p.image;
+    const int selected=select_entry(c,slot,c->selected[slot],error,sizeof error);c->media[slot]=m;
+    if(!selected){rc_prg_close(&p);return -5;}
     free(m->data);m->data=p.image->data;m->size=p.image->size;m->dirty=1;p.image->data=NULL;rc_prg_close(&p);return 1;
 }
 static int before_fetch(void *self,uint16_t pc){

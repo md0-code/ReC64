@@ -16,11 +16,11 @@ int main(int argc,char **argv){
     rc_rom_index roms;rc_rom_index_init(&roms);const char *folders[]={RC_ROM_DIR};CHECK(rc_rom_index_scan(&roms,folders,1));
     unsigned options[]={0};rc_machine_setup setup={.family=&rc_c64_family,.model=0,.options=options,.roms=&roms};c=rc_c64_create(&setup,error,sizeof error);CHECK(c);CHECK(rc_c64_run(c,period(c)*200)==RC_RUN_OK&&ready(c));
     const uint8_t name[16]={'P','H','A','S','E','4',' ',' ',' ',' ',' ',' ',' ',' ',' ',' '};rc_media *media=NULL;
-    if(!strcmp(kind,"prg")){rc_prg p={0};CHECK(rc_prg_create(&p,0x0801,PROGRAM,sizeof PROGRAM,name,0,error,sizeof error));media=p.image;snprintf(media->path,sizeof media->path,"fixture.prg");}
+    if(!strcmp(kind,"prg")||!strcmp(kind,"fastsave")){rc_prg p={0};CHECK(rc_prg_create(&p,0x0801,PROGRAM,sizeof PROGRAM,name,0,error,sizeof error));media=p.image;snprintf(media->path,sizeof media->path,"fixture.prg");}
     else if(!strcmp(kind,"t64")){rc_t64 t={0};const rc_t64_program p={.address=0x0801,.data=PROGRAM,.size=sizeof PROGRAM};CHECK(rc_t64_create(&t,&p,1,NULL,error,sizeof error));media=t.image;snprintf(media->path,sizeof media->path,"fixture.t64");}
     else if(!strcmp(kind,"tap")||!strcmp(kind,"save")){rc_tap t={0};if(!strcmp(kind,"save"))CHECK(rc_tap_create(&t,1,error,sizeof error));else CHECK(rc_tape_encode(&t,0x0801,PROGRAM,sizeof PROGRAM,name,error,sizeof error));media=t.image;snprintf(media->path,sizeof media->path,"fixture.tap");}
     else CHECK(0);
-    const unsigned slot=!strcmp(kind,"prg")?1u:0u;CHECK(rc_c64_insert(c,slot,media,error,sizeof error));
+    const unsigned slot=!strcmp(kind,"prg")||!strcmp(kind,"fastsave")?1u:0u;CHECK(rc_c64_insert(c,slot,media,error,sizeof error));
     rc_c64_tape_options(c,slot,RC_TAPE_SOUND|(fast?RC_TAPE_TRAPS|RC_TAPE_SAVE_TRAPS|RC_TAPE_ACCELERATE:0));
     if(!strcmp(kind,"save")){
         memcpy(c->bus.ram+0x0801,PROGRAM,sizeof PROGRAM);rc_put16(c->bus.ram+0x2b,0x0801);rc_put16(c->bus.ram+0x2d,(uint16_t)(0x0801+sizeof PROGRAM));
@@ -44,7 +44,13 @@ int main(int argc,char **argv){
         rc_tap t={0};CHECK(rc_tap_open(&t,media->data,media->size,error,sizeof error));uint16_t address;uint8_t *data=NULL;size_t length;CHECK(rc_tape_extract(&t,0,&address,&data,&length,error,sizeof error));CHECK(address==0x0801&&length==sizeof PROGRAM&&!memcmp(data,PROGRAM,length));free(data);rc_tap_close(&t);
         CHECK(rc_c64_control(c,0,RC_MEDIA_REWIND,0));memset(c->bus.ram+0x0801,0,sizeof PROGRAM);CHECK(type(c,"LOAD\"\",1,1\n"));frames=0;while(!ready(c)&&frames++<6000)CHECK(rc_c64_run(c,period(c))==RC_RUN_OK);CHECK(ready(c));
     }
-    CHECK(!memcmp(c->bus.ram+0x0801,PROGRAM,sizeof PROGRAM));CHECK(type(c,"RUN\n"));char text[2048];rc_c64_family.impl->text(c,text,sizeof text);CHECK(strstr(text,"PHASE FOUR"));
+    uint8_t expected_program[sizeof PROGRAM];memcpy(expected_program,PROGRAM,sizeof PROGRAM);
+    if(!strcmp(kind,"fastsave")){
+        expected_program[14]='I';expected_program[15]='V';expected_program[16]='E';memcpy(c->bus.ram+0x0801,expected_program,sizeof PROGRAM);
+        CHECK(type(c,"SAVE\"\",1\n")&&c->traps.saves==1);memset(c->bus.ram+0x0801,0,sizeof PROGRAM);
+        CHECK(type(c,"LOAD\"\",1,1\n"));frames=0;while(!ready(c)&&frames++<6000)CHECK(rc_c64_run(c,period(c))==RC_RUN_OK);CHECK(ready(c));
+    }
+    CHECK(!memcmp(c->bus.ram+0x0801,expected_program,sizeof PROGRAM));CHECK(type(c,"RUN\n"));char text[2048];rc_c64_family.impl->text(c,text,sizeof text);CHECK(strstr(text,!strcmp(kind,"fastsave")?"PHASE FIVE":"PHASE FOUR"));
     printf("%s %s loaded identical program and ran; cycles=%llu trap_loads=%u tape_bytes=%zu\n",kind,fast?"fast":"original",(unsigned long long)c->sched.now,c->traps.loads,media->size);
     rc_c64_family.impl->destroy(c);rc_media_close(media);rc_rom_index_free(&roms);return 0;
 }

@@ -90,7 +90,7 @@ static void phi2(void *ctx,uint64_t time){
 rc_run_status rc_c64_run(void *self,uint64_t cycles){rc_c64 *c=self;const rc_cycle_host board={c,phi1,phi2,NULL};return rc_sched_cycles(&c->sched,&board,cycles)&&rc_sid_ok(&c->sid)&&rc_datasette_ok(&c->tape)?RC_RUN_OK:RC_RUN_ERROR;}
 static void destroy(void *self){rc_c64 *c=self;rc_c64_media_release(c);rc_sid_release(&c->sid);free(c);}
 static const char *description(const void *self){return MODELS[((const rc_c64 *)self)->model].name;}
-static const char *error_text(const void *self){(void)self;return "C64 clock overflow or SID allocation failed";}
+static const char *error_text(const void *self){(void)self;return "C64 clock overflow, SID allocation or tape recording failed";}
 static void reset(void *self,int power){
     rc_c64 *c=self;
     if(power){for(unsigned i=0;i<65536;++i)c->bus.ram[i]=(uint8_t)((i&64u)?255:0);memset(c->bus.colour,0,1024);rc_sched_init(&c->sched);c->tod_at=0;c->port_charge=0;rc_mos6510_init(&c->cpu,&c->host,RC_MOS6510);}
