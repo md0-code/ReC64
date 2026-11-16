@@ -23,7 +23,7 @@ int main(int argc,char **argv){
     if(loader){
         CHECK(type("LOAD\"*\",8,1\n")&&prompt(18000));CHECK(type("RUN\n"));unsigned ram_frames=0;
         for(unsigned frame=0;frame<6000;++frame){CHECK(rc_c64_run(c,period())==RC_RUN_OK);if(c->drive.cpu.pc<0x800)++ram_frames;if(frame==999||frame==2999||frame==5999){char name[32];snprintf(name,sizeof name,"loader-%u",frame+1);CHECK(shot(name));report();}}
-        CHECK(ram_frames>50);printf("Custom drive code observed for %u frames; cycles=%llu\n",ram_frames,(unsigned long long)c->sched.now);
+        char text[2048];rc_c64_family.impl->text(c,text,sizeof text);CHECK(ram_frames>50&&!strstr(text,"INSTALLING LOADER"));printf("Custom drive code observed for %u frames; cycles=%llu\n",ram_frames,(unsigned long long)c->sched.now);
     }else {
         CHECK(type("LOAD\"$\",8\n")&&prompt(4000));CHECK(type("LIST\n"));char text[2048];rc_c64_family.impl->text(c,text,sizeof text);CHECK(strstr(text,"PHASE FIVE")&&strstr(text,"BLOCKS FREE"));CHECK(shot("directory"));
         CHECK(type("NEW\n10PRINT\"PHASE FIVE\"\nSAVE\"PHASE5\",8\n")&&prompt(10000));CHECK(rc_c64_control(c,2,RC_MEDIA_FLUSH,0)&&media->dirty);CHECK(rc_media_save(media));

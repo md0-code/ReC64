@@ -121,7 +121,7 @@ static size_t text(void *self,char *out,size_t capacity){
     rc_c64 *c=self;size_t n=0;const unsigned bank=(rc_cia6526_port_output(&c->cia[1],0)^3u)&3u;
     const unsigned base=(bank<<14)|((c->vic.reg[24]&240u)<<6);
     for(unsigned y=0;y<25;++y){char row[40];unsigned last=0;
-        for(unsigned x=0;x<40;++x){unsigned ch=c->bus.ram[(base+y*40+x)&65535u]&127u;ch=ch<32?ch+64:ch<64?ch:32;row[x]=(char)ch;if(ch!=32)last=x+1;}
+        for(unsigned x=0;x<40;++x){unsigned ch=c->bus.ram[(base+y*40+x)&65535u]&127u;ch=ch<32?ch+64:ch<64?ch:(c->vic.reg[24]&2u)&&ch>=65&&ch<=90?ch:32;row[x]=(char)ch;if(ch!=32)last=x+1;}
         for(unsigned x=0;x<last&&n+1<capacity;++x)out[n++]=row[x];if(n+1<capacity)out[n++]='\n';}
     if(capacity)out[n]=0;return n;
 }
