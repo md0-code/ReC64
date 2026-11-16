@@ -1,5 +1,6 @@
 /* 250407/250425/250469 address, data, bank-select and keyboard wiring. */
 #include "bus.h"
+#include "../core/config.h"
 static uint8_t decode(rc_bus *b,uint16_t a,int read,int effects) {
     const uint8_t port=rc_mos6510_port_read(b->cpu,1);
     const uint16_t inputs=(uint16_t)((port&7u)<<1|(a&0x8000u)>>10|(a&0x4000u)>>8|
@@ -30,7 +31,10 @@ uint8_t rc_bus_read(rc_bus *b,uint16_t a,int effects) {
             if(effects)data=rc_vic2_read(b->vic,a&63u);
             else {const unsigned reg=a&63u;const uint8_t saved=reg<47?b->vic->reg[reg]:255;
                 data=rc_vic2_read(b->vic,reg);if(reg<47)b->vic->reg[reg]=saved;}
-        } else if(a<0xd800)data=effects?rc_sid_read(b->sid,a&31u):rc_sid_peek(b->sid,a&31u);
+        } else if(a<0xd800){const unsigned reg=a&31u;
+            if(reg==25||reg==26)data=effects?rc_sid_pot_read(b->sid,reg,b->pot_value[reg-25]):b->pot_value[reg-25];
+            else data=effects?rc_sid_read(b->sid,reg):rc_sid_peek(b->sid,reg);
+        }
         else if(a<0xdc00)data=(uint8_t)(b->colour[a&1023u]|(b->vic_data&240u));
         else if(a<0xde00){
             rc_cia6526 *c=b->cia[(a>>8)&1u];
@@ -57,5 +61,35 @@ uint8_t rc_bus_vic(rc_bus *b,uint16_t address) {
         (bank&1u?RC_PLA_VA14:0)|(address&0x2000u?RC_PLA_VA13:0)|(address&0x1000u?RC_PLA_VA12:0));
     b->vic_data=rc_pla_decode(inputs)&RC_PLA_CHAROM?b->chargen[a&4095u]:b->ram[a];return b->vic_data;
 }
-void rc_bus_save(const rc_bus *b,rc_state_writer *w){rc_sw_u32(w,1);rc_sw_u8(w,b->data);rc_sw_u8(w,b->vic_data);rc_sw_u8(w,b->game);rc_sw_u8(w,b->exrom);rc_sw_packed(w,b->ram,sizeof b->ram);rc_sw_packed(w,b->colour,sizeof b->colour);}
-int rc_bus_load(rc_bus *b,rc_state_reader *r){if(r->end-r->at<8||rc_sr_u32(r)!=1)return 0;b->data=rc_sr_u8(r);b->vic_data=rc_sr_u8(r);b->game=rc_sr_u8(r);b->exrom=rc_sr_u8(r);rc_sr_packed(r,b->ram,sizeof b->ram);rc_sr_packed(r,b->colour,sizeof b->colour);return rc_sr_ok(r)&&b->game<=1&&b->exrom<=1;}
+void rc_bus_save(const rc_bus *b,rc_state_writer *w){rc_sw_u32(w,2);rc_sw_u8(w,b->data);rc_sw_u8(w,b->vic_data);rc_sw_u8(w,b->game);rc_sw_u8(w,b->exrom);rc_sw_packed(w,b->ram,sizeof b->ram);rc_sw_packed(w,b->colour,sizeof b->colour);
+    rc_sw_u16(w,b->pot_phase);rc_sw_bytes(w,b->pot_value,2);rc_sw_bytes(w,b->pot_charge,2);
+    for(unsigned p=0;p<2;++p){rc_sw_u8(w,b->control_type[p]);rc_sw_bytes(w,b->paddle[p],2);rc_mouse1351_save(&b->mouse[p],w);}}
+int rc_bus_load(rc_bus *b,rc_state_reader *r){
+    const unsigned version=rc_sr_u32(r);if(version<1||version>2)return 0;
+    b->data=rc_sr_u8(r);b->vic_data=rc_sr_u8(r);b->game=rc_sr_u8(r);b->exrom=rc_sr_u8(r);rc_sr_packed(r,b->ram,sizeof b->ram);rc_sr_packed(r,b->colour,sizeof b->colour);
+    if(version>=2){b->pot_phase=rc_sr_u16(r);rc_sr_bytes(r,b->pot_value,2);rc_sr_bytes(r,b->pot_charge,2);
+        for(unsigned p=0;p<2;++p){b->control_type[p]=rc_sr_u8(r);rc_sr_bytes(r,b->paddle[p],2);if(b->control_type[p]>RC_CONTROL_NONE||!rc_mouse1351_load(&b->mouse[p],r))return 0;}}
+    else {b->pot_phase=0;for(unsigned p=0;p<2;++p){b->pot_value[p]=b->pot_charge[p]=255;b->control_type[p]=RC_CONTROL_JOYSTICK;rc_mouse1351_init(&b->mouse[p]);}}
+    return rc_sr_ok(r)&&b->pot_phase<512&&b->game<=1&&b->exrom<=1;
+}
+/* SID's 256-cycle discharge and 256-cycle conversion; the 4066 switches
+ * follow CIA1 PA6/7. A disconnected input runs to 255. Paddle values are
+ * calibrated conversion times; two enabled resistances charge in parallel. */
+void rc_bus_pot_tick(rc_bus *b){
+    const unsigned phase=b->pot_phase;
+    if(!phase)b->pot_charge[0]=b->pot_charge[1]=255;
+    if(phase>=256){const uint8_t select=rc_cia6526_port_output(b->cia[0],0);
+        for(unsigned axis=0;axis<2;++axis){unsigned threshold=256,resistance=256;
+            for(unsigned p=0;p<2;++p)if(select&(64u<<p)){
+                const unsigned type=b->control_type[p];
+                if(type==RC_CONTROL_MOUSE1351){const unsigned value=rc_mouse1351_pot(&b->mouse[p],axis);if(value<threshold)threshold=value;}
+                else if(type==RC_CONTROL_PADDLES){const unsigned value=b->paddle[p][axis];
+                    resistance=resistance==256?value:resistance+value?resistance*value/(resistance+value):0;}
+            }
+            if(resistance<threshold)threshold=resistance;
+            if(phase-256>=threshold&&b->pot_charge[axis]==255)b->pot_charge[axis]=(uint8_t)(phase-256);
+        }
+    }
+    if(phase==511){b->pot_value[0]=b->pot_charge[0];b->pot_value[1]=b->pot_charge[1];}
+    b->pot_phase=(uint16_t)((phase+1)&511u);
+}

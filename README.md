@@ -27,7 +27,13 @@ Use `--list-models` to see the model identifiers. The `test` model is a
 diagnostic screen that runs without firmware. The optional configuration is
 `rec64.yaml`; an example is in `src/app/`.
 F12 opens setup; Alt+F12 resets and Ctrl+F12 cold boots. F10 switches speed,
-Pause stops/resumes, and Alt+Enter switches full screen.
+Pause stops/resumes, and Alt+Enter switches full screen. F11 toggles the
+keyboard joystick; Shift+F11 swaps ports. Controllers, the 1351 mouse and
+paddles are configured on the Controllers page. Keyboard text follows your
+host layout.
+
+Create a portable Windows build in `dist/` with `./tools/build_dist.ps1`.
+Launch `dist/rec64.exe`; the native ARM64 copy is `dist/arm64/rec64.exe`.
 See [configuration and control](docs/CONFIGURATION.md) and
 [component notices](docs/THIRD_PARTY.md). Licensed under
 [GPL-3.0-or-later](docs/LICENSE). Firmware retains its owners' rights.

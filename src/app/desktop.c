@@ -3,6 +3,9 @@
 #include "harness.h"
 #include "pace.h"
 #include "setup.h"
+#include "pads.h"
+#include "joykeys.h"
+#include "../core/keymap.h"
 #include "../core/palette.h"
 #include "../core/yamledit.h"
 #include "../host/host.h"
@@ -21,6 +24,7 @@ typedef struct desktop {
     rc_host_audio audio;
     rc_wav wav;
     rc_config *config;const rc_rom_index *roms;rc_machine **owner;
+    rc_pads pads;rc_joykeys joykeys;rc_keymap keymap;int suppress_text;
     rc_setup setup;rc_osd osd;uint32_t palette[16];
     char palette_folders[3][RC_HOST_PATH];unsigned palette_folders_count;
     int hidden,paused,quit,restart_pending,pace_dirty;uint64_t frames;rc_config running_config;
@@ -66,9 +70,29 @@ static int state_load(void *ctx,const char *path,char *error,size_t cap) {
     desktop *d=ctx;uint8_t *data=NULL;size_t size=0;int writable=0;
     if(!rc_host_read_file(path,64u*1024u*1024u,&data,&size,&writable,error,cap)) return 0;
     rc_state_reader r;const int ok=rc_sr_open(&r,data,size,error,cap)&&rc_machine_load(d->machine,&r,error,cap);
-    free(data);if(ok)d->pace_dirty=1;return ok;
+    free(data);if(ok){d->pace_dirty=1;memset(d->keymap.sent,255,sizeof d->keymap.sent);}return ok;
 }
-static void release_keys(desktop *d){const rc_family *f=rc_machine_family(d->machine);for(unsigned i=0;i<f->key_count;++i)rc_machine_key(d->machine,i,0);for(unsigned p=0;p<f->joysticks;++p)rc_machine_joystick(d->machine,p,0);}
+static void release_keys(desktop *d){rc_keymap_clear(&d->keymap);rc_joykeys_set(&d->joykeys,d->config->keyboard_joystick);const rc_family *f=rc_machine_family(d->machine);for(unsigned i=0;i<f->key_count;++i)rc_machine_key(d->machine,i,0);for(unsigned p=0;p<f->joysticks;++p){rc_machine_joystick(d->machine,p,0);if(d->config->sticks[p].type==RC_CONTROL_MOUSE1351)rc_machine_pointer(d->machine,p,RC_CONTROL_MOUSE1351,0,0,0);}d->suppress_text=0;}
+static void input_config(desktop *d){
+    release_keys(d);int keys[RC_CONFIG_STICK_KEYS];for(unsigned i=0;i<RC_CONFIG_STICK_KEYS;++i)keys[i]=(int)SDL_GetScancodeFromName(d->config->stick_keys[i]);rc_joykeys_set_keys(&d->joykeys,keys);
+    for(unsigned p=0;p<2;++p)rc_machine_pointer(d->machine,p,d->config->sticks[p].type,d->config->sticks[p].type==RC_CONTROL_PADDLES?255:0,d->config->sticks[p].type==RC_CONTROL_PADDLES?255:0,0);
+    if(!d->hidden){int mouse=0;for(unsigned p=0;p<2;++p)if(d->config->sticks[p].type==RC_CONTROL_MOUSE1351)mouse=1;SDL_SetRelativeMouseMode(mouse&&!d->setup.active&&!d->paused?SDL_TRUE:SDL_FALSE);}
+}
+static void input_poll(desktop *d){
+    if(d->setup.active||d->paused)return;
+    int explicit_keyboard=0;for(unsigned p=0;p<2;++p)if(d->config->sticks[p].device==RC_STICK_KEYBOARD)explicit_keyboard=1;
+    const unsigned keyboard=rc_joykeys_held(&d->joykeys);
+    for(unsigned p=0;p<2;++p){const rc_config_stick *st=&d->config->sticks[p];
+        if(st->type==RC_CONTROL_JOYSTICK){unsigned held=st->device==RC_STICK_CONTROLLER?rc_pads_joystick(&d->pads,st->pad-1):0;
+            if(st->device==RC_STICK_KEYBOARD||(!explicit_keyboard&&p==d->config->keyboard_port))held|=keyboard;
+            rc_machine_pointer(d->machine,p,st->type,0,0,0);rc_machine_joystick(d->machine,p,held);
+        }else if(st->type==RC_CONTROL_PADDLES){int x=255,y=255;unsigned buttons=0;
+            if(st->device==RC_STICK_CONTROLLER)rc_pads_paddles(&d->pads,st->pad-1,&x,&y,&buttons);
+            else if(st->device==RC_STICK_MOUSE){int w,h,mx,my;const unsigned held=SDL_GetMouseState(&mx,&my);w=h=0;if(SDL_GetMouseFocus())SDL_GetWindowSize(SDL_GetMouseFocus(),&w,&h);if(w>0)x=mx*255/w;if(h>0)y=my*255/h;if(x<0)x=0;if(x>255)x=255;if(y<0)y=0;if(y>255)y=255;buttons=(held&SDL_BUTTON_LMASK?1u:0)|(held&SDL_BUTTON_RMASK?2u:0);}
+            rc_machine_pointer(d->machine,p,st->type,x,y,buttons);
+        }else if(st->type==RC_CONTROL_NONE)rc_machine_pointer(d->machine,p,st->type,0,0,0);
+    }
+}
 static void reset(void *ctx,int power) { desktop *d=ctx;release_keys(d);if(power!=2){rc_machine_reset(d->machine,power==1);d->pace_dirty=1;} }
 static void speed(void *ctx,int full) { ((desktop *)ctx)->full=full; }
 static int audio_capture(void *ctx,const char *path,char *error,size_t cap) {
@@ -111,7 +135,7 @@ static int store_config(desktop *d,char *error,size_t cap){
 static int restart(desktop *d,char *error,size_t cap){
     rc_machine *next=rc_machine_create(d->config,d->roms,error,cap);if(!next)return 0;
     if(strcmp(d->config->model,"test")&&strcmp(rc_machine_family(next)->id,"c64")){rc_machine_destroy(next);snprintf(error,cap,"Required firmware is missing");return 0;}
-    rc_machine_destroy(d->machine);*d->owner=d->machine=next;rc_machine_border(next,d->config->border);d->running_config=*d->config;d->pace_dirty=1;return 1;
+    release_keys(d);rc_machine_destroy(d->machine);*d->owner=d->machine=next;rc_keymap_init(&d->keymap,next,d->config);rc_machine_border(next,d->config->border);d->running_config=*d->config;d->pace_dirty=1;return 1;
 }
 static void restore_machine_config(desktop *d){snprintf(d->config->model,sizeof d->config->model,"%s",d->running_config.model);d->config->option_count=d->running_config.option_count;memcpy(d->config->options,d->running_config.options,sizeof d->config->options);}
 static int needs_restart(desktop *d){
@@ -134,27 +158,38 @@ static int shell_key(void *ctx,const char *name,int down){
         if(shifted){d->quit=1;return 2;}
         if(!d->setup.active){release_keys(d);d->setup.active=1;d->setup.row=0;}
         else {d->setup.active=0;if(d->restart_pending){if(!restart(d,error,sizeof error)){restore_machine_config(d);message(d,error);}d->restart_pending=0;}if(!store_config(d,error,sizeof error))message(d,error);}
-        d->pace_dirty=1;return 1;
+        d->pace_dirty=1;input_config(d);return 1;
     }
     if(d->setup.active){
         if(!down)return 1;const rc_config before=*d->config;const unsigned action=rc_setup_key(&d->setup,bare);
+        if(action&RC_SETUP_INPUT)input_config(d);
         if(action&RC_SETUP_VIDEO){if(!apply_video(d,error,sizeof error)){*d->config=before;message(d,error);}}
         if(action&RC_SETUP_RESTART)d->restart_pending=needs_restart(d);
         if(action&RC_SETUP_AUDIO){if(d->config->sound&&!d->hidden&&!d->audio.device)rc_host_audio_open(&d->audio);}
         if(action&(RC_SETUP_RESET|RC_SETUP_COLD)){if(d->restart_pending){if(!restart(d,error,sizeof error)){restore_machine_config(d);message(d,error);}d->restart_pending=0;}reset(d,(action&RC_SETUP_COLD)!=0);message(d,action&RC_SETUP_COLD?"Cold boot":"Reset");}
         if(action&RC_SETUP_OFF){d->quit=1;if(!store_config(d,error,sizeof error))message(d,error);}
-        if(action&RC_SETUP_CLOSE){if(d->restart_pending){if(!restart(d,error,sizeof error)){restore_machine_config(d);message(d,error);}d->restart_pending=0;}d->pace_dirty=1;}
+        if(action&RC_SETUP_CLOSE){if(d->restart_pending){if(!restart(d,error,sizeof error)){restore_machine_config(d);message(d,error);}d->restart_pending=0;}d->pace_dirty=1;input_config(d);}
         if(action&&!(action&RC_SETUP_OFF)&&!d->restart_pending&&!store_config(d,error,sizeof error))message(d,error);
         return action&RC_SETUP_OFF?2:1;
     }
+    if(!strcmp(bare,"F11")){
+        if(down){release_keys(d);if(shifted){const rc_config_stick temp=d->config->sticks[0];d->config->sticks[0]=d->config->sticks[1];d->config->sticks[1]=temp;d->config->keyboard_port^=1u;message(d,"Control ports swapped");}
+            else {d->config->keyboard_joystick=!d->config->keyboard_joystick;message(d,d->config->keyboard_joystick?"Keyboard joystick on":"Keyboard joystick off");}
+            input_config(d);if(!store_config(d,error,sizeof error))message(d,error);
+        }return 1;
+    }
     if(!strcmp(bare,"F10")){if(down){d->full=!d->full;d->pace_dirty=1;message(d,d->full?"Full speed (sound muted)":"100% speed");}return 1;}
-    if(!strcmp(bare,"PAUSE")){if(down){d->paused=!d->paused;d->pace_dirty=1;release_keys(d);message(d,d->paused?"Paused":"Running");}return 1;}
+    if(!strcmp(bare,"PAUSE")){if(down){d->paused=!d->paused;d->pace_dirty=1;release_keys(d);message(d,d->paused?"Paused":"Running");input_config(d);}return 1;}
     if(ctrl&&(!strcmp(bare,"F1")||!strcmp(bare,"F2")||!strcmp(bare,"F5")||!strcmp(bare,"F6"))){if(down)message(d,bare[1]=='1'||bare[1]=='2'?"No media device available":"Snapshot slots unavailable");return 1;}
     if((alt&&(!strcmp(bare,"F")||!strcmp(bare,"S")||!strcmp(bare,"T")))||!strcmp(bare,"F9")){if(down)message(d,"Control unavailable");return 1;}
     if(alt&&(!strcmp(bare,"RETURN")||!strcmp(bare,"ENTER"))){if(down){d->config->fullscreen=!d->config->fullscreen;apply_video(d,error,sizeof error);if(!store_config(d,error,sizeof error))message(d,error);}return 1;}
     if(!strcmp(bare,"PRINTSCREEN")||!strcmp(bare,"PRINT SCREEN")){
         if(down){char path[RC_HOST_PATH];rc_host_make_folders("work/screenshots");snprintf(path,sizeof path,"work/screenshots/rec64-%llu.png",(unsigned long long)d->frames);if(shot(d,path,error,sizeof error))message(d,path);else message(d,error);}return 1;
     }
+    /* Headless host-key commands use the same configurable physical map. */
+    const SDL_Scancode sc=SDL_GetScancodeFromName(name);
+    if(sc!=SDL_SCANCODE_UNKNOWN){if(rc_joykeys_key(&d->joykeys,(int)sc,down)){for(unsigned p=0;p<2;++p)if(d->config->sticks[p].type==RC_CONTROL_JOYSTICK&&(p==d->config->keyboard_port||d->config->sticks[p].device==RC_STICK_KEYBOARD))rc_machine_joystick(d->machine,p,rc_joykeys_held(&d->joykeys));return 1;}
+        return rc_keymap_key(&d->keymap,(unsigned)sc,name,down);}
     return 0;
 }
 static int control_read(void *ctx,char *line,size_t cap) {
@@ -190,6 +225,7 @@ static void control_write(void *ctx,const char *line) {
 }
 int rc_desktop_run(rc_machine **owner,rc_config *c,const rc_rom_index *roms,const rc_desktop_options *o,char *error,size_t cap) {
     rc_machine *m=*owner;desktop d={0};d.machine=m;d.owner=owner;d.config=c;d.roms=roms;d.hidden=o->hidden;d.running_config=*c;
+    rc_keymap_init(&d.keymap,m,c);int keys[RC_CONFIG_STICK_KEYS];for(unsigned i=0;i<RC_CONFIG_STICK_KEYS;++i)keys[i]=(int)SDL_GetScancodeFromName(c->stick_keys[i]);rc_joykeys_init(&d.joykeys,keys,c->keyboard_joystick);
     int status=1;rc_harness *h=NULL;rc_setup_init(&d.setup,c);
     char folder[RC_HOST_PATH];
     if(c->source[0]){snprintf(folder,sizeof folder,"%s",c->source);char *slash=strrchr(folder,'/'),*back=strrchr(folder,'\\');if(back&&(!slash||back>slash))slash=back;if(slash)slash[1]=0;else folder[0]=0;snprintf(d.palette_folders[d.palette_folders_count++],RC_HOST_PATH,"%spalettes",folder);}
@@ -203,6 +239,7 @@ int rc_desktop_run(rc_machine **owner,rc_config *c,const rc_rom_index *roms,cons
         snprintf(error,cap,"SDL: %s",SDL_GetError());return 1;
     }
     if(!o->hidden) {
+        rc_pads_open(&d.pads);SDL_StartTextInput();
         const rc_settings settings={c->fullscreen!=0,2,c->scale==RC_CONFIG_SCALE_INTEGER?8:0,(int)c->aspect,
             (int)c->filter,c->look==RC_LOOK_CRT,c->vsync!=0};
         rc_frame f;if(!picture(&d,&f,error,cap)) goto done;
@@ -213,6 +250,7 @@ int rc_desktop_run(rc_machine **owner,rc_config *c,const rc_rom_index *roms,cons
         if(!apply_video(&d,error,cap))goto done;
         if(c->sound) rc_host_audio_open(&d.audio);
     }
+    input_config(&d);
     if(o->audio&&!audio_capture(&d,o->audio,error,cap)) goto done;
     if(o->control) {
         if(!strcmp(o->control,"stdin")) d.stdin_control=1;
@@ -237,17 +275,32 @@ int rc_desktop_run(rc_machine **owner,rc_config *c,const rc_rom_index *roms,cons
             SDL_Event e;
             while(SDL_PollEvent(&e)) {
                 if(e.type==SDL_QUIT) { status=0;goto done; }
+                rc_pad_key pad=RC_PAD_NONE;const rc_pads_result change=rc_pads_event(&d.pads,&e,&pad);
+                if(change==RC_PADS_CHANGED){input_poll(&d);message(&d,"Controller connections changed");}
+                if(change==RC_PADS_KEY&&(d.setup.active||pad==RC_PAD_START)){
+                    const char *names[]={"","UP","DOWN","LEFT","RIGHT","RETURN","ESCAPE","-","+","F12",""};if(pad!=RC_PAD_NONE&&pad!=RC_PAD_BACK)shell_key(&d,names[pad],1);}
                 if(e.type==SDL_WINDOWEVENT&&e.window.event==SDL_WINDOWEVENT_FOCUS_LOST)release_keys(&d);
-                else if((e.type==SDL_KEYDOWN||e.type==SDL_KEYUP)&&(!e.key.repeat||d.setup.active)) {
-                    char hostkey[96];snprintf(hostkey,sizeof hostkey,"%s%s%s%s",e.key.keysym.mod&KMOD_CTRL?"Ctrl+":"",e.key.keysym.mod&KMOD_ALT?"Alt+":"",e.key.keysym.mod&KMOD_SHIFT?"Shift+":"",SDL_GetScancodeName(e.key.keysym.scancode));
-                    if(shell_key(&d,hostkey,e.type==SDL_KEYDOWN))continue;
-                    const rc_family *f=rc_machine_family(d.machine);
-                    for(unsigned k=0;k<f->key_count;++k)
-                        if(f->keys[k].host&&SDL_GetScancodeFromName(f->keys[k].host)==e.key.keysym.scancode)
-                            rc_machine_key(d.machine,k,e.type==SDL_KEYDOWN);
+                else if(e.type==SDL_TEXTINPUT&&!d.setup.active&&!d.paused){if(!d.suppress_text&&!rc_keymap_text(&d.keymap,e.text.text))message(&d,"Character unavailable on C64 keyboard");}
+                else if(e.type==SDL_MOUSEMOTION||e.type==SDL_MOUSEBUTTONDOWN||e.type==SDL_MOUSEBUTTONUP){
+                    if(!d.setup.active&&!d.paused){const unsigned held=SDL_GetMouseState(NULL,NULL),buttons=(held&SDL_BUTTON_LMASK?1u:0)|(held&SDL_BUTTON_RMASK?2u:0);
+                        for(unsigned p=0;p<2;++p)if(c->sticks[p].type==RC_CONTROL_MOUSE1351)rc_machine_pointer(d.machine,p,RC_CONTROL_MOUSE1351,e.type==SDL_MOUSEMOTION?e.motion.xrel:0,e.type==SDL_MOUSEMOTION?e.motion.yrel:0,buttons);}}
+                else if(e.type==SDL_KEYDOWN||e.type==SDL_KEYUP){
+                    if(e.key.repeat&&!d.setup.active)continue;
+                    const int down=e.type==SDL_KEYDOWN;const char *name=SDL_GetScancodeName(e.key.keysym.scancode);
+                    char hostkey[96];snprintf(hostkey,sizeof hostkey,"%s%s%s%s",e.key.keysym.mod&KMOD_CTRL?"Ctrl+":"",e.key.keysym.mod&KMOD_ALT?"Alt+":"",e.key.keysym.mod&KMOD_SHIFT?"Shift+":"",name);
+                    /* Always release the original binding, even if modifiers changed. */
+                    if(!down){rc_joykeys_key(&d.joykeys,(int)e.key.keysym.scancode,0);rc_keymap_key(&d.keymap,(unsigned)e.key.keysym.scancode,name,0);}
+                    const int handled=shell_key(&d,hostkey,down);
+                    if(down)d.suppress_text=handled!=0;
+                    if(handled||d.paused)continue;
+                    if(rc_joykeys_key(&d.joykeys,(int)e.key.keysym.scancode,down)){d.suppress_text=down;continue;}
+                    const int mapped=rc_keymap_key(&d.keymap,(unsigned)e.key.keysym.scancode,name,down);
+                    if(down)d.suppress_text=mapped;
                 }
+
             }
         }
+        if(!o->hidden){rc_pad_key pad;if(d.setup.active&&rc_pads_repeat(&d.pads,SDL_GetTicks(),&pad)){const char *names[]={"","UP","DOWN","LEFT","RIGHT"};shell_key(&d,names[pad],1);}input_poll(&d);}
         m=d.machine;
         if(d.pace_dirty){rc_pace_init(&pace,SDL_GetPerformanceFrequency(),rc_machine_clock(m),100);rc_pace_reset(&pace,SDL_GetPerformanceCounter(),rc_machine_time(m));d.pace_dirty=0;}
         uint64_t ticks=rc_machine_frame_period(m);int present=1;
@@ -263,7 +316,7 @@ int rc_desktop_run(rc_machine **owner,rc_config *c,const rc_rom_index *roms,cons
         }
         if(d.quit){status=0;break;}m=d.machine;
         if(!d.setup.active&&!d.paused&&rc_machine_run(m,ticks)!=RC_RUN_OK) { snprintf(error,cap,"%s",rc_machine_error(m));goto done; }
-        if(present) ++d.frames;
+        if(present){++d.frames;if(!d.setup.active&&!d.paused)rc_keymap_frame(&d.keymap);}
         if(d.wav.file) rc_wav_pump(&d.wav,m);
         else rc_host_audio_pump(&d.audio,m,(unsigned)c->volume,o->hidden||d.full||!c->sound||d.setup.active||d.paused);
         if(d.video&&present) {
@@ -278,5 +331,5 @@ done:
     if(d.io_failed) { snprintf(error,cap,"Control channel failed");status=1; }
     if(!rc_wav_close(&d.wav)) { snprintf(error,cap,"Cannot finish audio capture");status=1; }
     rc_harness_close(h);rc_host_stream_close(d.tcp);rc_host_audio_close(&d.audio);
-    rc_video_close(d.video);free(d.pixels);SDL_Quit();return status;
+    if(!o->hidden){SDL_StopTextInput();rc_pads_close(&d.pads);}rc_video_close(d.video);free(d.pixels);SDL_Quit();return status;
 }

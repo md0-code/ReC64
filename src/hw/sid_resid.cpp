@@ -23,6 +23,7 @@ struct engine {
     std::vector<entry> journal;
     std::deque<int16_t> samples;
     uint32_t model,hz,rate;
+    uint8_t pot_bus=0;uint32_t pot_ttl=0;
     bool failed;
     engine(uint32_t m,uint32_t h,uint32_t r):model(m),hz(h),rate(r),failed(false){
         sid.set_chip_model(m==RC_SID_8580?reSID::MOS8580:reSID::MOS6581);
@@ -60,10 +61,17 @@ int rc_sid_init(rc_sid *s,const rc_hw_host *host,unsigned model,uint32_t hz,uint
 }
 void rc_sid_release(rc_sid *s){delete get(s);s->engine=nullptr;}
 void rc_sid_reset(rc_sid *s){engine *e=get(s);if(!e)return;try{std::unique_ptr<engine> next(new engine(e->model,e->hz,e->rate));delete e;s->engine=next.release();}catch(...){e->failed=true;}}
-uint8_t rc_sid_read(rc_sid *s,unsigned reg){engine *e=get(s);if(!e||e->failed)return 255;try{e->record(entry{READ,static_cast<uint8_t>(reg&31u),0,0});return static_cast<uint8_t>(e->sid.read(reg&31u));}catch(...){e->failed=true;return 255;}}
-uint8_t rc_sid_peek(rc_sid *s,unsigned reg){engine *e=get(s);if(!e||e->failed)return 255;const reSID::SID::State state=e->sid.read_state();reg&=31u;return static_cast<uint8_t>(reg>=25&&reg<=28?state.sid_register[reg]:state.bus_value);}
-void rc_sid_write(rc_sid *s,unsigned reg,uint8_t v){engine *e=get(s);if(!e||e->failed)return;try{e->record(entry{WRITE,static_cast<uint8_t>(reg&31u),v,0});e->sid.write(reg&31u,v);}catch(...){e->failed=true;}}
-int rc_sid_clock(rc_sid *s,uint32_t cycles){engine *e=get(s);if(!e||e->failed)return 0;try{if(cycles){e->record(entry{CLOCK,0,0,cycles});e->clock(cycles,true);}return 1;}catch(...){e->failed=true;return 0;}}
+uint8_t rc_sid_read(rc_sid *s,unsigned reg){engine *e=get(s);if(!e||e->failed)return 255;try{e->record(entry{READ,static_cast<uint8_t>(reg&31u),0,0});const uint8_t value=static_cast<uint8_t>(e->sid.read(reg&31u));
+        if((reg&31u)>=25&&(reg&31u)<=28){e->pot_ttl=0;return value;}return e->pot_ttl?e->pot_bus:value;}catch(...){e->failed=true;return 255;}}
+uint8_t rc_sid_pot_read(rc_sid *s,unsigned reg,uint8_t value){
+    rc_sid_read(s,reg);engine *e=get(s);if(!e||e->failed)return 255;
+    /* The public State supplies the selected model's bus lifetime. The
+     * ADC overlay leaves reSID's analogue filters and FIR history intact. */
+    e->pot_bus=value;e->pot_ttl=static_cast<uint32_t>(e->sid.read_state().bus_value_ttl);return value;
+}
+uint8_t rc_sid_peek(rc_sid *s,unsigned reg){engine *e=get(s);if(!e||e->failed)return 255;const reSID::SID::State state=e->sid.read_state();reg&=31u;if(e->pot_ttl&&(reg<25||reg>28))return e->pot_bus;return static_cast<uint8_t>(reg>=25&&reg<=28?state.sid_register[reg]:state.bus_value);}
+void rc_sid_write(rc_sid *s,unsigned reg,uint8_t v){engine *e=get(s);if(!e||e->failed)return;try{e->record(entry{WRITE,static_cast<uint8_t>(reg&31u),v,0});e->sid.write(reg&31u,v);e->pot_ttl=0;}catch(...){e->failed=true;}}
+int rc_sid_clock(rc_sid *s,uint32_t cycles){engine *e=get(s);if(!e||e->failed)return 0;try{if(cycles){e->record(entry{CLOCK,0,0,cycles});e->clock(cycles,true);e->pot_ttl=cycles>=e->pot_ttl?0:e->pot_ttl-cycles;}return 1;}catch(...){e->failed=true;return 0;}}
 size_t rc_sid_audio_pull(rc_sid *s,int16_t *mono,size_t frames){engine *e=get(s);if(!e||e->failed)return 0;size_t n=0;while(n<frames&&!e->samples.empty()){mono[n++]=e->samples.front();e->samples.pop_front();}return n;}
 int rc_sid_ok(const rc_sid *s){return s->engine&&!get(s)->failed;}
 void rc_sid_save(const rc_sid *s,rc_state_writer *w){
@@ -71,6 +79,7 @@ void rc_sid_save(const rc_sid *s,rc_state_writer *w){
     rc_sw_u32(w,1);rc_sw_u32(w,e->model);rc_sw_u32(w,e->hz);rc_sw_u32(w,e->rate);rc_sw_u32(w,static_cast<uint32_t>(e->journal.size()));
     for(const entry &v:e->journal){rc_sw_u8(w,v.kind);rc_sw_u8(w,v.reg);rc_sw_u8(w,v.value);rc_sw_u32(w,v.cycles);}
     rc_sw_u32(w,static_cast<uint32_t>(e->samples.size()));for(int16_t sample:e->samples)rc_sw_u16(w,static_cast<uint16_t>(sample));
+    rc_sw_u8(w,e->pot_bus);rc_sw_u32(w,e->pot_ttl);
 }
 int rc_sid_load(rc_sid *s,rc_state_reader *r){
     if(r->end-r->at<24||rc_sr_u32(r)!=1)return 0;
@@ -85,6 +94,7 @@ int rc_sid_load(rc_sid *s,rc_state_reader *r){
         }
         const uint32_t samples=rc_sr_u32(r);if(samples>rate||samples>(r->end-r->at)/2)return 0;
         for(uint32_t i=0;i<samples;++i)next->samples.push_back(static_cast<int16_t>(rc_sr_u16(r)));
+        if(r->end-r->at>=5){next->pot_bus=rc_sr_u8(r);next->pot_ttl=rc_sr_u32(r);}
         if(!rc_sr_ok(r))return 0;delete get(s);s->engine=next.release();return 1;
     }catch(...){return 0;}
 }

@@ -141,3 +141,16 @@ write protection and modified data in states. Density timing uses integer
 16 MHz ticks (52/56/60/64), avoiding drift between the four speed zones.
 Sync detection and drive wiring belong to the 1541 package. The GCR check
 includes the worked conversion from Inside Commodore DOS.
+
+## Control ports
+
+The board's `pointer` input takes a socket, controller type, X/Y and two
+buttons. For the 1351, X/Y are signed host movement; the chip stores six-bit
+counters and presents bits 6:1 to POTX/POTY. POTY increases upwards. Its
+buttons connect to fire and up. For paddles, X/Y are absolute 0-255 conversion
+times and the buttons connect to left/right. The board clocks a 256-cycle
+discharge plus 256-cycle conversion through the CIA1 PA6/PA7-controlled
+4066 multiplexer. Mouse counters, paddle inputs and ADC phase/results are
+serialized in BUS version 2; version 1 states load with disconnected inputs.
+The SID adapter overlays external ADC read data and its data-bus lifetime,
+leaving the vendored reSID and its analogue history unchanged.

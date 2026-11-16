@@ -6,6 +6,7 @@
  * registry's tables (machine.h). */
 #include "config.h"
 #include "machine.h"
+#include "keymap.h"
 #include "yamledit.h"
 #include "../host/host.h"
 
@@ -152,7 +153,8 @@ const char *rc_config_stick_key_default(unsigned function) { return function < R
 void rc_config_set_key_check(int (*known)(const char *name)) { key_known = known; }
 
 const char *rc_config_stick_device_name(const rc_config_stick *stick, char *buffer, size_t capacity) {
-    if (stick->device == RC_STICK_KEYBOARD) snprintf(buffer, capacity, "keyboard");
+    if(stick->device==RC_STICK_MOUSE)snprintf(buffer,capacity,"mouse");
+    else if (stick->device == RC_STICK_KEYBOARD) snprintf(buffer, capacity, "keyboard");
     else if (stick->device == RC_STICK_CONTROLLER) snprintf(buffer, capacity, "controller %u", (unsigned)stick->pad);
     else snprintf(buffer, capacity, "none");
     return buffer;
@@ -167,8 +169,8 @@ static int same_key(const char *a, const char *b) {
 /* A name no key has, or one the window keeps. */
 static int key_name_problem(const char *name, const char **reserved) {
     static const struct { const char *name, *written; } window[] = {
-        {"F1", "F1"}, {"F2", "F2"}, {"F3", "F3"}, {"F4", "F4"}, {"F5", "F5"}, {"F6", "F6"}, {"F7", "F7"}, {"F8", "F8"}, {"F9", "F9"}, {"F10", "F10"}, {"F11", "F11"}, {"F12", "F12"},
-        {"Pause", "Pause"}, {"PrintScreen", "Print Screen"}};
+        {"F9", "F9"}, {"F10", "F10"}, {"F11", "F11"}, {"F12", "F12"},
+        {"Pause", "Pause"}, {"PrintScreen", "Print Screen"}, {"Print Screen", "Print Screen"}};
     const size_t n = strlen(name);
     if (!n || n >= RC_CONFIG_KEY_NAME) return RC_KEY_NAME_BAD;
     for (const char *p = name; *p; ++p) if ((unsigned char)*p < 0x20 || (unsigned char)*p > 0x7E) return RC_KEY_NAME_BAD;
@@ -208,7 +210,8 @@ void rc_config_defaults(rc_config *c) {
     c->vsync = 1;
     c->sound = 1;
     c->volume = 100;
-    c->sticks[0].device = RC_STICK_KEYBOARD;
+    c->sticks[0].device = RC_STICK_NONE;
+    c->sticks[1].device = RC_STICK_CONTROLLER;c->sticks[1].pad=1;c->keyboard_port=1;
     for (unsigned i = 0; i < RC_CONFIG_STICK_KEYS; ++i) snprintf(c->stick_keys[i], sizeof c->stick_keys[i], "%s", stick_defaults[i]);
     c->state_slot = 1;
     snprintf(c->setup_page, sizeof c->setup_page, "machine");
@@ -457,6 +460,7 @@ static int sound_section(reader *r, yaml_node_t *v, rc_config *c) {
 static int stick_device(reader *r, yaml_node_t *n, const char *key, rc_config_stick *st) {
     const char *s = scalar(r, n);
     if (!s) return 0;
+    if(!strcmp(s,"mouse")){st->device=RC_STICK_MOUSE;st->pad=0;return 1;}
     if (!strcmp(s, "none")) { st->device = RC_STICK_NONE; st->pad = 0; return 1; }
     if (!strcmp(s, "keyboard")) { st->device = RC_STICK_KEYBOARD; st->pad = 0; return 1; }
     if (!strncmp(s, "controller ", 11) && s[11] >= '1' && s[11] <= '9' && !s[12]) {
@@ -474,8 +478,11 @@ static int stick_section(reader *r, yaml_node_t *v, unsigned index, rc_config *c
         yaml_node_t *x = node(r, q->value);
         char key[64];
         snprintf(key, sizeof key, "controllers.%s.%s", stick_sockets[index], name);
-        if (strcmp(name, "device")) return fail(r, "Unknown joystick key; expected device");
-        if (!stick_device(r, x, key, &c->sticks[index])) return 0;
+        if (!strcmp(name,"type")) {
+            static const named types[]={{"joystick",RC_CONTROL_JOYSTICK},{"mouse1351",RC_CONTROL_MOUSE1351},{"paddles",RC_CONTROL_PADDLES},{"none",RC_CONTROL_NONE},{NULL,0}};
+            if(!choice(r,x,key,types,&c->sticks[index].type))return 0;
+        } else if(!strcmp(name,"device")){if(!stick_device(r,x,key,&c->sticks[index]))return 0;}
+        else return fail(r,"Unknown joystick key; expected device or type");
     }
     return 1;
 }
@@ -501,6 +508,16 @@ static int keys_section(reader *r, yaml_node_t *v, rc_config *c) {
     return 1;
 }
 
+static int keyboard_section(reader *r,yaml_node_t *v,rc_config *c){
+    if(empty(v))return 1;if(!mapping(r,v))return 0;
+    PAIRS(v,q){const char *key=scalar(r,node(r,q->key));const char *host=scalar(r,node(r,q->value));uint8_t keys[2];
+        if(!key||!host)return 0;
+        if(!rc_keymap_action(rc_family_of_model(RC_CONFIG_DEFAULT_MODEL,NULL),key,keys))return failf(r,"Unknown C64 key: %s",key);
+        if(c->binding_count==RC_CONFIG_BINDINGS||strlen(key)>=32||key_name_problem(host,NULL)!=RC_KEY_NAME_OK)return fail(r,"Invalid or reserved keyboard binding");
+        for(unsigned i=0;i<c->binding_count;++i)if(same_key(c->bindings[i].host,host)||same_key(c->bindings[i].key,key))return fail(r,"Duplicate keyboard binding");
+        rc_config_binding *b=&c->bindings[c->binding_count++];snprintf(b->key,sizeof b->key,"%s",key);snprintf(b->host,sizeof b->host,"%s",host);
+    }return 1;
+}
 static int controllers_section(reader *r, yaml_node_t *v, rc_config *c) {
     if (!mapping(r, v)) return 0;
     PAIRS(v, q) {
@@ -509,6 +526,7 @@ static int controllers_section(reader *r, yaml_node_t *v, rc_config *c) {
         yaml_node_t *x = node(r, q->value);
         int ok = 0, found = 0;
         if (!strcmp(name, "keys")) { found = 1; ok = keys_section(r, x, c); }
+        else if(!strcmp(name,"keyboard_port")){int port;found=1;ok=integer(r,x,"keyboard_port",1,2,&port);if(ok)c->keyboard_port=(unsigned)(port-1);}
         else if (!strcmp(name, "keyboard_joystick")) { found = 1; ok = boolean(r, x, &c->keyboard_joystick); }
         for (unsigned i = 0; i < RC_CONFIG_STICKS; ++i)
             if (!strcmp(name, stick_sockets[i])) { found = 1; ok = stick_section(r, x, i, c); }
@@ -683,10 +701,11 @@ int rc_config_parse(const char *text, size_t length, const char *source, rc_conf
             else if (!strcmp(key, "media")) ok = media_section(&r, v, base, &c);
             else if (!strcmp(key, "video")) ok = video_section(&r, v, &c);
             else if (!strcmp(key, "sound")) ok = sound_section(&r, v, &c);
+            else if (!strcmp(key,"keyboard")) ok=keyboard_section(&r,v,&c);
             else if (!strcmp(key, "controllers")) ok = controllers_section(&r, v, &c);
             else if (!strcmp(key, "ports")) ok = ports_section(&r, v, base, &c);
             else if (!strcmp(key, "ui")) ok = ui_section(&r, v, &c);
-            else ok = fail(&r, "Unknown section; expected machine, media, video, sound, controllers, ports or ui");
+            else ok = fail(&r, "Unknown section; expected machine, media, video, sound, keyboard, controllers, ports or ui");
             if (!ok) break;
         }
     }
@@ -812,8 +831,13 @@ int rc_config_store(const rc_config *c, struct rc_ydoc *doc) {
         const char *path[3] = {"controllers", stick_sockets[i], "device"};
         char name[32];
         rc_config_stick_device_name(&c->sticks[i], name, sizeof name);
-        ok = set_unless_default(doc, path, 3, name, 0, c->sticks[i].device == (uint32_t)(i == 0 ? RC_STICK_KEYBOARD : RC_STICK_NONE));
+        ok = set_unless_default(doc, path, 3, name, 0, (i==0?c->sticks[i].device==RC_STICK_NONE:c->sticks[i].device==RC_STICK_CONTROLLER&&c->sticks[i].pad==1));
     }
+    for(unsigned i=0;ok&&i<RC_CONFIG_STICKS;++i){
+        const char *path[]={"controllers",stick_sockets[i],"type"};const char *types[]={"joystick","mouse1351","paddles","none"};
+        ok=set_unless_default(doc,path,3,types[c->sticks[i].type],0,c->sticks[i].type==RC_CONTROL_JOYSTICK);
+    }
+    for(unsigned i=0;ok&&i<c->binding_count;++i){const char *path[]={"keyboard",c->bindings[i].key};ok=set_scalar(doc,path,2,c->bindings[i].host,1);}
     for (unsigned i = 0; ok && i < RC_CONFIG_STICK_KEYS; ++i) {
         const char *path[3] = {"controllers", "keys", stick_key_names[i]};
         ok = set_unless_default(doc, path, 3, c->stick_keys[i], 0, same_key(c->stick_keys[i], stick_defaults[i]));
@@ -828,6 +852,7 @@ int rc_config_store(const rc_config *c, struct rc_ydoc *doc) {
         for (const char *t = text; *t && plain; ++t) plain = isalnum((unsigned char)*t) || strchr("._:/-", *t) != NULL;
         ok = set_unless_default(doc, path, 2, text, plain ? 2 : 1, p->type == RC_END_NONE);
     }
+    if(ok){const char *path[]={"controllers","keyboard_port"};ok=set_unless_default(doc,path,2,c->keyboard_port?"2":"1",2,c->keyboard_port==1);}
     if (ok) {
         const char *path[2] = {"controllers", "keyboard_joystick"}, *autoload[2] = {"ui", "autoload"};
         ok = set_unless_default(doc, path, 2, c->keyboard_joystick ? "true" : "false", 2, !c->keyboard_joystick) &&

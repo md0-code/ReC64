@@ -33,13 +33,17 @@ enum { RC_LANG_EN, RC_LANG_COUNT };
  * (Kempston, Sinclair, Cursor...) is an option of the machine, not here. */
 #define RC_CONFIG_STICKS 2
 #define RC_CONFIG_PADS 8                /* host game controllers numbered 1 to 8 */
-enum { RC_STICK_NONE, RC_STICK_KEYBOARD, RC_STICK_CONTROLLER };
+enum { RC_STICK_NONE, RC_STICK_KEYBOARD, RC_STICK_CONTROLLER, RC_STICK_MOUSE };
 /* controllers.keys: the keyboard joystick's keys, in this order */
 enum { RC_STICK_UP, RC_STICK_DOWN, RC_STICK_LEFT, RC_STICK_RIGHT, RC_STICK_FIRE, RC_STICK_FIRE2, RC_CONFIG_STICK_KEYS };
 #define RC_CONFIG_KEY_NAME 32           /* a host key's name, with its end */
 
+enum { RC_CONTROL_JOYSTICK, RC_CONTROL_MOUSE1351, RC_CONTROL_PADDLES, RC_CONTROL_NONE };
+typedef struct rc_config_binding {char key[32],host[32];} rc_config_binding;
+#define RC_CONFIG_BINDINGS 96
 typedef struct rc_config_stick {
     uint32_t device;                    /* RC_STICK_* */
+    uint32_t type;                      /* RC_CONTROL_* */
     uint32_t pad;                       /* RC_STICK_CONTROLLER: the controller, 1 to RC_CONFIG_PADS */
 } rc_config_stick;
 
@@ -104,6 +108,9 @@ typedef struct rc_config {
     rc_config_stick sticks[RC_CONFIG_STICKS];
     char stick_keys[RC_CONFIG_STICK_KEYS][RC_CONFIG_KEY_NAME];
     int keyboard_joystick;
+    unsigned keyboard_port;             /* fallback socket, 0 or 1 */
+    rc_config_binding bindings[RC_CONFIG_BINDINGS];
+    unsigned binding_count;
     /* ui */
     uint32_t language;                  /* RC_LANG_*; English only */
     int state_slot;                     /* the slot Ctrl+F5 saves to and Ctrl+F6 loads from, 1 to 10 */
@@ -161,7 +168,7 @@ const char *rc_config_stick_device_name(const rc_config_stick *stick, char *buff
  * without one every printable name is taken. */
 void rc_config_set_key_check(int (*known)(const char *name));
 /* Whether `name` can be the key of `function`: RC_KEY_NAME_OK; _BAD when the host has no key of that
- * name; _RESERVED when the window keeps it (F5 to F12, Pause, Print Screen; *reserved is how it is
+ * name; _RESERVED when the window keeps it (F9 to F12, Pause, Print Screen; *reserved is how it is
  * written); _USED when another function of the keyboard joystick has it (*other). */
 enum { RC_KEY_NAME_OK, RC_KEY_NAME_BAD, RC_KEY_NAME_RESERVED, RC_KEY_NAME_USED };
 int rc_config_stick_key_problem(const rc_config *config, unsigned function, const char *name, const char **reserved, unsigned *other);

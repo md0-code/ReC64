@@ -28,6 +28,43 @@ Alt+Enter switches full screen. Print Screen writes a PNG under
 `work/screenshots/`. Setup and status messages use the same presenter as
 the machine, including its display filter.
 
+Keyboard text follows the host layout. The C64 keys for each character are
+pressed with the required Shift; F1-F8 and cursor keys produce the C64's
+shifted combinations. Esc is RUN/STOP, Page Up RESTORE, Tab CTRL, Page Down
+Commodore, Home CLR/HOME, Backspace INST/DEL, and Insert shifted INST/DEL.
+Override any physical C64 key or shifted function/cursor key under `keyboard`:
+
+```yaml
+keyboard:
+  RUN STOP: Escape
+  RESTORE: PageUp
+  F2: F2
+controllers:
+  joystick1: {type: joystick, device: none}
+  joystick2: {type: joystick, device: controller 1}
+  keyboard_joystick: false
+  keyboard_port: 2
+  keys: {up: Up, down: Down, left: Left, right: Right, fire: Left Ctrl, fire2: Left Shift}
+```
+
+Binding values are SDL scancode names, case insensitive; F9-F12, Pause and
+Print Screen are reserved by the shell. Character input remains symbolic.
+F11 switches the keyboard joystick; Shift+F11 swaps complete port assignments.
+The keyboard joystick shares port 2 with controller 1 by default. Explicit
+`device: keyboard` assignments select its socket instead of `keyboard_port`.
+Controllers keep their number while connected; disconnect releases their input.
+The d-pad/left stick supplies directions, A fire, and B a second fire button
+(where the connected device supports it). Start opens setup; d-pad navigates,
+A accepts, B goes back, and shoulders change values.
+
+Each port's `type` is `joystick`, `mouse1351`, `paddles`, or `none`; its
+`device` is `none`, `keyboard`, `controller 1` through `controller 8`, or
+`mouse` (paddles). The 1351 always uses relative host mouse movement and the
+left/right buttons; F12 releases capture while setup is open. Paddles use
+absolute mouse X/Y and the left/right buttons with `device: mouse`, or a
+controller's left X/Y axes and A/B. Mouse and paddle values reach the SID
+through the CIA-controlled 4066 switch and the 512-cycle ADC conversion.
+
 `--hidden` never opens a window or an audio device. Supply `--frames N`,
 `--script FILE` or `--control stdin|tcp:PORT`. TCP binds to localhost.
 `--screenshot FILE.png` writes the final raw frame; `--audio FILE.wav` records

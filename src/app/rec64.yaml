@@ -13,5 +13,11 @@ video:
 sound:
   enabled: true
   volume: 100
+controllers:
+  joystick1: {type: joystick, device: none}
+  joystick2: {type: joystick, device: controller 1}
+  keyboard_joystick: false
+  keyboard_port: 2
+  keys: {up: Up, down: Down, left: Left, right: Right, fire: Left Ctrl, fire2: Left Shift}
 ui:
   language: en

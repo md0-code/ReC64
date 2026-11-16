@@ -60,7 +60,7 @@ int rc_family_key(const rc_family *f, const char *name) {
 }
 int rc_family_typing(const rc_family *f, int ch, uint8_t *key, uint8_t *shift) {
     for (unsigned i = 0; i < f->typing_count; ++i)
-        if (f->typing[i].ch == (char)ch) {
+        if (f->typing[i].ch == (uint32_t)ch) {
             *key = f->typing[i].key;
             *shift = f->typing[i].shift;
             return 1;
@@ -354,3 +354,5 @@ void rc_frame_argb(const rc_frame *f, uint32_t *out) {
         for (uint32_t x = 0; x < f->width; ++x) o[x] = colors[row[x]];
     }
 }
+
+void rc_machine_pointer(rc_machine *m,unsigned port,unsigned type,int x,int y,unsigned buttons){if(m->impl->pointer)m->impl->pointer(m->self,port,type,x,y,buttons);}

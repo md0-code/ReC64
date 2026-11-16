@@ -1,4 +1,5 @@
 #include "desktop.h"
+#include "pads.h"
 #include "../host/host.h"
 #include "rc_version.h"
 #include <stdio.h>
@@ -11,6 +12,7 @@ static void usage(void) {
         "F12 opens setup. The test model runs without firmware.");
 }
 int main(int argc,char **argv) {
+    rc_config_set_key_check(rc_host_key_known);
     rc_desktop_options o={0};const char *yaml=NULL,*model=NULL;int list_roms=0;
     char default_yaml[RC_HOST_PATH];
     /* Pipes already belong to a headless run. Never attach a console or alert. */

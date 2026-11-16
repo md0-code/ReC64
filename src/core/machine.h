@@ -102,7 +102,7 @@ typedef struct rc_key_desc {
 
 /* How a character is typed: a key, alone or with a shift key held. */
 typedef struct rc_typing_desc {
-    char ch;
+    uint32_t ch;
     uint8_t key, shift;                 /* shift RC_KEY_NONE: alone */
 } rc_typing_desc;
 
@@ -241,6 +241,8 @@ void rc_machine_key(rc_machine *m, unsigned key, int down);
  * What kind of joystick is in the socket is an option of the machine. */
 enum { RC_JOY_UP = 1, RC_JOY_DOWN = 2, RC_JOY_LEFT = 4, RC_JOY_RIGHT = 8, RC_JOY_FIRE = 16, RC_JOY_FIRE2 = 32 };
 void rc_machine_joystick(rc_machine *m, unsigned stick, unsigned held);
+/* Relative mouse movement or absolute paddle ADC values, buttons bit 0/1. */
+void rc_machine_pointer(rc_machine *m,unsigned port,unsigned type,int x,int y,unsigned buttons);
 
 /* --- media ---------------------------------------------------------------------- */
 

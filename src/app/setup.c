@@ -9,7 +9,7 @@ void rc_setup_init(rc_setup *s,rc_config *c){memset(s,0,sizeof *s);s->config=c;s
     for(unsigned i=0;i<8;++i)if(!strcmp(c->setup_page,IDS[i]))s->page=i;
     rc_setup_palette(s,"cjam");rc_setup_palette(s,"colodore");rc_setup_palette(s,"pepto-pal");rc_setup_palette(s,"pepto-ntsc");rc_setup_palette(s,c->palette);
 }
-static unsigned rows(const rc_setup *s){return s->page==RC_SETUP_MACHINE?5u:s->page==RC_SETUP_DISPLAY?7u:s->page==RC_SETUP_SOUND?2u:0;}
+static unsigned rows(const rc_setup *s){return s->page==RC_SETUP_MACHINE?5u:s->page==RC_SETUP_DISPLAY?7u:s->page==RC_SETUP_SOUND?2u:s->page==RC_SETUP_CONTROLLERS?6u:0;}
 static unsigned cycle(unsigned value,unsigned count,int direction){return (value+count+(direction<0?count-1u:1u))%count;}
 unsigned rc_setup_key(rc_setup *s,const char *key){
     if(!strcmp(key,"ESCAPE")||!strcmp(key,"F12")){s->active=0;return RC_SETUP_CLOSE;}
@@ -38,6 +38,15 @@ unsigned rc_setup_key(rc_setup *s,const char *key){
         }return RC_SETUP_VIDEO;
     }
     if(s->page==RC_SETUP_SOUND){if(!s->row)c->sound=!c->sound;else c->volume=(int)cycle((unsigned)c->volume/5,21,direction)*5;return RC_SETUP_AUDIO;}
+    if(s->page==RC_SETUP_CONTROLLERS){
+        if(s->row<4){if((s->row&1u)&&(c->sticks[s->row/2].type==RC_CONTROL_MOUSE1351||c->sticks[s->row/2].type==RC_CONTROL_NONE))return 0;rc_config_stick *st=&c->sticks[s->row/2];
+            if(!(s->row&1u)){st->type=cycle(st->type,4,direction);if(st->type==RC_CONTROL_PADDLES)st->device=RC_STICK_MOUSE;else if(st->device==RC_STICK_MOUSE)st->device=RC_STICK_NONE;}
+            else {unsigned source=st->device==RC_STICK_NONE?0:st->device==RC_STICK_KEYBOARD?1:st->device==RC_STICK_MOUSE?RC_CONFIG_PADS+2:1+st->pad;
+                source=cycle(source,RC_CONFIG_PADS+3,direction);st->device=source==0?RC_STICK_NONE:source==1?RC_STICK_KEYBOARD:source==RC_CONFIG_PADS+2?RC_STICK_MOUSE:RC_STICK_CONTROLLER;st->pad=st->device==RC_STICK_CONTROLLER?source-1:0;}
+        }else if(s->row==4)c->keyboard_joystick=!c->keyboard_joystick;
+        else {const rc_config_stick temp=c->sticks[0];c->sticks[0]=c->sticks[1];c->sticks[1]=temp;c->keyboard_port^=1u;}
+        return RC_SETUP_INPUT;
+    }
     return 0;
 }
 static void row(rc_setup *s,unsigned index,const char *label,const char *value,int enabled){char line[37];snprintf(line,sizeof line," %-16.16s %15.15s ",label,value);const int selected=enabled&&s->row==index;
@@ -54,7 +63,12 @@ void rc_setup_draw(rc_setup *s,const uint32_t palette[16],rc_frame *f){
         row(s,3,"FULL SCREEN",c->fullscreen?"ON":"OFF",1);row(s,4,"SCALE",c->scale?"INTEGER":"FIT",1);row(s,5,"PIXEL SHAPE",c->aspect?"SQUARE":"ORIGINAL",1);row(s,6,"VSYNC",c->vsync?"ON":"OFF",1);break;
     case RC_SETUP_SOUND:{char volume[16];snprintf(volume,sizeof volume,"%d%%",c->volume);row(s,0,"SOUND",c->sound?"ON":"OFF",1);row(s,1,"VOLUME",volume,1);break;}
     case RC_SETUP_MEDIA:row(s,0,"LOAD IMAGE","UNAVAILABLE",0);row(s,1,"SAVE","UNAVAILABLE",0);rc_tui_put(&s->tui,12,3,"NO MEDIA DEVICE AVAILABLE",12,6);break;
-    case RC_SETUP_CONTROLLERS:row(s,0,"PORT 1","UNAVAILABLE",0);row(s,1,"PORT 2","UNAVAILABLE",0);break;
+    case RC_SETUP_CONTROLLERS:{const char *types[]={"JOYSTICK","1351 MOUSE","PADDLES","NONE"};char source[32];
+        row(s,0,"PORT 1",types[c->sticks[0].type],1);rc_config_stick_device_name(&c->sticks[0],source,sizeof source);row(s,1,"INPUT 1",c->sticks[0].type==RC_CONTROL_MOUSE1351?"MOUSE":source,c->sticks[0].type!=RC_CONTROL_MOUSE1351&&c->sticks[0].type!=RC_CONTROL_NONE);
+        row(s,2,"PORT 2",types[c->sticks[1].type],1);rc_config_stick_device_name(&c->sticks[1],source,sizeof source);row(s,3,"INPUT 2",c->sticks[1].type==RC_CONTROL_MOUSE1351?"MOUSE":source,c->sticks[1].type!=RC_CONTROL_MOUSE1351&&c->sticks[1].type!=RC_CONTROL_NONE);
+        row(s,4,"KEYBOARD JOY",c->keyboard_joystick?"ON":"OFF",1);row(s,5,"SWAP PORTS","SHIFT+F11",1);
+        rc_tui_put(&s->tui,19,3,"F11 KEYBOARD JOYSTICK ON/OFF",14,6);break;}
+
     case RC_SETUP_CARTRIDGE:row(s,0,"CARTRIDGE","NONE",0);rc_tui_put(&s->tui,12,3,"NO CARTRIDGE ATTACHED",12,6);break;
     case RC_SETUP_STATES:row(s,0,"SNAPSHOT SLOTS","UNAVAILABLE",0);break;
     case RC_SETUP_ABOUT:rc_tui_put(&s->tui,7,3,"REC64 " RC_VERSION,14,6);rc_tui_put(&s->tui,10,3,"COMMODORE 64 / C64C",14,6);rc_tui_put(&s->tui,12,3,"GPL-3.0-OR-LATER",14,6);rc_tui_put(&s->tui,15,3,"SID: RESID 1.0-PRE2",14,6);break;

@@ -3,3 +3,4 @@
 /src/build*/
 __pycache__/
 *.pyc
+/dist/
