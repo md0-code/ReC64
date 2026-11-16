@@ -4,7 +4,7 @@ A Commodore 64 emulator for Windows and Linux, written in C11.
 The current build provides a diagnostic test screen; it does not yet execute
 C64 programs.
 
-Build on Windows with Visual Studio's C++ tools, CMake 3.24 or later and Ninja:
+Build on Windows with Visual Studio's C++ tools, CMake 3.24 or later and Ninja, plus Perl (included with Git for Windows):
 
 ```powershell
 ./src/build.ps1

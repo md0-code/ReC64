@@ -48,3 +48,15 @@ The board supplies CPU/VIC ownership, address, cartridge and banking pins.
 The keyboard resolves the bidirectional 8x8 switch network to a fixed point,
 including ghost keys and both joysticks. RESTORE has its own output line.
 Each module includes its state interface and a focused state-round-trip check.
+
+## SID
+
+`hw/sid.h` is the C-only 6581/8580 chip and audio interface. The backend uses
+reSID resampling at the configured PAL/NTSC clock and sample rate. Its state
+journal combines adjacent clock advances and records register reads/writes.
+Restore replays that journal, reconstructing the analogue filter and FIR
+history omitted by reSID's public digital State, then restores queued audio.
+Backend construction uses cleared storage, avoiding an uninitialised filter
+lookup observed with the pinned release on Windows. Vendored files are
+unchanged. The focused check requires non-silent audio and identical samples
+across a state round trip for both chip models.

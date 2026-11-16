@@ -25,6 +25,9 @@
 
 #include <stddef.h>
 #include <stdint.h>
+#ifdef __cplusplus
+extern "C" {
+#endif
 
 #define RC_STATE_VERSION 1u
 #define RC_STATE_ID 32                  /* a family or model id with its end */
@@ -88,4 +91,7 @@ void rc_sr_packed(rc_state_reader *r, uint8_t *data, size_t length);
 /* 1 while every field read so far was there in the right shape. */
 int rc_sr_ok(const rc_state_reader *r);
 
+#ifdef __cplusplus
+}
+#endif
 #endif /* RC_STATE_H */
