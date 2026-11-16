@@ -2,6 +2,7 @@
 #include "c64.h"
 #include "c64_media.h"
 #include "c64_expansion.h"
+#include "c64_layout.h"
 #include "../palette.h"
 #include <stdio.h>
 #include <stdlib.h>
@@ -26,7 +27,7 @@ static const rc_media_desc MEDIA[]={
     {.key="cartridge",.kind=RC_MEDIA_CART,.extensions="crt",.models=RC_MODELS_ALL},
     {.key="sid",.kind=RC_MEDIA_SID,.extensions="sid",.models=RC_MODELS_ALL}};
 /* Matrix order: CIA1 PA bit selects the row; PB bit selects the column. */
-static const rc_key_desc KEYS[]={
+static rc_key_desc KEYS[]={
     {"DELETE","Backspace","DEL",0,0,4,4},{"RETURN","Return","RETURN",0,0,4,4},
     {"CURSOR RIGHT","Right","RIGHT",0,0,4,4},{"F7","F7","F7",0,0,4,4},
     {"F1","F1","F1",0,0,4,4},{"F3","F3","F3",0,0,4,4},{"F5","F5","F5",0,0,4,4},
@@ -189,6 +190,7 @@ const rc_family rc_c64_family={.id="c64",.name="Commodore 64",.models=MODELS,.mo
     .media=MEDIA,.media_count=5,.options=OPTIONS,.option_count=sizeof OPTIONS/sizeof OPTIONS[0],.keys=KEYS,.key_count=65,
     .combos=COMBOS,.combo_count=sizeof COMBOS/sizeof COMBOS[0],.typing=TYPING,.typing_count=sizeof TYPING/sizeof TYPING[0],.joysticks=2,.impl=&IMPL,.create=rc_c64_create};
 void *rc_c64_create(const rc_machine_setup *setup,char *error,size_t capacity){
+    rc_c64_layout_apply(KEYS,sizeof KEYS/sizeof KEYS[0]);
     rc_c64 *c=calloc(1,sizeof *c);if(!c){if(capacity)snprintf(error,capacity,"Out of memory");return NULL;}
     c->host=(rc_hw_host){c,host_now,host_schedule,host_line};c->model=(uint8_t)setup->model;c->hz=c->model>=2?1022727u:985248u;
     c->bus.cpu=&c->cpu;c->bus.vic=&c->vic;c->bus.cia[0]=&c->cia[0];c->bus.cia[1]=&c->cia[1];

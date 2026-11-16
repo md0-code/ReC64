@@ -155,6 +155,12 @@ static int execute(rc_harness *h, const char *line) {
         return STARTED;
     }
     if (!strcmp(cmd, "type")) return start_typing(h, arg);
+    if (!strcmp(cmd,"pointer")) {
+        long long id;int x,y;char action[16],extra;
+        if(sscanf(arg,"%lld %d %d %15s %c",&id,&x,&y,action,&extra)!=4)return failf(h,"pointer needs ID X Y down|move|up|cancel");
+        int down;if(!strcmp(action,"down")||!strcmp(action,"move"))down=1;else if(!strcmp(action,"up"))down=0;else if(!strcmp(action,"cancel"))down=-1;else return failf(h,"Unknown pointer action");
+        return h->host.pointer&&h->host.pointer(h->host.ctx,(int64_t)id,x,y,down)?DONE:failf(h,"On-screen keyboard is closed");
+    }
     if (!strcmp(cmd, "enter")) return start_typing(h, "\n");
     if (!strcmp(cmd, "key") || !strcmp(cmd, "release")) {
         if(h->host.key){const int handled=h->host.key(h->host.ctx,arg,cmd[0]=='k');if(handled){if(handled>1)h->quit=1;return DONE;}}

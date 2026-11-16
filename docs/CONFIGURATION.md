@@ -25,6 +25,27 @@ other. Capacity changes restart on closing setup; snapshots retain RAM and
 transfers in progress. Cartridge images use `media.cartridge.image` and
 `media.cartridge.write_protect`.
 
+Single-SID PSID v1-v4 and RSID v2-v4 files open through Load or drag and
+drop. The player shows title, author, release, sub-tune and elapsed guest
+time. Left/Right chooses a sub-tune, Space pauses/resumes, and Escape stops
+playback and returns to BASIC. File clock and SID-chip hints choose PAL or
+NTSC and the C64/C64C model. Loading a tune disconnects the cartridge;
+disk and tape images remain attached. The startup file is
+`media.sid.image`. Multi-SID files and MUS data requiring an external
+player are refused.
+
+F9 toggles the live status panel while the guest runs, including during
+loads. It shows the 1541 device, track, LED and motor; the Datasette byte
+position, motor and transport; and the keyboard joystick port. Tape position
+counts TAP data bytes after the file header.
+
+Shift+F9 or controller Back toggles the on-screen C64 keyboard. Click/touch
+a key to hold it; multiple fingers can press different keys together. Tap
+Shift, C= or Ctrl to latch it, then tap again to release. Controller arrows
+select a key, A holds it, and B closes; host arrows and Return work too.
+Closing the keyboard or losing focus releases its contacts. Snapshots retain
+the keyboard's visibility, selection and latched modifiers.
+
 F12 opens setup. Left/Right or Tab changes page, Up/Down selects a row,
 Enter or +/- changes its value, and F12/Escape closes. Model and SID changes
 restart the machine on close; display and sound changes apply immediately.
@@ -92,6 +113,9 @@ uses an existing terminal or redirected pipes.
 guest audio. `--list-models`, `--list-roms` and `--version` print information.
 
 Scripts contain one command per line; blank lines and `#` comments are ignored.
+`pointer ID X Y down|move|up|cancel` sends a contact to the open on-screen
+keyboard in raw frame coordinates. Independent IDs exercise multi-touch;
+`key Pad A`/`release Pad A` and `key Pad B` exercise controller actions.
 Supported commands are `wait SECONDS`, `frames N`, `type TEXT`, `enter`,
 `key NAME`, `release NAME`, `joy PORT [up down left right fire fire2]`,
 `shot FILE.png`, `text`, `expect TEXT`, `until SECONDS TEXT`,

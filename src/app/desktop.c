@@ -6,6 +6,9 @@
 #include "browser.h"
 #include "typist.h"
 #include "states.h"
+#include "panel.h"
+#include "sidplayer.h"
+#include "osk.h"
 #include "rc_version.h"
 #include "../core/media/tapedeck.h"
 #include "../core/media/d64.h"
@@ -34,6 +37,7 @@ typedef struct desktop {
     rc_media *media[RC_CONFIG_MEDIA];uint32_t media_entry[RC_CONFIG_MEDIA];
     rc_browser browser;rc_typist typist;
     rc_setup setup;rc_osd osd;uint32_t palette[16];
+    rc_panel panel;rc_sidplayer player;rc_osk osk;int panel_visible;
     char palette_folders[3][RC_HOST_PATH];unsigned palette_folders_count;
     int hidden,paused,quit,restart_pending,pace_dirty;uint64_t frames;rc_config running_config;
     uint32_t *pixels;
@@ -49,6 +53,12 @@ static void states_status(desktop *d);
 static void media_options(desktop *d);
 static int restart(desktop *d,char *error,size_t cap);
 static void restore_machine_config(desktop *d);
+static void virtual_key(void *ctx,unsigned key,int down){desktop *d=ctx;rc_keymap_virtual(&d->keymap,key,down);}
+static void panel_draw(desktop *d,rc_frame *frame){
+    rc_machine_status s;if(!d->panel_visible||!rc_machine_get_status(d->machine,&s))return;
+    const rc_panel_status p={s.drive_present,s.drive_device,s.drive_halftrack,s.drive_led,s.drive_motor,s.tape_counter,s.tape_motor,s.tape_play,s.tape_record,d->config->keyboard_joystick?(unsigned)d->config->keyboard_port+1u:0};
+    rc_panel_draw(&d->panel,frame,&p,frame);
+}
 static rc_machine *machine(void *ctx) { return ((desktop *)ctx)->machine; }
 static int message_active(const desktop *d){return d->osd.text[0]&&(int32_t)(d->osd.until_ms-(uint32_t)(d->frames*20u))>=0;}
 static void message(desktop *d,const char *text){rc_osd_show(&d->osd,(uint32_t)(d->frames*20u),"%s",text);}
@@ -56,7 +66,11 @@ static int picture(desktop *d,rc_frame *f,char *error,size_t cap) {
     media_status(d);
     if(d->browser.active)rc_browser_draw(&d->browser,d->palette,f);
     else if(d->setup.active)rc_setup_draw(&d->setup,d->palette,f);
-    else if(!rc_machine_frame(d->machine,f)) { snprintf(error,cap,"No machine frame");return 0; }
+    else {rc_machine_status s;rc_machine_get_status(d->machine,&s);
+        if(d->player.active&&s.sid_loaded)rc_sidplayer_draw(&d->player,s.sid_song,s.sid_cycles,s.sid_hz,s.sid_paused,d->palette,f);
+        else if(!rc_machine_frame(d->machine,f)) { snprintf(error,cap,"No machine frame");return 0; }
+        panel_draw(d,f);rc_osk_draw(&d->osk,f,d->panel_visible?32u:0u,f);
+    }
     f->palette=d->palette;
     const size_t n=(size_t)f->width*f->height;
     if(n>d->pixel_count) {
@@ -76,6 +90,11 @@ static int shot(void *ctx,const char *path,char *error,size_t cap) {
     }
     return 1;
 }
+static int pointer_input(void *ctx,int64_t id,int x,int y,int down){
+    desktop *d=ctx;if(!d->osk.visible||d->setup.active||d->browser.active)return 0;
+    rc_frame f;char error[128];if(!picture(d,&f,error,sizeof error))return 0;
+    rc_osk_pointer(&d->osk,id,x,y,down);return 1;
+}
 static int state_save(void *ctx,const char *path,char *error,size_t cap) {
     desktop *d=ctx;if(!flush_media(d,error,cap))return 0;rc_states_info info={0};
     const rc_family *family=rc_machine_family(d->machine);
@@ -86,25 +105,26 @@ static int state_save(void *ctx,const char *path,char *error,size_t cap) {
     rc_host_time time;if(rc_host_local_time(&time)){info.has_time=1;info.time=(rc_states_time){time.year,time.month,time.day,time.hour,time.minute,time.second};}
     snprintf(info.version,sizeof info.version,"%s",RC_VERSION);
     rc_state_writer w;rc_sw_init(&w);int ok=rc_states_write(d->machine,&info,&w);
-    rc_sw_begin(&w,"AUTO",0);rc_sw_u32(&w,1);rc_sw_u32(&w,(unsigned)(d->source_slot+1));rc_sw_u32(&w,RC_CONFIG_MEDIA);
+    rc_sw_begin(&w,"AUTO",0);rc_sw_u32(&w,2);rc_sw_u32(&w,(unsigned)(d->source_slot+1));rc_sw_u32(&w,RC_CONFIG_MEDIA);
     for(unsigned i=0;i<RC_CONFIG_MEDIA;++i)rc_sw_u32(&w,d->media_entry[i]);
-    rc_typist_save(&d->typist,&w);rc_keymap_save(&d->keymap,&w);rc_sw_end(&w);ok=ok&&rc_states_finish(&w);
+    rc_typist_save(&d->typist,&w);rc_keymap_save(&d->keymap,&w);rc_osk_save(&d->osk,&w);rc_sw_end(&w);ok=ok&&rc_states_finish(&w);
     if(!ok) snprintf(error,cap,"Cannot serialise state");
     else ok=rc_states_save_file(path,w.data,w.size,error,cap);
     rc_sw_free(&w);d->states_dirty=1;return ok;
 }
 static int state_load(void *ctx,const char *path,char *error,size_t cap) {
     desktop *d=ctx;uint8_t *data=NULL;size_t size=0;if(!rc_states_load_file(path,&data,&size,error,cap))return 0;
-    rc_states_info info;rc_state_reader r;rc_machine *next=NULL;rc_config config=*d->config;rc_typist typist;rc_keymap keys;
+    rc_states_info info;rc_state_reader r;rc_machine *next=NULL;rc_config config=*d->config;rc_typist typist;rc_keymap keys;rc_osk osk;rc_osk_init(&osk,NULL,NULL);
     int source=-1;uint32_t entries[RC_CONFIG_MEDIA];for(unsigned i=0;i<RC_CONFIG_MEDIA;++i)entries[i]=UINT32_MAX;
     if(!rc_states_read(data,size,&info,&r,error,cap))goto failed;
     snprintf(config.model,sizeof config.model,"%s",d->running_config.model);config.option_count=d->running_config.option_count;memcpy(config.options,d->running_config.options,sizeof config.options);
     next=rc_machine_create(&config,d->roms,error,cap);if(!next||!rc_machine_load(next,&r,error,cap))goto failed;rc_machine_border(next,d->config->border);
     rc_typist_init(&typist);rc_keymap_init(&keys,next,d->config);
     if(rc_sr_chunk(&r,"AUTO",0)){
-        if(rc_sr_u32(&r)!=1)goto invalid;const unsigned selected=rc_sr_u32(&r),count=rc_sr_u32(&r);if(selected>RC_CONFIG_MEDIA||count!=RC_CONFIG_MEDIA)goto invalid;
+        const unsigned version=rc_sr_u32(&r);if(version<1||version>2)goto invalid;const unsigned selected=rc_sr_u32(&r),count=rc_sr_u32(&r);if(selected>RC_CONFIG_MEDIA||count!=RC_CONFIG_MEDIA)goto invalid;
         source=(int)selected-1;for(unsigned i=0;i<count;++i)entries[i]=rc_sr_u32(&r);
         if(!rc_typist_load(&typist,&r)||!rc_keymap_load(&keys,&r))goto invalid;
+        if(version>=2&&!rc_osk_load(&osk,&r))goto invalid;
     }else {memset(keys.sent,255,sizeof keys.sent);rc_keymap_clear(&keys);}
     const rc_family *family=rc_machine_family(next);
     if(source>=0&&(unsigned)source>=family->media_count)goto invalid;
@@ -118,27 +138,28 @@ static int state_load(void *ctx,const char *path,char *error,size_t cap) {
         const int matches=!memcmp(hash,md->sha256,32)&&file->writable==m->writable;rc_media_close(file);
         if(!matches){snprintf(error,cap,"Snapshot media has changed: %s",md->path);goto failed;}
     }
-    rc_machine_destroy(d->machine);*d->owner=d->machine=next;next=NULL;
+    rc_osk_close(&d->osk);rc_machine_destroy(d->machine);*d->owner=d->machine=next;next=NULL;
     for(unsigned i=0;i<RC_CONFIG_MEDIA;++i){rc_media_close(d->media[i]);d->media[i]=NULL;d->media_entry[i]=entries[i];
         if(i<family->media_count){rc_config_media *setting=rc_config_media_slot(d->config,family->media[i].key);if(setting){snprintf(setting->image,sizeof setting->image,"%s",info.media[i].present?info.media[i].path:"");setting->write_protect=info.media[i].write_protect;setting->explicit_flags|=RC_MEDIA_SETTING_PROTECT;}}}
     snprintf(d->config->model,sizeof d->config->model,"%s",config.model);d->config->option_count=config.option_count;memcpy(d->config->options,config.options,sizeof config.options);
-    d->keymap=keys;d->typist=typist;rc_joykeys_set(&d->joykeys,d->config->keyboard_joystick);d->source_slot=source;d->running_config=*d->config;
+    d->keymap=keys;d->osk=osk;rc_osk_bind(&d->osk,virtual_key,d);d->typist=typist;rc_joykeys_set(&d->joykeys,d->config->keyboard_joystick);d->source_slot=source;d->running_config=*d->config;
+    rc_media *sid=family->media_count>4?rc_machine_media(d->machine,4):NULL;rc_sidplayer_close(&d->player);if(sid)rc_sidplayer_open(&d->player,sid->data,sid->size,NULL,0);
     d->setup.active=0;rc_browser_close(&d->browser);d->restart_pending=d->freeze_pending=0;d->pace_dirty=d->states_dirty=1;media_options(d);
     if(d->audio.device){SDL_ClearQueuedAudio(d->audio.device);d->audio.flowing=0;}
     free(data);return 1;
 invalid:
     snprintf(error,cap,"Snapshot input state is damaged");
 failed:
-    rc_machine_destroy(next);free(data);return 0;
+    rc_osk_close(&osk);rc_machine_destroy(next);free(data);return 0;
 }
-static void release_keys(desktop *d){d->freeze_pending=0;rc_typist_cancel(&d->typist);rc_keymap_clear(&d->keymap);rc_joykeys_set(&d->joykeys,d->config->keyboard_joystick);const rc_family *f=rc_machine_family(d->machine);for(unsigned i=0;i<f->key_count;++i)rc_machine_key(d->machine,i,0);for(unsigned p=0;p<f->joysticks;++p){rc_machine_joystick(d->machine,p,0);if(d->config->sticks[p].type==RC_CONTROL_MOUSE1351)rc_machine_pointer(d->machine,p,RC_CONTROL_MOUSE1351,0,0,0);}d->suppress_text=0;}
+static void release_keys(desktop *d){d->freeze_pending=0;rc_osk_release(&d->osk);rc_typist_cancel(&d->typist);rc_keymap_clear(&d->keymap);rc_joykeys_set(&d->joykeys,d->config->keyboard_joystick);const rc_family *f=rc_machine_family(d->machine);for(unsigned i=0;i<f->key_count;++i)rc_machine_key(d->machine,i,0);for(unsigned p=0;p<f->joysticks;++p){rc_machine_joystick(d->machine,p,0);if(d->config->sticks[p].type==RC_CONTROL_MOUSE1351)rc_machine_pointer(d->machine,p,RC_CONTROL_MOUSE1351,0,0,0);}d->suppress_text=0;}
 static void input_config(desktop *d){
     release_keys(d);int keys[RC_CONFIG_STICK_KEYS];for(unsigned i=0;i<RC_CONFIG_STICK_KEYS;++i)keys[i]=(int)SDL_GetScancodeFromName(d->config->stick_keys[i]);rc_joykeys_set_keys(&d->joykeys,keys);
     for(unsigned p=0;p<2;++p)rc_machine_pointer(d->machine,p,d->config->sticks[p].type,d->config->sticks[p].type==RC_CONTROL_PADDLES?255:0,d->config->sticks[p].type==RC_CONTROL_PADDLES?255:0,0);
-    if(!d->hidden){int mouse=0;for(unsigned p=0;p<2;++p)if(d->config->sticks[p].type==RC_CONTROL_MOUSE1351)mouse=1;SDL_SetRelativeMouseMode(mouse&&!d->setup.active&&!d->browser.active&&!d->paused?SDL_TRUE:SDL_FALSE);}
+    if(!d->hidden){int mouse=0;for(unsigned p=0;p<2;++p)if(d->config->sticks[p].type==RC_CONTROL_MOUSE1351)mouse=1;SDL_SetRelativeMouseMode(mouse&&!d->setup.active&&!d->browser.active&&!d->paused&&!d->osk.visible?SDL_TRUE:SDL_FALSE);}
 }
 static void input_poll(desktop *d){
-    if(d->setup.active||d->browser.active||d->paused)return;
+    if(d->setup.active||d->browser.active||d->paused||d->osk.visible)return;
     int explicit_keyboard=0;for(unsigned p=0;p<2;++p)if(d->config->sticks[p].device==RC_STICK_KEYBOARD)explicit_keyboard=1;
     const unsigned keyboard=rc_joykeys_held(&d->joykeys);
     for(unsigned p=0;p<2;++p){const rc_config_stick *st=&d->config->sticks[p];
@@ -165,7 +186,11 @@ static size_t screen_text(void *ctx,char *out,size_t cap){desktop *d=ctx;size_t 
     media_status(d);
     if(d->browser.active)n=rc_browser_text(&d->browser,out,cap);
     else if(d->setup.active){rc_frame f;rc_setup_draw(&d->setup,d->palette,&f);n=rc_tui_text(&d->setup.tui,out,cap);}
-    else n=rc_machine_text(d->machine,out,cap);
+    else {rc_frame f;char error[128];if(!picture(d,&f,error,sizeof error))return 0;
+        if(d->player.active)n=rc_sidplayer_text(&d->player,out,cap);else n=rc_machine_text(d->machine,out,cap);
+        if(d->panel_visible&&n<cap)n+=rc_panel_text(&d->panel,out+n,cap-n);
+        if(d->osk.visible&&n<cap)n+=rc_osk_text(&d->osk,out+n,cap-n);
+    }
     if(message_active(d)&&n<cap){const int added=snprintf(out+n,cap-n,"%s\n",d->osd.text);if(added>0)n+=(size_t)added<cap-n?(size_t)added:cap-n-1;}
     return n;
 }
@@ -206,12 +231,12 @@ static void states_status(desktop *d){
 }
 static void media_status(desktop *d){
     states_status(d);
-    d->setup.media_available=media_available(d);d->setup.cartridge_available=d->browser.cartridges_enabled=0;d->setup.has_cartridge=d->setup.can_freeze=0;d->setup.has_disk=0;d->setup.has_tape=d->setup.tape_writable=d->setup.tape_playing=d->setup.tape_recording=0;
+    d->setup.media_available=media_available(d);d->setup.cartridge_available=d->browser.cartridges_enabled=d->browser.sid_enabled=0;d->setup.has_cartridge=d->setup.can_freeze=0;d->setup.has_disk=0;d->setup.has_tape=d->setup.tape_writable=d->setup.tape_playing=d->setup.tape_recording=0;
     if(!d->setup.media_available)return;rc_media *media=rc_machine_media(d->machine,0);rc_tape_deck *deck=rc_machine_tape_deck(d->machine,0);
     d->setup.has_tape=media!=NULL;d->setup.tape_writable=media&&media->writable&&rc_media_extension_in(media->path,"tap");d->setup.tape_playing=deck&&deck->play;d->setup.tape_recording=deck&&deck->record;
     d->setup.has_disk=rc_machine_media(d->machine,2)!=NULL;
     const rc_family *family=rc_machine_family(d->machine);d->setup.cartridge_available=family->media_count>3&&family->media[3].kind==RC_MEDIA_CART;
-    d->browser.cartridges_enabled=d->setup.cartridge_available;d->setup.has_cartridge=d->setup.cartridge_available&&rc_machine_media(d->machine,3)!=NULL;
+    d->browser.cartridges_enabled=d->setup.cartridge_available;d->browser.sid_enabled=family->media_count>4&&family->media[4].kind==RC_MEDIA_SID;d->setup.has_cartridge=d->setup.cartridge_available&&rc_machine_media(d->machine,3)!=NULL;
     d->setup.can_freeze=d->setup.has_cartridge&&rc_machine_control(d->machine,3,RC_MEDIA_FREEZE,UINT32_MAX);
 }
 static void media_options(desktop *d){const rc_family *f=rc_machine_family(d->machine);for(unsigned i=0;i<f->media_count;++i){rc_config_media effective;rc_config_media_settings(d->config,f->media[i].key,&effective);rc_machine_tape_options(d->machine,i,rc_config_tape_bits(&effective));}}
@@ -223,6 +248,32 @@ static int flush_media(desktop *d,char *error,size_t cap){
         if(owned&&owned!=mounted&&!rc_media_save(owned)){snprintf(error,cap,"%s: %s",owned->path,owned->error);return 0;}}
     return 1;
 }
+static int mount_sid(desktop *d,rc_media *image,char *error,size_t cap){
+    rc_sidfile file;if(!rc_sidfile_parse(&file,image->data,image->size,error,cap)||!flush_media(d,error,cap))return 0;
+    rc_config config=*d->config;unsigned model=rc_machine_model(d->machine);
+    const unsigned ntsc=file.clock==RC_SID_PAL?0:file.clock==RC_SID_NTSC?1:model>=2;
+    const unsigned modern=file.model==RC_SID_MODEL_6581?0:file.model==RC_SID_MODEL_8580?1:model&1u;
+    const char *models[]={"c64-pal","c64c-pal","c64-ntsc","c64c-ntsc"};snprintf(config.model,sizeof config.model,"%s",models[ntsc*2u+modern]);
+    if(file.model==RC_SID_MODEL_6581||file.model==RC_SID_MODEL_8580)rc_config_set_option(&config,"sid","default");
+    rc_config_media *setting=rc_config_media_slot(&config,"sid");if(setting)snprintf(setting->image,sizeof setting->image,"%s",image->path);
+    setting=rc_config_media_slot(&config,"cartridge");if(setting)setting->image[0]=0;
+    rc_machine *next=rc_machine_create(&config,d->roms,error,cap);if(!next)return 0;
+    rc_media *clones[3]={0};int ok=!strcmp(rc_machine_family(next)->id,"c64");
+    for(unsigned i=0;i<3&&ok;++i){rc_media *m=rc_machine_media(d->machine,i);if(!m)continue;
+        if(m!=d->media[i]){clones[i]=rc_media_from(m->path,m->data,m->size);if(!clones[i]){ok=0;snprintf(error,cap,"Out of memory");break;}clones[i]->writable=m->writable;clones[i]->dirty=m->dirty;m=clones[i];}
+        ok=rc_machine_insert(next,i,m,error,cap);
+        if(ok&&d->media_entry[i]!=UINT32_MAX)ok=rc_machine_control(next,i,RC_MEDIA_SEEK,d->media_entry[i]);
+    }
+    if(ok)ok=rc_machine_insert(next,4,image,error,cap);
+    if(!ok){rc_machine_destroy(next);for(unsigned i=0;i<3;++i)rc_media_close(clones[i]);return 0;}
+    release_keys(d);rc_machine_destroy(d->machine);*d->owner=d->machine=next;*d->config=config;
+    for(unsigned i=0;i<3;++i)if(clones[i]){rc_media_close(d->media[i]);d->media[i]=clones[i];}
+    rc_media_close(d->media[3]);d->media[3]=NULL;d->media_entry[3]=UINT32_MAX;
+    rc_media_close(d->media[4]);d->media[4]=image;d->media_entry[4]=UINT32_MAX;
+    rc_keymap_init(&d->keymap,next,d->config);rc_sidplayer_open(&d->player,image->data,image->size,NULL,0);
+    d->running_config=config;d->restart_pending=0;d->pace_dirty=d->states_dirty=1;media_options(d);media_status(d);
+    return store_config(d,error,cap);
+}
 static int mount_media(desktop *d,unsigned slot,const char *path,char *error,size_t cap){
     const rc_family *f=rc_machine_family(d->machine);if(slot>=f->media_count||slot>=RC_CONFIG_MEDIA){snprintf(error,cap,"No media slot available");return 0;}
     char absolute[RC_MEDIA_PATH];if(!rc_host_full_path(path,absolute,sizeof absolute)){snprintf(error,cap,"Path is too long");return 0;}
@@ -231,7 +282,9 @@ static int mount_media(desktop *d,unsigned slot,const char *path,char *error,siz
     if(old&&(f->media[slot].kind==RC_MEDIA_FLOPPY||f->media[slot].kind==RC_MEDIA_CART)&&!rc_machine_control(d->machine,slot,RC_MEDIA_FLUSH,0)){snprintf(error,cap,"Cannot update media image");return 0;}
     if(old&&!rc_media_save(old)){snprintf(error,cap,"%s",old->error);return 0;}
     rc_media *next=rc_media_open(absolute,effective.write_protect,error,cap);if(!next)return 0;
+    if(f->media[slot].kind==RC_MEDIA_SID){if(mount_sid(d,next,error,cap))return 1;if(d->media[slot]!=next)rc_media_close(next);return 0;}
     if(!rc_machine_insert(d->machine,slot,next,error,cap)){rc_media_close(next);return 0;}
+    if(d->player.active){rc_sidplayer_close(&d->player);if(rc_machine_media(d->machine,4)){rc_machine_eject(d->machine,4);rc_media_close(d->media[4]);d->media[4]=NULL;rc_config_media *sid=rc_config_media_slot(d->config,"sid");if(sid)sid->image[0]=0;reset(d,1);}}
     rc_media_close(d->media[slot]);d->media[slot]=next;d->media_entry[slot]=UINT32_MAX;
     rc_config_media *setting=rc_config_media_slot(d->config,f->media[slot].key);if(setting)snprintf(setting->image,sizeof setting->image,"%s",absolute);
     if(f->media[slot].kind==RC_MEDIA_TAPE||f->media[slot].kind==RC_MEDIA_PROGRAM)d->source_slot=(int)slot;
@@ -244,10 +297,10 @@ static int eject(void *ctx,unsigned slot){
     if((f->media[slot].kind==RC_MEDIA_FLOPPY||f->media[slot].kind==RC_MEDIA_CART)&&!rc_machine_control(d->machine,slot,RC_MEDIA_FLUSH,0)){message(d,"Cannot update media image");return 0;}
     if(!rc_media_save(mounted)){message(d,mounted->error);return 0;}
     if(!rc_machine_eject(d->machine,slot))return 0;if(d->source_slot==(int)slot)d->source_slot=-1;release_keys(d);rc_media_close(d->media[slot]);d->media[slot]=NULL;d->media_entry[slot]=UINT32_MAX;
-    rc_config_media *setting=rc_config_media_slot(d->config,f->media[slot].key);if(setting)setting->image[0]=0;if(f->media[slot].kind==RC_MEDIA_CART)reset(d,0);char error[128];if(!store_config(d,error,sizeof error))message(d,error);media_status(d);return 1;
+    rc_config_media *setting=rc_config_media_slot(d->config,f->media[slot].key);if(setting)setting->image[0]=0;if(f->media[slot].kind==RC_MEDIA_CART)reset(d,0);if(f->media[slot].kind==RC_MEDIA_SID){rc_sidplayer_close(&d->player);reset(d,1);}char error[128];if(!store_config(d,error,sizeof error))message(d,error);media_status(d);return 1;
 }
 static int autoload(desktop *d,unsigned slot,char *error,size_t cap){
-    const rc_family *f=rc_machine_family(d->machine);if(slot>=f->media_count)return 0;if(f->media[slot].kind==RC_MEDIA_CART)return 1;
+    const rc_family *f=rc_machine_family(d->machine);if(slot>=f->media_count)return 0;if(f->media[slot].kind==RC_MEDIA_CART||f->media[slot].kind==RC_MEDIA_SID)return 1;
     rc_config_media effective;rc_config_media_settings(d->config,f->media[slot].key,&effective);if(!effective.autoload)return 1;
     int power=0;const char *commands=rc_machine_autoload(d->machine,slot,&power);if(!commands||!*commands)return 1;
     char text[512];snprintf(text,sizeof text,"%s",commands);release_keys(d);if(power)rc_machine_reset(d->machine,1);d->pace_dirty=1;
@@ -320,7 +373,7 @@ static int automatic_speed(desktop *d){
     for(unsigned i=0;i<f->media_count;++i)if(active&(1u<<i)){rc_config_media effective;rc_config_media_settings(d->config,f->media[i].key,&effective);if(effective.fast&&effective.full_speed)return 1;}return 0;
 }
 static int restart(desktop *d,char *error,size_t cap){
-    if(!flush_media(d,error,cap))return 0;rc_machine *next=rc_machine_create(d->config,d->roms,error,cap);if(!next)return 0;
+    if(!flush_media(d,error,cap))return 0;rc_machine_status previous;rc_machine_get_status(d->machine,&previous);rc_machine *next=rc_machine_create(d->config,d->roms,error,cap);if(!next)return 0;
     if(strcmp(d->config->model,"test")&&strcmp(rc_machine_family(next)->id,"c64")){rc_machine_destroy(next);snprintf(error,cap,"Required firmware is missing");return 0;}
     rc_media *clones[RC_CONFIG_MEDIA]={0};const rc_family *family=rc_machine_family(next),*old_family=rc_machine_family(d->machine);int ok=1;
     for(unsigned i=0;i<family->media_count&&i<RC_CONFIG_MEDIA;++i){rc_config_media effective;rc_config_media_settings(d->config,family->media[i].key,&effective);rc_machine_tape_options(next,i,rc_config_tape_bits(&effective));
@@ -328,10 +381,11 @@ static int restart(desktop *d,char *error,size_t cap){
         if(mounted&&mounted!=d->media[i]){clones[i]=rc_media_from(mounted->path,mounted->data,mounted->size);if(!clones[i]){snprintf(error,cap,"Out of memory");ok=0;break;}clones[i]->writable=mounted->writable;clones[i]->dirty=mounted->dirty;mounted=clones[i];}
         if(mounted&&(!rc_machine_insert(next,i,mounted,error,cap)||(d->media_entry[i]!=UINT32_MAX&&!rc_machine_control(next,i,RC_MEDIA_SEEK,d->media_entry[i])))){ok=0;break;}}
     if(ok&&d->source_slot>=0&&(unsigned)d->source_slot<family->media_count&&rc_machine_media(next,(unsigned)d->source_slot))ok=rc_machine_control(next,(unsigned)d->source_slot,RC_MEDIA_SEEK,d->media_entry[d->source_slot]);
+    if(ok&&previous.sid_loaded&&family->media_count>4&&rc_machine_media(next,4)){ok=rc_machine_control(next,4,RC_MEDIA_SONG,previous.sid_song);if(ok)rc_machine_control(next,4,RC_MEDIA_PAUSE,previous.sid_paused);}
     if(!ok){rc_machine_destroy(next);for(unsigned i=0;i<RC_CONFIG_MEDIA;++i)rc_media_close(clones[i]);return 0;}
     release_keys(d);rc_machine_destroy(d->machine);*d->owner=d->machine=next;
     for(unsigned i=0;i<RC_CONFIG_MEDIA;++i)if(clones[i]){rc_media_close(d->media[i]);d->media[i]=clones[i];}
-    rc_keymap_init(&d->keymap,next,d->config);rc_machine_border(next,d->config->border);d->running_config=*d->config;d->pace_dirty=1;media_status(d);return 1;
+    rc_keymap_init(&d->keymap,next,d->config);rc_media *sid=family->media_count>4?rc_machine_media(next,4):NULL;rc_sidplayer_close(&d->player);if(sid)rc_sidplayer_open(&d->player,sid->data,sid->size,NULL,0);rc_machine_border(next,d->config->border);d->running_config=*d->config;d->pace_dirty=1;media_status(d);return 1;
 }
 
 static void restore_machine_config(desktop *d){snprintf(d->config->model,sizeof d->config->model,"%s",d->running_config.model);d->config->option_count=d->running_config.option_count;memcpy(d->config->options,d->running_config.options,sizeof d->config->options);}
@@ -369,6 +423,10 @@ static int shell_key(void *ctx,const char *name,int down){
     }
     if(ctrl&&(!strcmp(bare,"F1")||!strcmp(bare,"F2"))){if(down&&!browser_open(d,!strcmp(bare,"F2"),error,sizeof error))message(d,error);return 1;}
     if(ctrl&&(!strcmp(bare,"F5")||!strcmp(bare,"F6"))){if(down&&!quick_state(d,!strcmp(bare,"F5"),error,sizeof error))message(d,error);return 1;}
+    if(!strcmp(bare,"F9")){
+        if(down&&media_available(d)){if(shifted){const int visible=!d->osk.visible;release_keys(d);rc_osk_open(&d->osk,visible);input_config(d);}else d->panel_visible=!d->panel_visible;}
+        return 1;
+    }
     if(!strcmp(bare,"F10")){if(down){speed(d,!d->full);message(d,d->full?"Full speed (sound muted)":"100% speed");}return 1;}
     if(alt&&(!strcmp(bare,"F")||!strcmp(bare,"S"))){if(!media_available(d)){if(down)message(d,"No drive available");return 1;}if(down){rc_config_media effective;rc_config_media_settings(d->config,"disk",&effective);rc_config_media *disk=rc_config_media_slot(d->config,"disk");if(disk){
         if(!strcmp(bare,"F")){disk->fast=!effective.fast;disk->explicit_flags|=RC_MEDIA_SETTING_FAST;message(d,disk->fast?"Drive fast loading on":"Drive fast loading off");d->pace_dirty=1;}
@@ -410,6 +468,19 @@ static int shell_key(void *ctx,const char *name,int down){
         if(action&&!(action&RC_SETUP_OFF)&&!d->restart_pending&&!store_config(d,error,sizeof error))message(d,error);
         return action&RC_SETUP_OFF?2:1;
     }
+    if(d->osk.visible&&(!strcmp(bare,"UP")||!strcmp(bare,"DOWN")||!strcmp(bare,"LEFT")||!strcmp(bare,"RIGHT")||!strcmp(bare,"RETURN")||!strcmp(bare,"ENTER")||!strcmp(bare,"SPACE")||!strcmp(bare,"ESCAPE")||!strcmp(bare,"PAD A")||!strcmp(bare,"PAD B"))){
+        const char *osk_key=!strcmp(bare,"PAD A")?"A":!strcmp(bare,"PAD B")?"B":!strcmp(bare,"ENTER")?"RETURN":bare;
+        rc_osk_key(&d->osk,osk_key,down);if(!d->osk.visible)input_config(d);return 1;
+    }
+    if(d->player.active){
+        rc_machine_status s;rc_machine_get_status(d->machine,&s);const unsigned action=rc_sidplayer_key(&d->player,bare,s.sid_song,s.sid_paused);
+        if(down){
+            if(action==RC_SIDPLAYER_CLOSE)eject(d,4);
+            else if(action==RC_SIDPLAYER_PREVIOUS||action==RC_SIDPLAYER_NEXT){release_keys(d);rc_machine_control(d->machine,4,RC_MEDIA_SONG,action==RC_SIDPLAYER_PREVIOUS?s.sid_song-1u:s.sid_song+1u);d->pace_dirty=1;}
+            else if(action==RC_SIDPLAYER_PAUSE){rc_machine_control(d->machine,4,RC_MEDIA_PAUSE,!s.sid_paused);d->pace_dirty=1;if(d->audio.device){SDL_ClearQueuedAudio(d->audio.device);d->audio.flowing=0;}}
+        }
+        if(action||!strcmp(bare,"LEFT")||!strcmp(bare,"RIGHT")||!strcmp(bare,"SPACE")||!strcmp(bare,"ESCAPE"))return 1;
+    }
     if(!strcmp(bare,"F11")){
         if(down){release_keys(d);if(shifted){const rc_config_stick temp=d->config->sticks[0];d->config->sticks[0]=d->config->sticks[1];d->config->sticks[1]=temp;d->config->keyboard_port^=1u;message(d,"Control ports swapped");}
             else {d->config->keyboard_joystick=!d->config->keyboard_joystick;message(d,d->config->keyboard_joystick?"Keyboard joystick on":"Keyboard joystick off");}
@@ -417,7 +488,7 @@ static int shell_key(void *ctx,const char *name,int down){
         }return 1;
     }
     if(!strcmp(bare,"PAUSE")){if(down){d->paused=!d->paused;d->pace_dirty=1;release_keys(d);message(d,d->paused?"Paused":"Running");input_config(d);}return 1;}
-    if((alt&&(!strcmp(bare,"F")||!strcmp(bare,"S")))||!strcmp(bare,"F9")){if(down)message(d,"Control unavailable");return 1;}
+    if(alt&&(!strcmp(bare,"F")||!strcmp(bare,"S"))){if(down)message(d,"Control unavailable");return 1;}
     if(!strcmp(bare,"PRINTSCREEN")||!strcmp(bare,"PRINT SCREEN")){
         if(down){char path[RC_HOST_PATH];rc_host_make_folders("work/screenshots");snprintf(path,sizeof path,"work/screenshots/rec64-%llu.png",(unsigned long long)d->frames);if(shot(d,path,error,sizeof error))message(d,path);else message(d,error);}return 1;
     }
@@ -461,7 +532,7 @@ static void control_write(void *ctx,const char *line) {
 }
 int rc_desktop_run(rc_machine **owner,rc_config *c,const rc_rom_index *roms,const rc_desktop_options *o,char *error,size_t cap) {
     rc_machine *m=*owner;desktop d={0};d.machine=m;d.owner=owner;d.config=c;d.roms=roms;d.hidden=o->hidden;d.running_config=*c;d.source_slot=-1;d.states_dirty=1;for(unsigned i=0;i<RC_CONFIG_MEDIA;++i)d.media_entry[i]=UINT32_MAX;rc_browser_init(&d.browser);d.browser.states_enabled=1;rc_browser_set_tape_reader(&d.browser,tape_directory,&d);rc_typist_init(&d.typist);
-    rc_keymap_init(&d.keymap,m,c);int keys[RC_CONFIG_STICK_KEYS];for(unsigned i=0;i<RC_CONFIG_STICK_KEYS;++i)keys[i]=(int)SDL_GetScancodeFromName(c->stick_keys[i]);rc_joykeys_init(&d.joykeys,keys,c->keyboard_joystick);
+    rc_keymap_init(&d.keymap,m,c);rc_panel_init(&d.panel);rc_sidplayer_init(&d.player);rc_osk_init(&d.osk,virtual_key,&d);int keys[RC_CONFIG_STICK_KEYS];for(unsigned i=0;i<RC_CONFIG_STICK_KEYS;++i)keys[i]=(int)SDL_GetScancodeFromName(c->stick_keys[i]);rc_joykeys_init(&d.joykeys,keys,c->keyboard_joystick);
     int status=1;rc_harness *h=NULL;rc_setup_init(&d.setup,c);
     char folder[RC_HOST_PATH];
     if(c->source[0]){snprintf(folder,sizeof folder,"%s",c->source);char *slash=strrchr(folder,'/'),*back=strrchr(folder,'\\');if(back&&(!slash||back>slash))slash=back;if(slash)slash[1]=0;else folder[0]=0;snprintf(d.palette_folders[d.palette_folders_count++],RC_HOST_PATH,"%spalettes",folder);}
@@ -488,8 +559,8 @@ int rc_desktop_run(rc_machine **owner,rc_config *c,const rc_rom_index *roms,cons
     }
     input_config(&d);
     int startup=-1;const rc_family *family=rc_machine_family(d.machine);media_options(&d);
-    for(unsigned i=0;i<family->media_count;++i){rc_config_media settings;rc_config_media_settings(c,family->media[i].key,&settings);if(settings.image[0]){if(!mount_media(&d,i,settings.image,error,cap))goto done;if(settings.autoload&&family->media[i].kind!=RC_MEDIA_CART){if(i!=2||rc_machine_control(d.machine,i,RC_MEDIA_SEEK,0)){startup=(int)i;if(i==2){d.media_entry[i]=0;d.source_slot=2;}}}}}
-    media_status(&d);if(d.setup.has_cartridge)startup=-1;
+    for(unsigned i=0;i<family->media_count;++i){rc_config_media settings;rc_config_media_settings(c,family->media[i].key,&settings);if(settings.image[0]){if(!mount_media(&d,i,settings.image,error,cap))goto done;if(settings.autoload&&family->media[i].kind!=RC_MEDIA_CART&&family->media[i].kind!=RC_MEDIA_SID){if(i!=2||rc_machine_control(d.machine,i,RC_MEDIA_SEEK,0)){startup=(int)i;if(i==2){d.media_entry[i]=0;d.source_slot=2;}}}}}
+    media_status(&d);if(d.setup.has_cartridge||d.player.active)startup=-1;
     if(startup>=0&&!autoload(&d,(unsigned)startup,error,cap))goto done;
     if(o->audio&&!audio_capture(&d,o->audio,error,cap)) goto done;
     if(o->control) {
@@ -502,7 +573,7 @@ int rc_desktop_run(rc_machine **owner,rc_config *c,const rc_rom_index *roms,cons
     if(driven) {
         rc_harness_host host={0};host.ctx=&d;host.machine=machine;host.shot=shot;
         host.state_save=state_save;host.state_load=state_load;host.reset=reset;host.speed=speed;
-        host.audio=audio_capture;host.deterministic=o->hidden;
+        host.audio=audio_capture;host.deterministic=o->hidden;host.pointer=pointer_input;
         host.key=shell_key;host.screen_text=screen_text;host.text_input=text_input;host.insert=insert;host.eject=eject;host.drop=drop;
         if(o->control) { host.control_read=control_read;host.control_write=control_write; }
         h=rc_harness_open(&host,o->script,error,cap);if(!h) goto done;
@@ -516,14 +587,27 @@ int rc_desktop_run(rc_machine **owner,rc_config *c,const rc_rom_index *roms,cons
             while(SDL_PollEvent(&e)) {
                 if(e.type==SDL_QUIT) { status=0;goto done; }
                 rc_pad_key pad=RC_PAD_NONE;const rc_pads_result change=rc_pads_event(&d.pads,&e,&pad);
-                if(change==RC_PADS_CHANGED){input_poll(&d);message(&d,"Controller connections changed");}
+                if(change==RC_PADS_CHANGED){rc_osk_release(&d.osk);input_poll(&d);message(&d,"Controller connections changed");}
+                if(change==RC_PADS_KEY&&pad==RC_PAD_BACK){shell_key(&d,"Shift+F9",1);continue;}
+                if(d.osk.visible&&!d.setup.active&&!d.browser.active&&e.type==SDL_CONTROLLERBUTTONUP&&e.cbutton.button==SDL_CONTROLLER_BUTTON_A){rc_osk_key(&d.osk,"A",0);continue;}
+                if(change==RC_PADS_KEY&&d.osk.visible&&!d.setup.active&&!d.browser.active&&(pad==RC_PAD_A||pad==RC_PAD_B)){rc_osk_key(&d.osk,pad==RC_PAD_A?"A":"B",1);if(!d.osk.visible)input_config(&d);continue;}
                 if(change==RC_PADS_KEY&&(d.setup.active||d.browser.active||pad==RC_PAD_START)){
                     const char *names[]={"","UP","DOWN","LEFT","RIGHT","RETURN","ESCAPE","-","+","F12",""};if(pad!=RC_PAD_NONE&&pad!=RC_PAD_BACK)shell_key(&d,names[pad],1);}
                 if(e.type==SDL_WINDOWEVENT&&e.window.event==SDL_WINDOWEVENT_FOCUS_LOST)release_keys(&d);
                 else if(e.type==SDL_DROPFILE){if(!drop(&d,e.drop.file,error,cap))message(&d,error);SDL_free(e.drop.file);}
                 else if(e.type==SDL_TEXTINPUT){d.freeze_pending=0;if(d.browser.active){if(!d.suppress_text)rc_browser_input(&d.browser,e.text.text);}
                     else if(!d.setup.active&&!d.paused&&!d.suppress_text){rc_typist_cancel(&d.typist);if(!rc_keymap_text(&d.keymap,e.text.text))message(&d,"Character unavailable on C64 keyboard");}}
+                else if(e.type==SDL_FINGERDOWN||e.type==SDL_FINGERMOTION||e.type==SDL_FINGERUP){
+                    if(d.osk.visible){SDL_Window *window=SDL_GetWindowFromID(e.tfinger.windowID);if(window){int window_w,window_h,x,y;SDL_GetWindowSize(window,&window_w,&window_h);
+                        const int inside=rc_video_to_screen(d.video,(int)(e.tfinger.x*window_w),(int)(e.tfinger.y*window_h),&x,&y);
+                        pointer_input(&d,(int64_t)e.tfinger.fingerId,x,y,e.type==SDL_FINGERUP?0:inside?1:-1);}}
+                }
                 else if(e.type==SDL_MOUSEMOTION||e.type==SDL_MOUSEBUTTONDOWN||e.type==SDL_MOUSEBUTTONUP){
+                    const Uint32 which=e.type==SDL_MOUSEMOTION?e.motion.which:e.button.which;
+                    if(which==SDL_TOUCH_MOUSEID)continue;
+                    if(d.osk.visible){int x,y;const int wx=e.type==SDL_MOUSEMOTION?e.motion.x:e.button.x,wy=e.type==SDL_MOUSEMOTION?e.motion.y:e.button.y;const int inside=rc_video_to_screen(d.video,wx,wy,&x,&y);
+                        if(e.type==SDL_MOUSEMOTION){if(e.motion.state&SDL_BUTTON_LMASK)pointer_input(&d,INT64_MIN,x,y,inside?1:-1);}
+                        else if(e.button.button==SDL_BUTTON_LEFT)pointer_input(&d,INT64_MIN,x,y,e.type==SDL_MOUSEBUTTONUP?0:inside?1:-1);continue;}
                     if(!d.setup.active&&!d.browser.active&&!d.paused){const unsigned held=SDL_GetMouseState(NULL,NULL),buttons=(held&SDL_BUTTON_LMASK?1u:0)|(held&SDL_BUTTON_RMASK?2u:0);
                         for(unsigned p=0;p<2;++p)if(c->sticks[p].type==RC_CONTROL_MOUSE1351)rc_machine_pointer(d.machine,p,RC_CONTROL_MOUSE1351,e.type==SDL_MOUSEMOTION?e.motion.xrel:0,e.type==SDL_MOUSEMOTION?e.motion.yrel:0,buttons);}}
                 else if(e.type==SDL_KEYDOWN||e.type==SDL_KEYUP){
@@ -547,7 +631,7 @@ int rc_desktop_run(rc_machine **owner,rc_config *c,const rc_rom_index *roms,cons
 
             }
         }
-        if(!o->hidden){rc_pad_key pad;if((d.setup.active||d.browser.active)&&rc_pads_repeat(&d.pads,SDL_GetTicks(),&pad)){const char *names[]={"","UP","DOWN","LEFT","RIGHT"};shell_key(&d,names[pad],1);}input_poll(&d);}
+        if(!o->hidden){rc_pad_key pad;if((d.setup.active||d.browser.active||d.osk.visible)&&rc_pads_repeat(&d.pads,SDL_GetTicks(),&pad)){const char *names[]={"","UP","DOWN","LEFT","RIGHT"};shell_key(&d,names[pad],1);}input_poll(&d);}
         m=d.machine;
         if(d.pace_dirty){rc_pace_init(&pace,SDL_GetPerformanceFrequency(),rc_machine_clock(m),100);rc_pace_reset(&pace,SDL_GetPerformanceCounter(),rc_machine_time(m));d.pace_dirty=0;}
         uint64_t ticks=rc_machine_frame_period(m);int present=1,input_frame=1;
@@ -583,5 +667,5 @@ done:
     if(!flush_media(&d,error,cap))status=1;
     if(!rc_wav_close(&d.wav)) { snprintf(error,cap,"Cannot finish audio capture");status=1; }
     rc_harness_close(h);rc_host_stream_close(d.tcp);rc_host_audio_close(&d.audio);
-    if(!o->hidden){SDL_StopTextInput();rc_pads_close(&d.pads);}rc_video_close(d.video);rc_browser_close(&d.browser);const rc_family *final_family=rc_machine_family(d.machine);for(unsigned i=0;i<RC_CONFIG_MEDIA;++i){if(i<final_family->media_count&&rc_machine_media(d.machine,i))rc_machine_eject(d.machine,i);rc_media_close(d.media[i]);}free(d.pixels);SDL_Quit();return status;
+    if(!o->hidden){SDL_StopTextInput();rc_pads_close(&d.pads);}rc_video_close(d.video);rc_browser_close(&d.browser);const rc_family *final_family=rc_machine_family(d.machine);for(unsigned i=0;i<RC_CONFIG_MEDIA;++i){if(i<final_family->media_count&&rc_machine_media(d.machine,i))rc_machine_eject(d.machine,i);rc_media_close(d.media[i]);}rc_osk_close(&d.osk);rc_panel_close(&d.panel);free(d.pixels);SDL_Quit();return status;
 }

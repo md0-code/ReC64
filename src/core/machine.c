@@ -259,7 +259,7 @@ rc_media *rc_machine_media(const rc_machine *m, unsigned slot) { return slot < m
 int rc_machine_eject(rc_machine *m, unsigned slot) { return slot < m->family->media_count && m->impl->eject(m->self, slot); }
 unsigned rc_machine_activity(const rc_machine *m) { return m->impl->activity(m->self); }
 int rc_machine_control(rc_machine *m, unsigned slot, unsigned command, uint32_t value) {
-    return m->impl->control && slot < m->family->media_count && m->impl->control(m->self, slot, command, value);
+    return m->impl->control && slot < m->family->media_count ? m->impl->control(m->self, slot, command, value) : 0;
 }
 
 unsigned rc_machine_tape_options(rc_machine *m, unsigned slot, unsigned bits) {

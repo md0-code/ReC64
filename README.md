@@ -48,6 +48,14 @@ That page also selects REU or GeoRAM memory. Right Alt pressed and released
 alone activates supported freezer cartridges. EasyFlash writes are saved
 to the attached CRT image unless it is write protected.
 
+SID files open in the music player with title, author, release, elapsed time
+and sub-tune selection. Left/Right changes tune, Space pauses, and Escape
+stops playback. Clock and SID chip follow the file's hints.
+
+F9 toggles live drive, tape and joystick status. Shift+F9 opens the C64
+on-screen keyboard for mouse, multi-touch or controller input; controller
+Back also toggles it. Shift, C= and Ctrl can be latched with a tap.
+
 Create a portable Windows build in `dist/` with `./tools/build_dist.ps1`.
 Launch `dist/rec64.exe`; the native ARM64 copy is `dist/arm64/rec64.exe`.
 See [configuration and control](docs/CONFIGURATION.md) and
