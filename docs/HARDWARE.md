@@ -238,3 +238,15 @@ Completed writes are decoded back into the mounted, borrowed image before
 the host flushes it. State includes both processors' interface state, drive
 RAM, bus levels, mechanism phase, raw tracks and an unfinished write. No
 firmware byte or custom-loader instruction is replaced.
+
+## Automatic disk speed
+
+Automatic fast loading observes the actual drive motor and the resolved IEC
+edge counter after each guest cycle. Motor activity requests full speed
+immediately. Serial transitions keep that request alive for
+`ceil(clock_hz/50)` cycles (20 ms) after the most recent edge. This is a
+host-speed policy that bridges a frame poll; it changes no guest timing.
+A bus line held low without further transitions becomes idle after that
+interval. Motor stop adds no independent delay. The shell applies the user's
+fast-loading switch and returns to 100% when the request ends. The guest
+cycle, IEC counter, last-edge cycle and activity flags are saved exactly.
