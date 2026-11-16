@@ -163,10 +163,10 @@ static int mount_media(desktop *d,unsigned slot,const char *path,char *error,siz
     const rc_family *f=rc_machine_family(d->machine);if(slot>=f->media_count||slot>=RC_CONFIG_MEDIA){snprintf(error,cap,"No media slot available");return 0;}
     char absolute[RC_MEDIA_PATH];if(!rc_host_full_path(path,absolute,sizeof absolute)){snprintf(error,cap,"Path is too long");return 0;}
     rc_config_media effective;rc_config_media_settings(d->config,f->media[slot].key,&effective);
-    rc_media *next=rc_media_open(absolute,effective.write_protect,error,cap);if(!next)return 0;
     rc_media *old=rc_machine_media(d->machine,slot);
-    if(old&&f->media[slot].kind==RC_MEDIA_FLOPPY&&!rc_machine_control(d->machine,slot,RC_MEDIA_FLUSH,0)){snprintf(error,cap,"Cannot update disk image");rc_media_close(next);return 0;}
-    if(old&&!rc_media_save(old)){snprintf(error,cap,"%s",old->error);rc_media_close(next);return 0;}
+    if(old&&f->media[slot].kind==RC_MEDIA_FLOPPY&&!rc_machine_control(d->machine,slot,RC_MEDIA_FLUSH,0)){snprintf(error,cap,"Cannot update disk image");return 0;}
+    if(old&&!rc_media_save(old)){snprintf(error,cap,"%s",old->error);return 0;}
+    rc_media *next=rc_media_open(absolute,effective.write_protect,error,cap);if(!next)return 0;
     if(!rc_machine_insert(d->machine,slot,next,error,cap)){rc_media_close(next);return 0;}
     rc_media_close(d->media[slot]);d->media[slot]=next;d->media_entry[slot]=UINT32_MAX;
     rc_config_media *setting=rc_config_media_slot(d->config,f->media[slot].key);if(setting)snprintf(setting->image,sizeof setting->image,"%s",absolute);
@@ -199,6 +199,7 @@ static int image_slot(const desktop *d,const char *path){const rc_family *f=rc_m
 static void close_browser(desktop *d){rc_browser_close(&d->browser);input_config(d);d->pace_dirty=1;}
 static int browser_open(desktop *d,int save,char *error,size_t cap){
     if(!media_available(d)){snprintf(error,cap,"No media device available");return 0;}char folder[RC_MEDIA_PATH]=".";
+    if(!flush_media(d,error,cap))return 0;
     if(d->browser.path[0])snprintf(folder,sizeof folder,"%s",d->browser.path);
     else if(d->config->source[0]){snprintf(folder,sizeof folder,"%s",d->config->source);char *slash=strrchr(folder,'/'),*back=strrchr(folder,'\\');if(back&&(!slash||back>slash))slash=back;if(slash)slash[1]=0;else snprintf(folder,sizeof folder,".");}
     if(!rc_browser_open(&d->browser,folder,save,error,cap))return 0;release_keys(d);input_config(d);d->pace_dirty=1;return 1;
@@ -231,6 +232,7 @@ static int browser_action(desktop *d,unsigned action,char *error,size_t cap){
 }
 static int drop(void *ctx,const char *path,char *error,size_t cap){
     desktop *d=ctx;if(!media_available(d)){snprintf(error,cap,"No media device available");return 0;}
+    if(!flush_media(d,error,cap))return 0;
     const unsigned action=rc_browser_file(&d->browser,path,error,cap);if(cap&&error[0])return 0;
     if(action)return browser_action(d,action,error,cap);release_keys(d);input_config(d);d->pace_dirty=1;return 1;
 }

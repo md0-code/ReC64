@@ -7,12 +7,13 @@
 #include "../../hw/datasette.h"
 #include "../../hw/c1541.h"
 #include "../../hw/fastload.h"
+#include "../../hw/drivesnd.h"
 typedef struct rc_c64 {
     rc_hw_host host;rc_sched sched;rc_bus bus;
     rc_mos6510 cpu;rc_vic2 vic;rc_cia6526 cia[2];rc_c64kbd keyboard;rc_pla pla;rc_sid sid;
     uint8_t model,restore,port_charge,border;uint32_t hz;uint64_t tod_at;
     uint8_t rom_hashes[128],frame[520u*312u];
-    rc_c1541 drive;rc_iec iec;rc_fastload fastload;uint64_t drive_phase;
+    rc_c1541 drive;rc_iec iec;rc_fastload fastload;rc_drivesnd drive_sound;uint64_t drive_phase;
     rc_datasette tape;rc_traps traps;rc_cpu_hooks hooks;uint8_t fetch_watch[8192];
     rc_media *media[3],*synthetic;uint8_t media_owned[3],source,physical;
     uint32_t selected[3],tape_bits[3],program_size;uint16_t program_address;

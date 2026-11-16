@@ -108,10 +108,14 @@ void rc_c64_media_tick(rc_c64 *c){
     rc_c64_iec_lines(c);c->drive_phase+=1000000u;
     while(c->drive_phase>=c->hz){c->drive_phase-=c->hz;rc_c1541_tick(&c->drive);rc_c64_iec_lines(c);}
     rc_fastload_observe(&c->fastload,c->sched.now,c->drive.motor,c->iec.edges);
+    rc_drivesnd_status(&c->drive_sound,c->drive.motor,c->drive.steps,c->drive.bumps);
     rc_c64_media_lines(c);rc_datasette_tick(&c->tape,1);c->tape_audio_phase+=48000;
     if(c->tape_audio_phase>=c->hz){c->tape_audio_phase-=c->hz;
         if(c->tape_audio_count==48000){c->tape_audio_head=(c->tape_audio_head+1)%48000;--c->tape_audio_count;}
-        c->tape_audio[(c->tape_audio_head+c->tape_audio_count++)%48000]=(c->source<3&&(c->tape_bits[c->source]&RC_TAPE_SOUND))?rc_datasette_sample(&c->tape):0;
+        int sample=(c->source<2&&(c->tape_bits[c->source]&RC_TAPE_SOUND))?rc_datasette_sample(&c->tape):0;
+        const int drive=rc_drivesnd_sample(&c->drive_sound);if(c->tape_bits[2]&RC_TAPE_SOUND)sample+=drive;
+        if(sample>32767)sample=32767;if(sample< -32768)sample= -32768;
+        c->tape_audio[(c->tape_audio_head+c->tape_audio_count++)%48000]=(int16_t)sample;
     }
 }
 int16_t rc_c64_tape_audio(rc_c64 *c){if(!c->tape_audio_count)return 0;const int16_t value=c->tape_audio[c->tape_audio_head];c->tape_audio_head=(c->tape_audio_head+1)%48000;--c->tape_audio_count;return value;}
@@ -165,6 +169,7 @@ void rc_c64_media_save(const rc_c64 *c,rc_state_writer *w){
     rc_sw_begin(w,"DSET",0);rc_datasette_save(&c->tape,w);rc_sw_end(w);rc_sw_begin(w,"TRAP",0);rc_traps_save(&c->traps,w);rc_sw_end(w);
     rc_sw_begin(w,"1541",0);rc_c1541_save(&c->drive,w);rc_sw_end(w);rc_sw_begin(w,"IEC ",0);rc_iec_save(&c->iec,w);rc_sw_end(w);
     rc_sw_begin(w,"FAST",0);rc_fastload_save(&c->fastload,w);rc_sw_end(w);
+    rc_sw_begin(w,"DSND",0);rc_drivesnd_save(&c->drive_sound,w);rc_sw_end(w);
 }
 int rc_c64_media_load(rc_c64 *c,rc_state_reader *r){
     if(!rc_sr_chunk(r,"CMED",0))return 1;if(rc_sr_u32(r)!=2)return 0;
@@ -189,5 +194,6 @@ int rc_c64_media_load(rc_c64 *c,rc_state_reader *r){
     if(c->media[2]&&!rc_c1541_mount(&c->drive,c->media[2],error,sizeof error))return 0;
     if(!rc_sr_chunk(r,"1541",0)||!rc_c1541_load(&c->drive,r)||!rc_sr_chunk(r,"IEC ",0)||!rc_iec_load(&c->iec,r))return 0;
     if(!rc_sr_chunk(r,"FAST",0)||!rc_fastload_load(&c->fastload,r))return 0;
+    if(!rc_sr_chunk(r,"DSND",0)||!rc_drivesnd_load(&c->drive_sound,r))return 0;
     return 1;
 }

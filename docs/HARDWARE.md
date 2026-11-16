@@ -239,6 +239,16 @@ the host flushes it. State includes both processors' interface state, drive
 RAM, bus levels, mechanism phase, raw tracks and an unfinished write. No
 firmware byte or custom-loader instruction is replaced.
 
+Drive sounds are generated at 48 kHz from measured frequencies, levels,
+envelopes and durations of the pinned 1541 recordings. Integer oscillators
+and a seeded noise source produce motor spin-up, steady hum and coast-down;
+bounded overlapping voices produce alternating head steps and the head
+stop bump. No recorded samples are shipped. The board feeds actual motor
+levels and monotonically counted mechanical events. Sound state advances
+while muted, and its phases, envelopes and pending output are saved exactly.
+The original recordings, their hashes and the measurement method are in
+`sources.lock.json`.
+
 ## Automatic disk speed
 
 Automatic fast loading observes the actual drive motor and the resolved IEC

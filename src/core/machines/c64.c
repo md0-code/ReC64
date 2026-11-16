@@ -187,5 +187,6 @@ void *rc_c64_create(const rc_machine_setup *setup,char *error,size_t capacity){
     if(!drive_rom||drive_rom->size!=16384){if(capacity)snprintf(error,capacity,"Missing 1541 DOS ROM");rc_sid_release(&c->sid);free(c);return NULL;}
     rc_c1541_init(&c->drive,drive_rom->data,8u+setup->options[1]);rc_sha256(drive_rom->data,drive_rom->size,c->rom_hashes+96);rc_iec_init(&c->iec);
     rc_fastload_init(&c->fastload,c->hz);
+    rc_drivesnd_init(&c->drive_sound);
     rc_c64_media_init(c);reset(c,1);return c;
 }

@@ -32,11 +32,13 @@ int main(int argc,char **argv){
         for(unsigned frame=0;frame<1000;++frame){CHECK(rc_c64_run(c,period())==RC_RUN_OK);if(c->drive.cpu.pc<0x800)++ram_frames;}
         CHECK(ram_frames>50&&(c->vic.reg[17]&32u));CHECK(shot("loader"));printf("Custom loader reached its bitmap display; custom drive code observed for %u frames; cycles=%llu\n",ram_frames,(unsigned long long)c->sched.now);
     }else {
-        CHECK(type("LOAD\"$\",8\n"));CHECK(rc_c64_activity(c)&4u);CHECK(continuation());CHECK(prompt(4000));CHECK(type("LIST\n"));char text[2048];rc_c64_family.impl->text(c,text,sizeof text);CHECK(strstr(text,"PHASE FIVE")&&strstr(text,"BLOCKS FREE"));CHECK(shot("directory"));
+        CHECK(type("LOAD\"$\",8\n"));CHECK(rc_c64_activity(c)&4u);CHECK(continuation());
+        CHECK(prompt(4000));int16_t samples[1024];int heard=0;for(unsigned block=0;block<94&&!heard;++block){const size_t n=rc_c64_family.impl->audio_pull(c,samples,512);if(!n)break;for(size_t i=0;i<n*2;++i)if(samples[i])heard=1;}CHECK(heard);
+        CHECK(type("LIST\n"));char text[2048];rc_c64_family.impl->text(c,text,sizeof text);CHECK(strstr(text,"PHASE FIVE")&&strstr(text,"BLOCKS FREE"));CHECK(shot("directory"));
         CHECK(type("NEW\n10PRINT\"PHASE FIVE\"\nSAVE\"PHASE5\",8\n")&&prompt(10000));CHECK(rc_c64_control(c,2,RC_MEDIA_FLUSH,0)&&media->dirty);CHECK(rc_media_save(media));
         rc_d64 disk;CHECK(rc_d64_open(&disk,media->data,media->size,error,sizeof error));rc_d64_entry entry;size_t count;CHECK(rc_d64_directory(&disk,&entry,1,&count,error,sizeof error)&&count==1);uint8_t *saved=NULL;size_t size;CHECK(rc_d64_extract(&disk,&entry,&saved,&size,error,sizeof error)&&size>10);rc_d64_close(&disk);
         CHECK(type("NEW\nLOAD\"PHASE5\",8\n")&&prompt(10000));CHECK(!memcmp(c->bus.ram+rc_get16(saved),saved+2,size-2));free(saved);CHECK(type("RUN\n"));rc_c64_family.impl->text(c,text,sizeof text);CHECK(strstr(text,"PHASE FIVE"));CHECK(shot("saved-loadback"));
-        CHECK(c->traps.loads==0&&c->traps.saves==0);CHECK(rc_c64_run(c,period()*200)==RC_RUN_OK&&!(rc_c64_activity(c)&4u));printf("Actual serial directory, disk SAVE and LOAD/RUN, exact partial state and busy/idle passed; cycles=%llu\n",(unsigned long long)c->sched.now);
+        CHECK(c->traps.loads==0&&c->traps.saves==0);CHECK(rc_c64_run(c,period()*200)==RC_RUN_OK&&!(rc_c64_activity(c)&4u));printf("Actual serial directory, disk SAVE and LOAD/RUN, exact partial state, drive audio and busy/idle passed; cycles=%llu\n",(unsigned long long)c->sched.now);
     }
     rc_c64_family.impl->destroy(c);rc_media_close(media);rc_rom_index_free(&roms);return 0;
 }
