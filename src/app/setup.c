@@ -10,7 +10,7 @@ void rc_setup_init(rc_setup *s,rc_config *c){memset(s,0,sizeof *s);s->config=c;s
     if(s->page==RC_SETUP_STATES)s->row=(unsigned)c->state_slot-1u;
     rc_setup_palette(s,"cjam");rc_setup_palette(s,"colodore");rc_setup_palette(s,"pepto-pal");rc_setup_palette(s,"pepto-ntsc");rc_setup_palette(s,c->palette);
 }
-static unsigned rows(const rc_setup *s){return s->page==RC_SETUP_MACHINE?5u:s->page==RC_SETUP_DISPLAY?7u:s->page==RC_SETUP_SOUND?2u:s->page==RC_SETUP_CONTROLLERS?6u:s->page==RC_SETUP_MEDIA?15u:s->page==RC_SETUP_STATES?12u:0;}
+static unsigned rows(const rc_setup *s){return s->page==RC_SETUP_MACHINE?5u:s->page==RC_SETUP_DISPLAY?7u:s->page==RC_SETUP_SOUND?2u:s->page==RC_SETUP_CONTROLLERS?6u:s->page==RC_SETUP_MEDIA?15u:s->page==RC_SETUP_CARTRIDGE?5u:s->page==RC_SETUP_STATES?12u:0;}
 static unsigned cycle(unsigned value,unsigned count,int direction){return (value+count+(direction<0?count-1u:1u))%count;}
 unsigned rc_setup_key(rc_setup *s,const char *key){
     if(!strcmp(key,"ESCAPE")||!strcmp(key,"F12")){s->active=0;return RC_SETUP_CLOSE;}
@@ -22,6 +22,16 @@ unsigned rc_setup_key(rc_setup *s,const char *key){
     if(!strcmp(key,"-")||!strcmp(key,"PAGEDOWN"))direction=-1;
     else if(strcmp(key,"RETURN")&&strcmp(key,"ENTER")&&strcmp(key,"+")&&strcmp(key,"=")&&strcmp(key,"PAGEUP"))return 0;
     rc_config *c=s->config;
+    if(s->page==RC_SETUP_CARTRIDGE){
+        if(!s->cartridge_available)return 0;
+        if(s->row<3)return !s->row?RC_SETUP_LOAD:s->row==1?(s->has_cartridge?RC_SETUP_EJECT_CART:0):(s->can_freeze?RC_SETUP_FREEZE:0);
+        const rc_family *family=rc_family_of_model(c->model,NULL);const unsigned index=s->row==3?2u:3u,other=index==2?3u:2u;
+        if(!family||family->option_count<=other)return 0;
+        const rc_option_desc *option=&family->options[index];const char *current=rc_config_option_value(c,option->key);unsigned value=option->initial,count=0;
+        while(option->values[count]){if(current&&!strcmp(current,option->values[count]))value=count;++count;}
+        value=cycle(value,count,direction);rc_config_set_option(c,option->key,option->values[value]);
+        if(value)rc_config_set_option(c,family->options[other].key,"off");return RC_SETUP_RESTART;
+    }
     if(s->page==RC_SETUP_STATES){if(s->row<10){c->state_slot=(int)s->row+1;return RC_SETUP_STATE_REFRESH;}return s->row==10?RC_SETUP_STATE_SAVE:s->state_status[c->state_slot-1]==1?RC_SETUP_STATE_LOAD:0;}
     if(s->page==RC_SETUP_MACHINE){
         if(!s->row){const rc_family *f=rc_family_at(0);unsigned model=0;const rc_family *old=rc_family_of_model(c->model,&model);if(old!=f)model=direction>0?f->model_count-1u:0;model=cycle(model,f->model_count,direction);snprintf(c->model,sizeof c->model,"%s",f->models[model].id);return RC_SETUP_RESTART;}
@@ -97,7 +107,12 @@ void rc_setup_draw(rc_setup *s,const uint32_t palette[16],rc_frame *f){
         row(s,4,"KEYBOARD JOY",c->keyboard_joystick?"ON":"OFF",1);row(s,5,"SWAP PORTS","SHIFT+F11",1);
         rc_tui_put(&s->tui,19,3,"F11 KEYBOARD JOYSTICK ON/OFF",14,6);break;}
 
-    case RC_SETUP_CARTRIDGE:row(s,0,"CARTRIDGE","NONE",0);rc_tui_put(&s->tui,12,3,"NO CARTRIDGE ATTACHED",12,6);break;
+    case RC_SETUP_CARTRIDGE:{
+        rc_config_media cart;rc_config_media_settings(c,"cartridge",&cart);const char *name=cart.image[0]?cart.image:"NO CARTRIDGE ATTACHED";size_t length=strlen(name);
+        rc_tui_put(&s->tui,3,2,length>36?name+length-36:name,12,6);
+        row(s,0,"LOAD CARTRIDGE","ENTER",s->cartridge_available);row(s,1,"EJECT CARTRIDGE","ENTER",s->has_cartridge);row(s,2,"FREEZE","RIGHT ALT",s->can_freeze);
+        const char *reu=rc_config_option_value(c,"reu"),*geo=rc_config_option_value(c,"georam");
+        row(s,3,"REU",reu?reu:"off",s->cartridge_available);row(s,4,"GEORAM",geo?geo:"off",s->cartridge_available);break;}
     case RC_SETUP_STATES:{
         for(unsigned i=0;i<RC_STATES_SLOTS;++i){char line[22];const int selected=s->row==i;
             snprintf(line,sizeof line,"%c%02u %-14.14s",(unsigned)c->state_slot==i+1?'>':' ',i+1,s->state_status[i]==1?(s->state_time[i][0]?s->state_time[i]+5:"SAVED"):s->state_status[i]==2?"INVALID":"EMPTY");
