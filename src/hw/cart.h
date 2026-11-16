@@ -9,6 +9,7 @@ typedef struct rc_cart_lines { uint8_t game,exrom,nmi,irq,dma,ba; } rc_cart_line
  * must not change state. vic distinguishes VIC phi1 from CPU phi2 access. */
 typedef struct rc_cart_ops {
     void (*observe)(void *ctx,uint16_t address,int write,int side_effects,int vic);
+    uint8_t (*drive_mask)(const void *ctx,uint16_t address,unsigned selected,int vic);
     void (*reset)(void *ctx);
     uint8_t (*read)(void *ctx,uint16_t address,unsigned selected,uint8_t bus,int side_effects,int vic);
     void (*write)(void *ctx,uint16_t address,unsigned selected,uint8_t value);
@@ -33,6 +34,8 @@ void rc_cart_bind(rc_cart *c,const rc_cart_ops *ops,void *ctx);
 void rc_cart_reset(rc_cart *c);
 /* Board calls before PLA decode; vector-sensitive freezers can change lines. */
 void rc_cart_observe(rc_cart *c,uint16_t address,int write,int side_effects,int vic);
+/* Call before read: bits actively driven, for wired-AND I/O coexistence. */
+uint8_t rc_cart_drive_mask(const rc_cart *c,uint16_t address,unsigned selected,int vic);
 rc_cart_lines rc_cart_get_lines(const rc_cart *c);
 uint8_t rc_cart_read(rc_cart *c,uint16_t address,unsigned selected,uint8_t bus,int side_effects,int vic);
 void rc_cart_write(rc_cart *c,uint16_t address,unsigned selected,uint8_t value);
