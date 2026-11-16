@@ -177,3 +177,16 @@ counts are derived from the original ROM: header `$69` plus rollover gives
 `$6A00` short periods; data `$14` gives `$1500`; the repeated-copy pilot
 includes the end marker's short period. The original SAVE code, not the
 encoder, produces recorded waveforms during guest execution.
+## Known-ROM loading hooks
+
+The optional LOAD and SAVE hooks are enabled only for the pinned KERNAL
+901227-03 SHA-256. They watch F4A5 and F5ED after the ROM entry wrappers
+have stored their parameters. The board supplies memory and virtual-file
+callbacks, and checks ROM mapping before dispatch. A callback can decline,
+leaving the real routine untouched; physical TAP always declines. Disabling
+loading hooks clears the watch bits. No ROM byte is changed.
+
+Successful LOAD returns to F5A9, where the original CLC/LDX/LDY/RTS executes;
+SAVE returns to F68D. Negative callback results enter the original KERNAL
+error table. LOAD supports relocation and VERIFY status. Flags and counters
+are serialized, and a saved hook state cannot enable a different ROM hash.

@@ -1,0 +1,40 @@
+#include "typist.h"
+#include <stdio.h>
+#include <string.h>
+void rc_typist_init(rc_typist *t){memset(t,0,sizeof *t);}
+void rc_typist_cancel(rc_typist *t){t->active=t->queued=0;t->position=t->length=0;}
+int rc_typist_busy(const rc_typist *t){return t->active;}
+static int fail(rc_typist *t,const char *message,char *error,size_t cap){snprintf(t->error,sizeof t->error,"%s",message);if(cap)snprintf(error,cap,"%s",message);rc_typist_cancel(t);return 0;}
+int rc_typist_start(rc_typist *t,const char *commands,char *error,size_t cap){
+    rc_typist_init(t);unsigned line=0;
+    for(const char *p=commands;*p;++p){char ch=*p;if(ch=='\\'&&p[1]=='n'){ch='\n';++p;}if(ch=='\r')ch='\n';
+        if(t->length+2>=sizeof t->commands||line+2>=RC_KEYMAP_QUEUE)return fail(t,"Auto-load command is too long",error,cap);
+        t->commands[t->length++]=ch;if(ch=='\n')line=0;else ++line;
+    }
+    if(t->length&&t->commands[t->length-1]!='\n')t->commands[t->length++]='\n';
+    t->active=t->length!=0;if(cap)error[0]=0;return 1;
+}
+static int ready(const char *text){
+    const char *end=text+strlen(text);while(end>text&&(end[-1]=='\n'||end[-1]=='\r'||end[-1]==' '))--end;
+    const char *start=end;while(start>text&&start[-1]!='\n'&&start[-1]!='\r')--start;
+    while(start<end&&*start==' ')++start;return end-start==6&&!memcmp(start,"READY.",6);
+}
+static int basic_error(const char *text){
+    while(*text){const char *end=strchr(text,'\n');if(!end)end=text+strlen(text);
+        while(text<end&&*text==' ')++text;
+        if(text<end&&*text=='?'){const char *error=strstr(text,"ERROR");if(error&&error<end)return 1;}
+        text=*end?end+1:end;
+    }return 0;
+}
+int rc_typist_frame(rc_typist *t,rc_machine *machine,rc_keymap *keys){
+    if(!t->active||keys->count)return 0;
+    if(t->queued){t->queued=0;if(t->position==t->length){t->active=0;return 0;}}
+    if(rc_machine_activity(machine))return 0;
+    char text[2048];rc_machine_text(machine,text,sizeof text);if(!ready(text))return 0;
+    if(t->position&&basic_error(text)){fail(t,"Auto-load stopped after a BASIC error",NULL,0);return -1;}
+    char line[RC_KEYMAP_QUEUE];unsigned count=0;
+    while(t->position<t->length){const char ch=t->commands[t->position++];line[count++]=ch;if(ch=='\n')break;}
+    line[count]=0;
+    if(!rc_keymap_text(keys,line)){fail(t,"Cannot type auto-load command",NULL,0);return -1;}
+    t->queued=1;return 1;
+}
