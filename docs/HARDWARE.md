@@ -9,7 +9,7 @@ Guest time counts model CPU cycles. `rc_sched_cycles` runs the board's phi1,
 phi2 and tick callbacks once per cycle, with deadlines delivered in time order
 and registration order for ties. The board performs the address decode and
 BA/AEC/RDY arbitration, and advances the CPU only on a granted access.
-The 1541's separate clock will be advanced by an integer ratio on the board.
+The 1541's separate 1 MHz clock advances by an integer ratio on the board.
 
 The family registry in `core/machine.c` exposes models, options, slots,
 keyboards and the board implementation to the shell. Core and chip files use

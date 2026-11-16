@@ -34,8 +34,10 @@ host layout.
 
 Ctrl+F1 opens Load for PRG/P00 files and D64/T64/TAP contents; dropped files
 use the same browser. Ctrl+F2 saves a PRG, creates a TAP recording target,
-or makes a blank D64. The Media page controls tape transport, fast loading
-and loading sounds. Alt+T switches tape sound.
+or makes a blank D64. D64 images use the emulated 1541 and support disk SAVE.
+The Media page controls device number, tape transport, fast loading and
+loading sounds. Alt+F switches drive fast loading, Alt+S drive sounds,
+and Alt+T tape sound.
 
 Create a portable Windows build in `dist/` with `./tools/build_dist.ps1`.
 Launch `dist/rec64.exe`; the native ARM64 copy is `dist/arm64/rec64.exe`.

@@ -59,9 +59,9 @@ typedef struct rc_config_media {
     int write_protect;
     int fast;                           /* not original: the shell runs at full speed while this slot works; a tape is also
                                          * loaded and saved by the fast means below */
-    /* A tape slot's own. */
-    int sound;                          /* the tape's signal is heard */
-    int autoload;                       /* not original: a tape put into the slot is loaded at once (typist.h) */
+    /* Media playback and loading. */
+    int sound;                          /* tape signal or synthesised drive mechanism */
+    int autoload;                       /* an image put into the slot is loaded at once (typist.h) */
     /* The parts of a tape's `fast`, each on in a new configuration and of effect only while `fast` is on (the setup screen
      * has the one switch; the file may take a part out): the shell's full speed, the ROM's load and save routines done at
      * once (hw/traps.h), the waits of other loaders skipped (hw/loadaccel.h). */
@@ -146,7 +146,7 @@ int rc_config_set_option(rc_config *config, const char *key, const char *value);
  * rc_config_media_slot adds an empty one when missing (NULL: table full). */
 const rc_config_media *rc_config_media_find(const rc_config *config, const char *key);
 rc_config_media *rc_config_media_slot(rc_config *config, const char *key);
-/* Effective slot settings, inheriting unspecified tape controls from media.tape. */
+/* Effective settings; the virtual program slot inherits unspecified tape controls. */
 void rc_config_media_settings(const rc_config *config,const char *key,rc_config_media *out);
 
 /* The end of a port by its key; NULL when the configuration has none (the port is then not connected). The slot form adds

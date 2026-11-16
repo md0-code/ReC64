@@ -37,7 +37,7 @@ int main(void){
     uint8_t value;CHECK(rc_machine_peek(m,0xdc01,&value)&&!(value&17));
     rc_machine_destroy(m);
     /* The board fixture gives cycle-granular access without guest keyscan. */
-    unsigned options[]={0};rc_machine_setup setup={.family=&rc_c64_family,.model=0,.options=options,.roms=&roms};rc_c64 *board=rc_c64_create(&setup,error,sizeof error);CHECK(board);
+    unsigned options[RC_CONFIG_OPTIONS]={0};rc_machine_setup setup={.family=&rc_c64_family,.model=0,.options=options,.roms=&roms};rc_c64 *board=rc_c64_create(&setup,error,sizeof error);CHECK(board);
     rc_mouse1351_move(&board->bus.mouse[0],7,-9,3);board->bus.control_type[0]=RC_CONTROL_MOUSE1351;
     rc_cia6526_write(&board->cia[0],2,255);rc_cia6526_write(&board->cia[0],0,64);
     for(unsigned i=0;i<512;++i)rc_bus_pot_tick(&board->bus);CHECK(board->bus.pot_value[0]==14&&board->bus.pot_value[1]==18);

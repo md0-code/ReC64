@@ -14,7 +14,7 @@ static int type(rc_c64 *c,const char *text){for(;*text;++text){uint8_t key,shift
 int main(int argc,char **argv){
     rc_c64 *c=NULL;char error[256]="";const char *kind=argc>1?argv[1]:"prg";const int fast=argc>2?atoi(argv[2]):1;
     rc_rom_index roms;rc_rom_index_init(&roms);const char *folders[]={RC_ROM_DIR};CHECK(rc_rom_index_scan(&roms,folders,1));
-    unsigned options[]={0};rc_machine_setup setup={.family=&rc_c64_family,.model=0,.options=options,.roms=&roms};c=rc_c64_create(&setup,error,sizeof error);CHECK(c);CHECK(rc_c64_run(c,period(c)*200)==RC_RUN_OK&&ready(c));
+    unsigned options[RC_CONFIG_OPTIONS]={0};rc_machine_setup setup={.family=&rc_c64_family,.model=0,.options=options,.roms=&roms};c=rc_c64_create(&setup,error,sizeof error);CHECK(c);CHECK(rc_c64_run(c,period(c)*200)==RC_RUN_OK&&ready(c));
     const uint8_t name[16]={'P','H','A','S','E','4',' ',' ',' ',' ',' ',' ',' ',' ',' ',' '};rc_media *media=NULL;
     if(!strcmp(kind,"prg")||!strcmp(kind,"fastsave")){rc_prg p={0};CHECK(rc_prg_create(&p,0x0801,PROGRAM,sizeof PROGRAM,name,0,error,sizeof error));media=p.image;snprintf(media->path,sizeof media->path,"fixture.prg");}
     else if(!strcmp(kind,"t64")){rc_t64 t={0};const rc_t64_program p={.address=0x0801,.data=PROGRAM,.size=sizeof PROGRAM};CHECK(rc_t64_create(&t,&p,1,NULL,error,sizeof error));media=t.image;snprintf(media->path,sizeof media->path,"fixture.t64");}

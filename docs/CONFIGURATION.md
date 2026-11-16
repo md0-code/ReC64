@@ -118,16 +118,21 @@ browser pauses the guest; closing returns to the previous setup or machine
 screen. Manual keyboard input, focus loss and reset cancel auto-typing.
 
 The Media page has tape Play, Stop, Rewind, Record and Eject controls,
-plus fast loading, tape sound and auto-load. Alt+T toggles tape sound.
+plus tape fast loading, sound and auto-load. Disk controls select device
+8–11, eject the image, and switch disk fast loading, drive sounds and
+auto-load. Alt+F toggles drive fast loading, Alt+S drive sounds, and Alt+T
+tape sound. `machine.options.drive_device` stores the device number.
 Saving to TAP creates and mounts a recording target: use BASIC SAVE to
 record the program. Saving a blank D64 creates and inserts that image.
 Modified media are flushed before replacement, ejection, restart and exit.
 A model restart retains mounted images and selected entries.
 
 `media.tape` supplies default fast, sound, autoload, full_speed, traps,
-save_traps and accelerate settings for the virtual program/disk slots as
-well. An explicit setting under `media.program` or `media.disk` overrides
-that one default; storing an image path alone preserves inheritance.
+save_traps and accelerate settings for `media.program` as well. An explicit
+program setting overrides that one default; storing an image path alone
+preserves inheritance. `media.disk` has independent fast, sound, autoload
+and full_speed settings. D64 loading and saving always use the true 1541;
+KERNAL traps and skipped loader instructions never apply to disks.
 Automatic full speed runs while the configured media is active, with every
 guest cycle still executed. Manual F10 full speed continues to mute sound.
 

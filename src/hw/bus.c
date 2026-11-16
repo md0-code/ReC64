@@ -12,9 +12,8 @@ static uint8_t decode(rc_bus *b,uint16_t a,int read,int effects) {
 static void inputs(rc_bus *b,unsigned chip,uint8_t pins[2]) {
     uint8_t pa=rc_cia6526_port_output(b->cia[0],0),pb=rc_cia6526_port_output(b->cia[0],1);
     if(!chip){rc_c64kbd_scan(b->keyboard,&pa,&pb);pins[0]=pa;pins[1]=pb;return;}
-    /* CIA2 PA6/7 see the inverted, released IEC clock/data through U8. */
-    const uint8_t out=rc_cia6526_port_output(b->cia[1],0);
-    pins[0]=(uint8_t)(0x3fu|((out&16u)?0:64u)|((out&32u)?0:128u));pins[1]=255;
+    /* CIA2 serial inputs are supplied by the board's resolved IEC bus. */
+    pins[0]=b->cia[1]->input[0];pins[1]=255;
 }
 void rc_bus_keyboard(rc_bus *b) {
     for(unsigned chip=0;chip<2;++chip){uint8_t pins[2];inputs(b,chip,pins);
