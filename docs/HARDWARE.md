@@ -100,6 +100,33 @@ lookup observed with the pinned release on Windows. Vendored files are
 unchanged. The focused check requires non-silent audio and identical samples
 across a state round trip for both chip models.
 
+### Built-in engine
+
+`hw/sid_own.c` is the opt-in original engine. The oscillators, noise register,
+pulse comparator latch, envelope counters with their GATE and rate pipelines,
+bus retention and the 8580 write and OSC3 delays are modelled per cycle.
+Waveform and envelope DACs are solved as R-2R ladders (2R/R 2.20 without
+termination on the 6581, ideal on the 8580). Combined waveforms come from a
+selector-line model: each line collects the drive of its own and neighbouring
+bits, weakening with distance, against a buffer threshold.
+
+The filter is the two-integrator loop with the summer in front. On the 6581
+the amplifiers are low-gain inverters: lossy integrators, summer gains below
+one, a mixer whose gain depends on the number of connected inputs, voices that
+carry a DC offset, a FET cutoff curve driven through the unterminated cutoff
+ladder, and cutoff that shifts with the DC the filter carries. The 8580 has
+linear cutoff, resonance in eighth-octave steps and no offsets. Volume, the
+output offset and the C64 board's RC output stage follow.
+
+Constants the documents leave open (levels, offsets, amplifier gains, the
+cutoff curve, selector reach and thresholds) are calibrated by measuring the
+default engine as a running program; none of its code or tables is used. The
+6581 filter remains the weakest part: its cutoff depends on signal level in
+ways this model only approximates.
+
+Host audio is produced by a triangular pre-filter to a quarter of the chip
+clock and a Kaiser-windowed sinc kernel at the host rate.
+
 ## VIC-II
 
 The 6569/8565 and 6567R8/8562 models expose phi1/phi2 memory requests and

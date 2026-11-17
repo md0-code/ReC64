@@ -1,10 +1,12 @@
 # SID engine availability
 
 reSID remains the default engine for both 6581 and 8580. The Sound page also
-offers **Built-in (experimental)** by explicit opt-in. It is not accuracy-qualified
-and can sound different, especially with combined waveforms, envelope retrigger
-tricks and filtered or volume-sampled music. Changing engines restarts the machine;
-snapshots retain and automatically restore their engine.
+offers **Built-in (experimental)** by explicit opt-in. It plays at the same
+level as reSID and follows it closely on both chip models, but it is not
+accuracy-qualified: combined waveforms are approximated, and the 6581 filter
+only approximates how the cutoff moves with signal level. Changing engines
+restarts the machine; snapshots retain and automatically restore their engine.
+Built-in snapshots saved by 0.16.1 no longer load; reSID snapshots are unaffected.
 
 The strict qualification criteria in [SID-COMPARISON.md](SID-COMPARISON.md)
 remain unchanged. Experimental availability is separate from passing those gates.
@@ -15,36 +17,32 @@ An isolated-wave calibration also maps distinct waveform codes to the same
 PCM value. These observations cannot establish exact twelve-bit equality;
 the comparison reports that requirement as unverified, never as passed.
 
-The comparison implementation and original register logs remain available.
-Existing reSID snapshot payloads remain supported. Built-in snapshots include
-all digital latches, analog history, resampling position and queued PCM.
+## Comparison result
 
-## P10 result
-
-The completed comparison of the digital, nonlinear-filter and coupled-waveform
-candidate uses contract 1 and fixture SHA-256
-`64dc216cd5d7b80d0bd2fd9c20f70be9e4233432446acac1b4bfe08602ed3c8c`.
-No thresholds, gains or time alignment were adjusted to obtain these results.
+Contract 1, fixture SHA-256
+`64dc216cd5d7b80d0bd2fd9c20f70be9e4233432446acac1b4bfe08602ed3c8c`, with
+thresholds, gains and time alignment untouched:
 
 | Required check | 6581 | 8580 |
 |---|---:|---:|
-| Logs with every observable digital comparison exact | 3 / 5 | 1 / 5 |
+| Logs with every observable digital comparison exact | 4 / 5 | 4 / 5 |
 | Exact snapshot continuation | 5 / 5 | 5 / 5 |
-| Audio windows within both fixed limits | 0 / 40 | 1 / 40 |
+| Audio windows within both fixed limits | 39 / 40 | 40 / 40 |
 | Complete twelve-bit waveform equality | Unverified | Unverified |
 
-The worst filter-mode relative RMS errors were 2.119 for 6581 and 1.350 for
-8580, against limits of 0.25 and 0.10. Envelope/retrigger and combined-waveform
-differences also remain. These independent failures prevent accuracy qualification even
-apart from the unavailable twelve-bit observation. Model assumptions and their
-hardware sources are recorded in [HARDWARE.md](HARDWARE.md).
+The log that still differs is the combined-waveform one: OSC3 readback
+differs on 393 (6581) and 1,362 (8580) of 73,728 voice cycles, and on the
+6581 the waveform feedback then moves the phase on 13 and the noise register
+on 8 cycles. Oscillators, noise, pulse, ring, sync, TEST and the envelopes
+are exact on the fixture and on randomised register logs. The failing 6581
+audio window is band-pass at resonance 8: relative RMS error 0.295 against
+0.25 and correlation 0.965 against 0.97. The worst 8580 window is 0.059.
 
-A subsequent envelope repair preserves a pending direction transition across
-consecutive GATE writes. In the fixed retrigger log, 6581 envelope mismatches
-fell from 62,217 to 2,168, with guest reads now exact. The 8580 log still has one
-envelope timing mismatch. The all-gates qualification result remains failed.
+Two real tunes rendered through the emulator at 48 kHz correlate 0.989
+(6581) and 0.998 (8580) with the reSID render, at the same level. The model
+and how its constants were obtained are described in [HARDWARE.md](HARDWARE.md).
 
-Both runtime engines have exact snapshot continuation. Native built-in checks
-play a PSID on 6581 and an RSID on 8580, preserve SID state during debugger peeks,
+Both engines have exact snapshot continuation. Native built-in checks play a
+PSID on 6581 and an RSID on 8580, preserve SID state during debugger peeks,
 produce identical captured PCM after restoration, and restore the snapshot's
-engine after switching. These are functionality checks, not accuracy qualification.
+engine after switching.
