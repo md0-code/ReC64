@@ -3,6 +3,27 @@
 param([switch]$NoBuild)
 $ErrorActionPreference = 'Stop'
 $repo = [IO.Path]::GetFullPath("$PSScriptRoot/..")
+function Publish-Program([string]$source, [string]$destination) {
+    if ((Test-Path -LiteralPath $destination) -and
+        (Get-FileHash -LiteralPath $source).Hash -eq (Get-FileHash -LiteralPath $destination).Hash) { return }
+    try { Copy-Item -LiteralPath $source -Destination $destination -Force; return }
+    catch {
+        $publishError = $_
+        if (-not (Test-Path -LiteralPath $destination)) { throw }
+        # Windows permits renaming a mapped image while its process continues.
+        $retained = $destination + '.running-' + [Guid]::NewGuid().ToString('N')
+        try { Move-Item -LiteralPath $destination -Destination $retained }
+        catch { throw $publishError }
+        try { Copy-Item -LiteralPath $source -Destination $destination -Force }
+        catch {
+            if (Test-Path -LiteralPath $destination) { Remove-Item -LiteralPath $destination -Force }
+            Move-Item -LiteralPath $retained -Destination $destination
+            throw
+        }
+        try { Remove-Item -LiteralPath $retained -Force -ErrorAction Stop }
+        catch { Write-Host "Preserved running image: $retained" }
+    }
+}
 if (-not $NoBuild) {
     & "$repo/src/build.ps1" -NoTest -StaticRuntime
     & "$repo/src/build.ps1" -Arch arm64 -NoTest -StaticRuntime
@@ -16,7 +37,13 @@ foreach ($arch in @('x64', 'arm64')) {
     foreach ($folder in @($target, "$target/roms", "$target/palettes", "$target/docs/licenses")) {
         New-Item -ItemType Directory -Force -Path $folder | Out-Null
     }
-    Copy-Item -LiteralPath "$build/rec64.exe" -Destination "$target/rec64.exe" -Force
+    Publish-Program "$build/rec64.exe" "$target/rec64.exe"
+    # Retired mapped images become removable after their process exits.
+    Get-ChildItem -LiteralPath $target -Filter 'rec64.exe.running-*' -File | Where-Object {
+        $_.Name -match '^rec64\.exe\.running-[0-9a-f]{32}$'
+    } | ForEach-Object {
+        try { Remove-Item -LiteralPath $_.FullName -Force -ErrorAction Stop } catch { }
+    }
     if (-not (Test-Path -LiteralPath "$target/rec64.yaml")) {
         Copy-Item -LiteralPath "$repo/src/app/rec64.yaml" -Destination "$target/rec64.yaml"
     }
