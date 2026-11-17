@@ -39,7 +39,8 @@ Ctrl+F1 opens Load for PRG/P00 files and D64/T64/TAP contents; dropped files
 use the same browser. Ctrl+F2 saves a PRG, creates a TAP recording target,
 or makes a blank D64. G64 images load directly and preserve raw tracks and
 half-tracks. Both disk formats support disk SAVE through the emulated drive.
-The Media page selects 1541 or 1541-II, device number, fast loading and loading sounds.
+The Machine page selects the drive type (1541 or 1541-II). The Media page holds
+device number, fast loading and loading sounds.
 Ctrl+F3/F4 opens the media control OSD. Alt+F switches drive fast loading, Alt+S drive sounds,
 and Alt+T tape sound.
 

@@ -58,8 +58,8 @@ def main() -> int:
         key('F12'); ntsc = shot('ntsc')
         with Image.open(pal) as a, Image.open(ntsc) as b:
             assert a.getpixel((40,55)) != b.getpixel((40,55)), 'Automatic PAL/NTSC palette did not change'
-        key('DOWN', 2); key('RETURN'); assert 'MACHINE' not in text(); call('frames 200'); call('expect READY.')
-        key('F12'); key('DOWN', 3); key('RETURN'); assert 'MACHINE' not in text(); call('frames 200'); call('expect READY.')
+        key('DOWN', 3); key('RETURN'); assert 'MACHINE' not in text(); call('frames 200'); call('expect READY.')
+        key('F12'); key('DOWN', 4); key('RETURN'); assert 'MACHINE' not in text(); call('frames 200'); call('expect READY.')
         key('F12'); key('RIGHT', 4); key('DOWN'); sources=[]
         for _ in range(3):
             key('RETURN'); sources.append(next(line.strip() for line in text().splitlines() if 'INPUT 1' in line))

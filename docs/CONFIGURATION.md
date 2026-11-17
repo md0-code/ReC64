@@ -215,7 +215,8 @@ browser pauses the guest; closing returns to the previous setup or machine
 screen. Manual keyboard input, focus loss and reset cancel auto-typing.
 
 The control OSD has tape Play, Stop, Rewind, Record and Eject actions.
-The Media settings page selects the drive model (1541 or 1541-II), device 8–11, disk/tape fast loading,
+The Machine settings page selects the drive type (1541 or 1541-II).
+The Media settings page selects device 8–11, disk/tape fast loading,
 sounds and auto-load. Alt+F toggles drive fast loading, Alt+S drive sounds, and Alt+T
 tape sound. `machine.options.drive_device` stores the device number;
 `machine.options.drive_model` accepts `1541` (the default) or `1541-ii`.
