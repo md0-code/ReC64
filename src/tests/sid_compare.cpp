@@ -15,6 +15,12 @@
 
 namespace {
 struct Event { unsigned cycle, reg, value; char kind; };
+void expect_setup(const char *field,unsigned index,long long expected,long long actual){
+    if(expected==actual)return;
+    char why[192];
+    std::snprintf(why,sizeof(why),"public oracle canonical-state %s[%u]: expected %lld, actual %lld",field,index,expected,actual);
+    throw std::runtime_error(why);
+}
 struct Oracle {
     void *storage;
     reSID::SID *sid;
@@ -27,8 +33,9 @@ struct Oracle {
          * Keep the SDK's default rate terminal-count representation (8);
          * the candidate represents the same interval as 9 nominal clocks. */
         auto state=sid->read_state();
+        const auto bus_lifetime=state.bus_value_ttl;
         for(unsigned reg=0;reg<25;++reg)state.sid_register[reg]=0;
-        state.bus_value=0;state.bus_value_ttl=0;state.write_pipeline=0;state.write_address=0;
+        state.bus_value=0;state.write_pipeline=0;state.write_address=0;
         for(unsigned v=0;v<3;++v){
             state.accumulator[v]=0;state.shift_register[v]=0x7ffff8;
             state.shift_register_reset[v]=0;state.shift_pipeline[v]=0;
@@ -41,15 +48,29 @@ struct Oracle {
         }
         sid->write_state(state);
         const auto actual=sid->read_state();
-        bool same=actual.bus_value==0&&actual.bus_value_ttl==0&&actual.write_pipeline==0&&actual.write_address==0;
-        for(unsigned reg=0;reg<25;++reg)same=same&&actual.sid_register[reg]==0;
-        for(unsigned v=0;v<3;++v)same=same&&actual.accumulator[v]==0&&actual.shift_register[v]==0x7ffff8
-            &&actual.shift_register_reset[v]==0&&actual.shift_pipeline[v]==0&&actual.pulse_output[v]==0xfff
-            &&actual.floating_output_ttl[v]==0&&actual.rate_counter[v]==0&&actual.rate_counter_period[v]==8
-            &&actual.exponential_counter[v]==0&&actual.exponential_counter_period[v]==1
-            &&actual.envelope_counter[v]==0&&static_cast<int>(actual.envelope_state[v])==2
-            &&actual.hold_zero[v]&&actual.envelope_pipeline[v]==0;
-        if(!same)throw std::runtime_error("public oracle canonical-state readback failed");
+        expect_setup("bus_value",0,0,actual.bus_value);
+        /* This SDK field reads back the model lifetime even after clocks;
+         * it does not expose the running bus age. Initial bus value is zero. */
+        expect_setup("bus_value_ttl",0,bus_lifetime,actual.bus_value_ttl);
+        expect_setup("write_pipeline",0,0,actual.write_pipeline);
+        expect_setup("write_address",0,0,actual.write_address);
+        for(unsigned reg=0;reg<25;++reg)expect_setup("sid_register",reg,0,actual.sid_register[reg]);
+        for(unsigned v=0;v<3;++v){
+            expect_setup("accumulator",v,0,actual.accumulator[v]);
+            expect_setup("shift_register",v,0x7ffff8,actual.shift_register[v]);
+            expect_setup("shift_register_reset",v,0,actual.shift_register_reset[v]);
+            expect_setup("shift_pipeline",v,0,actual.shift_pipeline[v]);
+            expect_setup("pulse_output",v,0xfff,actual.pulse_output[v]);
+            expect_setup("floating_output_ttl",v,0,actual.floating_output_ttl[v]);
+            expect_setup("rate_counter",v,0,actual.rate_counter[v]);
+            expect_setup("rate_counter_period",v,8,actual.rate_counter_period[v]);
+            expect_setup("exponential_counter",v,0,actual.exponential_counter[v]);
+            expect_setup("exponential_counter_period",v,1,actual.exponential_counter_period[v]);
+            expect_setup("envelope_counter",v,0,actual.envelope_counter[v]);
+            expect_setup("envelope_state",v,2,static_cast<int>(actual.envelope_state[v]));
+            expect_setup("hold_zero",v,1,actual.hold_zero[v]);
+            expect_setup("envelope_pipeline",v,0,actual.envelope_pipeline[v]);
+        }
     }
     ~Oracle(){if(sid) sid->~SID(); std::free(storage);}
     Oracle(const Oracle&)=delete; Oracle& operator=(const Oracle&)=delete;
