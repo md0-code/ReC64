@@ -51,6 +51,8 @@ to the attached CRT image unless it is write protected.
 SID files open in the music player with title, author, release, elapsed time
 and sub-tune selection. Left/Right changes tune, Space pauses, and Escape
 stops playback. Clock and SID chip follow the file's hints.
+Release audio uses reSID for both chip models; see
+[sound engine availability](docs/LIMITATIONS.md).
 
 F9 toggles live drive, tape and joystick status. Shift+F9 opens the C64
 on-screen keyboard for mouse, multi-touch or controller input; controller

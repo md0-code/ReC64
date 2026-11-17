@@ -6,6 +6,9 @@ to the configuration file. `src/app/rec64.yaml` is an example. Models are
 `c64-pal` (default), `c64c-pal`, `c64-ntsc`, `c64c-ntsc`, and the firmware-free
 diagnostic model `test`. Run `python tools/fetch_roms.py` to obtain the pinned
 firmware. `machine.options.sid` accepts `default`, `6581`, or `8580`.
+This selects the chip model. Release audio uses reSID; the separately built
+original candidate is not a selectable backend. Its admission criteria and
+availability are in [LIMITATIONS.md](LIMITATIONS.md).
 
 The Cartridge page loads/ejects CRT images and selects expansion memory.
 Supported cartridges are Normal 8K/16K, Ultimax, Ocean, Magic Desk, Fun Play,
