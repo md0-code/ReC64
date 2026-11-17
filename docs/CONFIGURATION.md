@@ -79,6 +79,8 @@ The Display page combines these into CRT, Nearest and Linear. Border is
 `default` (automatically follows the running PAL/NTSC model) or
 `color-corrected` (Christopher Jam colors). Both are built in; no palette
 files are required. Full screen, integer scaling, pixel shape and vsync are live.
+On a display slower than 48 Hz, such as a remote desktop session, pictures
+are shown without waiting for vsync, since waiting would hold the machine up.
 
 Alt+F12 resets; Ctrl+F12 cold boots; both close the menu. Shift+F12 powers off. F10 switches
 100%/full speed (sound is muted at full speed), Pause stops/resumes, and

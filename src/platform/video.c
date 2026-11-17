@@ -170,6 +170,10 @@ struct rc_video {
     int aspect_mode;            /* rc_aspect */
     int scale;
     bool vsync;
+    bool slow;                  /* the display cannot keep up with the pictures: vsync stays off */
+    int slow_presents;          /* pictures in a row that waited longer than the slowest display may */
+    int display_probe;          /* pictures until the display is looked at again */
+    int display_index, display_w, display_h, display_hz;
     bool fullscreen;
     int win_x, win_y, win_w, win_h;   /* the window's place before full screen */
     int filter;
@@ -601,10 +605,51 @@ const char *rc_video_backend(const rc_video *v) {
     return v->backend == BACKEND_GL33 ? "OpenGL 3.3 core" : v->backend == BACKEND_GLES30 ? "OpenGL ES 3.0" : "SDL renderer";
 }
 
+/* A display slower than a machine's 50 or 60 pictures a second (a remote desktop session at 30 Hz) cannot
+ * show every picture, and waiting for it holds the machine up and makes the pictures it does show uneven.
+ * Vsync then stays off until the display changes. The display's own figure decides at once; one that waits
+ * longer than it says is found out by the wait. */
+#define RC_VIDEO_SLOWEST_HZ 48
+
+static void apply_vsync(rc_video *v) {
+    const int on = v->vsync && !v->slow;
+    if (v->gl.ready) SDL_GL_SetSwapInterval(on);
+    else if (v->renderer) SDL_RenderSetVSync(v->renderer, on);
+}
+
+static void watch_display(rc_video *v, double waited_ms) {
+    if (v->display_probe-- <= 0) {
+        SDL_DisplayMode m;
+        const int index = SDL_GetWindowDisplayIndex(v->window);
+        v->display_probe = 50;
+        if (index >= 0 && SDL_GetCurrentDisplayMode(index, &m) == 0 &&
+            (index + 1 != v->display_index || m.w != v->display_w || m.h != v->display_h || m.refresh_rate != v->display_hz)) {
+            const bool slow = m.refresh_rate > 0 && m.refresh_rate < RC_VIDEO_SLOWEST_HZ;
+            v->display_index = index + 1;
+            v->display_w = m.w;
+            v->display_h = m.h;
+            v->display_hz = m.refresh_rate;
+            v->slow_presents = 0;
+            if (slow != v->slow) {
+                v->slow = slow;
+                apply_vsync(v);
+            }
+        }
+    }
+    if (!v->vsync || v->slow) return;
+    v->slow_presents = waited_ms > 1000.0 / RC_VIDEO_SLOWEST_HZ ? v->slow_presents + 1 : 0;
+    if (v->slow_presents >= 8) {
+        v->slow = true;
+        apply_vsync(v);
+    }
+}
+
 void rc_video_present(rc_video *v, const uint32_t *frame, int w, int h) {
+    const Uint64 start = SDL_GetPerformanceCounter();
     if (v->shot_pending && v->shot_raw) save_pixels(v, w, h, frame, w * 4, false);
     if (v->gl.ready) gl_present(v, frame, w, h);
     else renderer_present(v, frame, w, h);
+    watch_display(v, (double)(SDL_GetPerformanceCounter() - start) * 1000.0 / (double)SDL_GetPerformanceFrequency());
 }
 
 void rc_video_set_geometry(rc_video *v, int w, int h, int aspect_w, int aspect_h) {
@@ -672,8 +717,7 @@ void rc_video_set_aspect(rc_video *v, int aspect) {
 
 void rc_video_set_vsync(rc_video *v, bool on) {
     v->vsync = on;
-    if (v->gl.ready) SDL_GL_SetSwapInterval(on ? 1 : 0);
-    else if (v->renderer) SDL_RenderSetVSync(v->renderer, on ? 1 : 0);
+    apply_vsync(v);
 }
 
 bool rc_video_set_look(rc_video *v, int look, int phosphor) {
