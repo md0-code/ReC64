@@ -32,6 +32,8 @@ keyboard joystick; Shift+F11 swaps ports. Controllers, the 1351 mouse and
 paddles are configured on the Controllers page. Keyboard text follows your
 host layout.
 SID selection offers 6581 (the default) or 8580.
+See [ROM compatibility](docs/C64-ROM-AUDIT.md) for supported firmware,
+cartridge families and their purposes compared with VICE.
 
 Ctrl+F1 opens Load for PRG/P00 files and D64/T64/TAP contents; dropped files
 use the same browser. Ctrl+F2 saves a PRG, creates a TAP recording target,

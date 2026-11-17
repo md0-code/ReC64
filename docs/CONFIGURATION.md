@@ -7,6 +7,12 @@ to the configuration file. `src/app/rec64.yaml` is an example. Models are
 diagnostic model `test`. Run `python tools/fetch_roms.py` to obtain the pinned
 firmware. `machine.options.sid` selects `6581` (the default) or `8580`.
 Older configuration files using `default` are updated to `6581`.
+Firmware discovery recognizes five exact ROM images: stock BASIC, KERNAL
+revision 3, the standard character generator, and the 1541/1541-II drive ROMs.
+Supported files can be renamed because identification uses SHA-256. Different
+revisions, localized ROMs and JiffyDOS are not accepted by copying or renaming
+them. See the [ROM compatibility comparison](C64-ROM-AUDIT.md) for the full
+catalogue, purposes and differences from VICE.
 Snapshots saved by the releases that used the
 reSID engine still load: registers are restored and notes start again.
 
