@@ -32,7 +32,7 @@ def main() -> None:
     run("save", ["frames 200", "expect READY.", "type 10 PRINT 42", "enter", "frames 3"] + save_name("saved.prg") + [
         "shot work/verify-files/save.png", "enter", "expect Saved", "state save work/verify-files/before-browser.rcs",
         "key Ctrl+F1", "expect FILES AND FOLDERS", "shot work/verify-files/files.png", "frames 3",
-        "state save work/verify-files/after-browser.rcs", "key ESCAPE", "key F12", "expect TAPE FAST LOAD", "shot work/verify-files/media.png"])
+        "state save work/verify-files/after-browser.rcs", "key ESCAPE", "key F12", "expect TAPE", "expect FAST LOAD", "shot work/verify-files/media.png"])
     original = (work / "saved.prg").read_bytes()
     assert original[:2] == b"\x01\x08" and b"42" in original
     assert machine_bytes(work / "before-browser.rcs") == machine_bytes(work / "after-browser.rcs")
@@ -52,7 +52,7 @@ def main() -> None:
         offset += len(data)
     (work / "programs.t64").write_bytes(tape)
     run("load-and-save", ["drop work/verify-files/programs.t64", "expect SECOND", "shot work/verify-files/contents.png", "key DOWN", "enter", "until 20 43", "expect 43", "shot work/verify-files/loaded.png"] +
-        save_name("recording.tap", 1) + ["enter", "key F12", "expect RECORDING"] + ["key DOWN"]*9 + ["key RETURN", "key Alt+T", "expect Tape sound off", "key Alt+T"] +
+        save_name("recording.tap", 1) + ["enter", "key Ctrl+F4", "expect RECORD", "key ESCAPE", "key Alt+T", "expect Tape sound off", "key Alt+T"] +
         save_name("blank.d64", 1) + ["enter"] + save_name("saved.prg", 1) + ["enter", "expect REPLACE EXISTING FILE?", "shot work/verify-files/overwrite.png", "key ESCAPE", "key ESCAPE"])
     assert (work / "saved.prg").read_bytes() == original, "Cancel overwrote the program"
     assert (work / "recording.tap").read_bytes()[:13] == b"C64-TAPE-RAW\x01"

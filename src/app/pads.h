@@ -1,14 +1,13 @@
 /* The host's game controllers (SDL's GameController API) as joysticks of
  * the machine: a controller's d-pad and left stick (beyond a dead zone,
- * stick.h) are the directions, A is fire and B is fire 2. They also work without a video subsystem. A controller keeps its
+ * stick.h) are the directions and A is fire. They also work without a video subsystem. A controller keeps its
  * number (1 to RC_PADS_MAX, in the order the host reported them) while it
  * is plugged in; one that is unplugged leaves its number empty, and its
  * socket released, until the next controller takes the first free one.
  *
  * rc_pads_event and rc_pads_repeat also turn controller input into the
- * events a setup screen takes (rc_pad_key: d-pad and stick move, A accepts,
- * B goes back, the shoulder buttons change a value, Start opens and closes
- * the screen).
+ * events a setup screen takes: d-pad and stick move, A accepts, and
+ * the remaining buttons invoke the shell's menu, media and state controls.
  *
  * pads.c is the only file besides the desktop that uses SDL; this header
  * needs none. Host controller interface. */
@@ -26,17 +25,19 @@ typedef enum rc_pad_key {
     RC_PAD_NONE,
     RC_PAD_UP, RC_PAD_DOWN, RC_PAD_LEFT, RC_PAD_RIGHT,
     RC_PAD_A,                           /* accept */
-    RC_PAD_B,                           /* back */
-    RC_PAD_SHOULDER_LEFT,               /* the value of the selected option goes back */
-    RC_PAD_SHOULDER_RIGHT,              /* ... and on */
+    RC_PAD_B,                           /* F12 menu or cancel a modal picker */
+    RC_PAD_SHOULDER_LEFT,               /* switch control port */
+    RC_PAD_SHOULDER_RIGHT,              /* full speed */
     RC_PAD_START,                       /* open and close the setup screen (the Guide button too) */
-    RC_PAD_BACK                         /* Select / Back: open and close the on-screen keyboard (osk.h) */
+    RC_PAD_BACK,                        /* Select / Back: on-screen keyboard */
+    RC_PAD_X, RC_PAD_Y, RC_PAD_TRIGGER_LEFT, RC_PAD_TRIGGER_RIGHT
 } rc_pad_key;
 
 typedef struct rc_pads {
     void *pad[RC_PADS_MAX];             /* SDL_GameController *, NULL for a number with no controller */
     int held;                           /* the direction held (a rc_pad_key), RC_PAD_NONE for none */
     uint32_t next_ms;                   /* when a held direction repeats */
+    uint8_t trigger[RC_PADS_MAX][2];    /* rising edges, one action per squeeze */
 } rc_pads;
 
 typedef enum rc_pads_result {
@@ -57,13 +58,15 @@ int rc_pads_repeat(rc_pads *p, uint32_t now_ms, rc_pad_key *key);
 
 /* 1 when controller `index` (0 to RC_PADS_MAX - 1: the number minus one) is plugged in; its name ("" when it is not). */
 int rc_pads_present(const rc_pads *p, unsigned index);
+int rc_pads_any(const rc_pads *p);
+int rc_pads_keyboard(const rc_pads *p,int requested);
 const char *rc_pads_name(const rc_pads *p, unsigned index);
 /* What controller `index` holds as a joystick: RC_JOY_* bits (machine.h), 0 for none or an empty number. */
 unsigned rc_pads_joystick(const rc_pads *p, unsigned index);
 
 /* Whether the host has a key of this name (SDL's names: "Up", "Left Ctrl"); what the configuration's
  * reader checks controllers.keys with (rc_config_set_key_check). Needs no rc_pads_open. */
-/* Signed left-stick axes and A/B buttons, for analogue paddles. */
+/* Signed left-stick axes and A button, for analogue paddles. */
 void rc_pads_paddles(const rc_pads *p,unsigned index,int *x,int *y,unsigned *buttons);
 int rc_host_key_known(const char *name);
 

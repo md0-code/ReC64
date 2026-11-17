@@ -18,7 +18,7 @@ def main() -> None:
     script.write_text("\n".join([
         "frames 200", "expect READY.", "poke DC02 00", "poke DC03 00",
         "key F11", "expect Keyboard joystick on", "key Up", "peek DC00", "release Up", "peek DC00",
-        "key Shift+F11", "expect Control ports swapped", "key Up", "peek DC01", "release Up", "peek DC01",
+        "key Shift+F11", "expect Joystick port 1", "key Up", "peek DC01", "release Up", "peek DC01",
         "key F11", "expect Keyboard joystick off", "key F12", "key RIGHT", "key RIGHT", "key RIGHT", "key RIGHT",
         "expect CONTROLLERS", "expect JOYSTICK", "shot work/verify-input/controllers.png", "key RETURN",
         "expect 1351 MOUSE", "key DOWN", "key DOWN", "key RETURN", "key RETURN", "expect PADDLES", "key F12", ""

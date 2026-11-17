@@ -35,20 +35,26 @@ host layout.
 Ctrl+F1 opens Load for PRG/P00 files and D64/T64/TAP contents; dropped files
 use the same browser. Ctrl+F2 saves a PRG, creates a TAP recording target,
 or makes a blank D64. D64 images use the emulated 1541 and support disk SAVE.
-The Media page controls device number, tape transport, fast loading and
-loading sounds. Alt+F switches drive fast loading, Alt+S drive sounds,
+The Media page sets device number, fast loading and loading sounds.
+Ctrl+F3/F4 opens the media control OSD. Alt+F switches drive fast loading, Alt+S drive sounds,
 and Alt+T tape sound.
 
 Ctrl+F5 saves the current snapshot slot; Ctrl+F6 restores it. The States
 page selects among ten slots per model and shows a preview of each save.
+The first quick save/load in a session opens a slot picker.
 Snapshot files (`.rcs`) also open through Ctrl+F1 or drag and drop.
 
-Load CRT cartridges through Ctrl+F1, drag and drop, or the Cartridge page.
-That page also selects REU or GeoRAM memory. Right Alt pressed and released
+Load CRT cartridges through Ctrl+F1, drag and drop, or the control OSD.
+The Cartridge settings page selects REU or GeoRAM memory. Right Alt pressed and released
 alone activates supported freezer cartridges. EasyFlash writes are saved
 to the attached CRT image unless it is write protected.
 Turn on **Start inserted** on the Cartridge page to keep the attached
 cartridge inserted when ReC64 next starts.
+
+Controller d-pad/left stick moves and A fires. B opens F12, X opens Load,
+Y opens controls, LB swaps ports, RB toggles full speed, and LT/RT quick
+save/load. Connecting a controller disables the keyboard joystick;
+disconnecting the last controller enables it again.
 
 SID files open in the music player with title, author, release, elapsed time
 and sub-tune selection. Left/Right changes tune, Space pauses, and Escape

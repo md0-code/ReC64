@@ -1,0 +1,70 @@
+"""One headless settings, control OSD, border and controller-action flow."""
+from pathlib import Path
+import argparse
+import json
+import subprocess
+from PIL import Image
+
+ROOT = Path(__file__).resolve().parents[1]
+
+
+def main():
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument('--binary', type=Path, default=ROOT/'work/build-x64/rec64.exe')
+    args = parser.parse_args()
+    work = ROOT/'work/verify-controls'; work.mkdir(parents=True, exist_ok=True)
+    config = work/'rec64.yaml'
+    config.write_text(json.dumps({'machine': {'model': 'c64-pal'}, 'video': {'border': 'none'},
+                                 'controllers': {'keyboard_joystick': True}, 'ui': {'state_slot': 3}}))
+    log = (work/'commands.jsonl').open('w')
+    proc = subprocess.Popen([str(args.binary.resolve()), '--hidden', '--config', str(config),
+                             '--control', 'stdin'], cwd=ROOT, stdin=subprocess.PIPE,
+                            stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+
+    def call(command):
+        proc.stdin.write(command+'\n'); proc.stdin.flush()
+        line = proc.stdout.readline(); assert line, (command, proc.poll(), proc.stderr.read())
+        reply = json.loads(line); log.write(json.dumps({'command': command, 'reply': reply})+'\n'); log.flush()
+        assert reply['ok'], (command, reply)
+        return reply
+
+    def key(name, count=1):
+        for _ in range(count): call('key '+name)
+
+    def text(): return call('text')['text']
+
+    def shot(name, size=(320, 200)):
+        path = work/f'{name}.png'; call('shot '+path.as_posix())
+        with Image.open(path) as im: assert im.size == size, (name, im.size, size)
+
+    try:
+        call('frames 150'); call('expect READY.')
+        key('Pad B'); key('RIGHT'); t = text()
+        assert 'DEVICE' in t and 'FAST LOAD' in t and 'CONTROLS' not in t and 'EJECT' not in t and 'LOAD IMAGE' not in t, t
+        shot('media-settings')
+        key('RIGHT', 3); t = text(); assert 'KEYBOARD JOYSTICK (PORT 2)' in t and 'F11' in t, t
+        assert 'KEYBOARD JOY ' not in t and 'ON/OFF' not in t
+        key('F11'); call('expect KEYBOARD JOYSTICK (OFF)'); key('DOWN', 4); key('Pad A'); call('expect KEYBOARD JOYSTICK (PORT 2)')
+        shot('controllers-settings'); key('Pad LB'); call('expect KEYBOARD JOYSTICK (PORT 1)')
+        key('RIGHT'); t = text(); assert 'REU' in t and 'LOAD CARTRIDGE' not in t and 'FREEZE' not in t, t
+        shot('cartridge-settings'); key('Pad B')
+        key('Pad Y'); t = text(); assert 'DRIVE 1/3' in t and 'EJECT' in t and 'FAST LOAD' not in t and 'SOUNDS' not in t, t
+        shot('drive-osd'); key('RIGHT'); call('expect TAPE 2/3'); shot('tape-osd')
+        key('RIGHT'); call('expect CARTRIDGE 3/3'); call('expect FREEZE'); shot('cartridge-osd'); key('Pad Y')
+        key('Pad X'); call('expect FILES AND FOLDERS'); shot('load-browser'); key('Pad B')
+        key('Pad RB'); call('expect Full speed'); key('Pad RB'); call('expect 100% speed')
+        key('Pad RT'); call('expect SELECT SNAPSHOT SLOT'); key('Pad A'); call('expect No snapshot in this slot'); shot('first-load-picker'); key('Pad B')
+        call('poke 0400 42'); key('Pad LT'); call('expect SELECT SNAPSHOT SLOT'); key('DOWN'); shot('save-picker'); key('Pad A')
+        call('expect Saved slot 4'); assert (work/'states/c64-pal/slot-4.rcs').exists()
+        call('poke 0400 99'); key('Pad RT'); call('expect Loaded slot 4'); assert call('peek 0400')['data'] == '42'
+        assert 'SELECT SNAPSHOT SLOT' not in text()
+        # A live border change keeps settings and the guest at the same dimensions.
+        key('Pad B'); key('LEFT', 3); key('DOWN', 2); key('Pad A'); shot('full-border-settings', (384, 272))
+        key('Pad A'); shot('minimal-border-settings', (352, 232)); key('Pad B'); shot('minimal-border-guest', (352, 232))
+        print('Settings/controls separation, borders, F11, controller actions and session slot picker passed')
+    finally:
+        if proc.poll() is None: call('quit')
+        proc.wait(timeout=10); log.close()
+
+
+if __name__ == '__main__': main()

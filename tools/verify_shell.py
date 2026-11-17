@@ -50,7 +50,7 @@ def main() -> int:
         key('F12'); screen = text()
         assert f'REC64 {version}' in screen and screen.count('MACHINE') == 1 and '1/8' in screen, screen
         pal = shot('machine')
-        key('RIGHT'); screen = text(); assert screen.index('DRIVE') < screen.index('TAPE') and 'CTRL+F3' in screen and 'CTRL+F4' in screen
+        key('RIGHT'); screen = text(); assert screen.index('DRIVE') < screen.index('TAPE') and 'FAST LOAD' in screen and 'EJECT' not in screen
         shot('media')
         key('RIGHT'); key('DOWN'); key('RETURN'); call('expect COLOR-CORRECTED')
         key('RETURN'); call('expect DEFAULT')
@@ -70,8 +70,8 @@ def main() -> int:
         call('release Up'); assert int(call('peek DC00')['data'],16)&1 == 1
         key('Shift+F11'); call('expect Joystick port 1'); call('poke DC03 00'); key('Up'); assert int(call('peek DC01')['data'],16)&1 == 0
         call('release Up'); key('F11')
-        key('Ctrl+F3'); call('expect DRIVE 1/2'); shot('drive-widget'); key('DOWN',2); before='FAST LOAD' in text(); key('RETURN'); assert before
-        key('RIGHT'); call('expect TAPE 2/2'); shot('tape-empty'); key('Ctrl+F4'); assert 'TAPE 2/2' not in text()
+        key('Ctrl+F3'); call('expect DRIVE 1/3'); shot('drive-widget'); assert 'FAST LOAD' not in text()
+        key('RIGHT'); call('expect TAPE 2/3'); shot('tape-empty'); key('Ctrl+F4'); assert 'TAPE 2/3' not in text()
         # The widget uses the actual writable Datasette transport.
         tape = work/'controls.tap'; tape.write_bytes(b'C64-TAPE-RAW'+bytes([1,0,0,0])+struct.pack('<I',64)+bytes([48])*64)
         call(f'insert tape {tape.as_posix()}'); key('Ctrl+F4'); key('RETURN'); call('expect PLAY'); key('DOWN'); key('RETURN'); call('expect STOP')

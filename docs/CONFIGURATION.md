@@ -9,14 +9,15 @@ firmware. `machine.options.sid` accepts `default`, `6581`, or `8580`.
 This selects the chip model. Snapshots saved by the releases that used the
 reSID engine still load: registers are restored and notes start again.
 
-The Cartridge page loads/ejects CRT images and selects expansion memory.
+The Cartridge settings page selects expansion memory and startup insertion;
+the control OSD loads, ejects and freezes cartridges.
 Supported cartridges are Normal 8K/16K, Ultimax, Ocean, Magic Desk, Fun Play,
 Super Games, Dinamic, Zaxxon, System 3, Simons' BASIC, EasyFlash, Action
 Replay 4-6, Retro Replay, Final Cartridge I/II and III, Epyx Fastload,
 KCS Power Cartridge and Super Snapshot 5. Attaching or ejecting a
 cartridge resets the machine. Right Alt pressed and released alone triggers
 the physical freeze button; using AltGr with another key does not freeze.
-The page's Freeze row performs the same action. EasyFlash retains completed
+The OSD's Freeze row performs the same action. EasyFlash retains completed
 flash writes in the attached CRT, including banks omitted from a sparse
 image; write protection inhibits programming.
 The **Start inserted** row remembers the attached cartridge for the next
@@ -54,10 +55,11 @@ counter wraps at one million bytes. Temporary messages share this line.
 
 Ctrl+F3 opens drive controls; Ctrl+F4 opens tape controls. Up/Down selects,
 Enter acts, Left/Right switches device, and Escape or the same shortcut
-closes the widget. The guest continues running. Drive controls offer image
-loading/eject, fast load, sounds and auto-load. Tape controls offer play,
-stop, rewind, record, eject and image loading. The Media setup page groups
-settings by drive first, then tape.
+closes the widget. Left/Right cycles through drive, tape and cartridge
+controls. The guest continues running. Drive controls offer loading, eject
+and file saving. Tape adds play, stop, rewind and record; cartridge controls
+offer loading, eject and freeze. The Media settings page holds device
+number, fast loading, sounds and auto-load, grouped by drive and tape.
 
 Shift+F9 or controller Back toggles the on-screen C64 keyboard. Click/touch
 a key to hold it; multiple fingers can press different keys together. Tap
@@ -70,6 +72,8 @@ always touches the screen bottom and covers the status line while open.
 F12 opens setup. Left/Right or Tab changes page, Up/Down selects a row,
 Enter or +/- changes its value, and F12/Escape closes. Model and SID changes
 restart the machine on close; display and sound changes apply immediately.
+Setup, file browsers and the SID player follow the selected border size
+and the running model's display aspect, just like the guest screen.
 Changes preserve comments in the selected YAML file. Unavailable controls
 are disabled.
 
@@ -110,14 +114,31 @@ controllers:
 Binding values are SDL scancode names, case insensitive; F9-F12, Pause and
 Print Screen are reserved by the shell. Character input remains symbolic.
 F11 switches the keyboard joystick; Shift+F11 swaps complete port assignments
-and identifies the active joystick port. The keyboard joystick shares port 2
-with controller 1 by default. It works alongside the selected physical
-controller, whether that controller is connected or absent. `keyboard_port`
-selects its socket independently of each port's input source.
+and identifies the active joystick port. The Controllers page has one
+`KEYBOARD JOYSTICK (PORT N) F11` entry using that same action; it shows OFF
+when disabled. A connected controller temporarily disables keyboard
+joystick input and the entry shows AUTO OFF. Disconnecting the last
+controller enables the keyboard joystick again. `keyboard_port` selects
+its socket independently of each port's input source. Port 2 is the default.
 Controllers keep their number while connected; disconnect releases their input.
-The d-pad/left stick supplies directions, A fire, and B a second fire button
-(where the connected device supports it). Start opens setup; d-pad navigates,
-A accepts, B goes back, and shoulders change values.
+
+Controller mapping:
+
+| Input | Action |
+| --- | --- |
+| D-pad / left stick | Movement on the assigned C64 port; menu navigation |
+| A | Fire; accept in menus |
+| B | F12 menu; close the current dialog |
+| X | Open the Load browser (Ctrl+F1) |
+| Y | Open/close the media control OSD |
+| LB | Swap control ports (Shift+F11) |
+| RB | Full speed on/off (F10) |
+| LT | Quick save (Ctrl+F5) |
+| RT | Quick load (Ctrl+F6) |
+| Start / Back | F12 menu / on-screen keyboard |
+
+Each trigger acts once per squeeze. In the on-screen keyboard, A holds
+the selected key and B closes it.
 
 Each port's `type` is `joystick`, `mouse1351`, `paddles`, or `none`; its
 `device` is `none`, `controller 1`, `controller 2`, or
@@ -182,10 +203,9 @@ input after a cold boot. Space inserts without auto-loading. Opening a
 browser pauses the guest; closing returns to the previous setup or machine
 screen. Manual keyboard input, focus loss and reset cancel auto-typing.
 
-The Media page has tape Play, Stop, Rewind, Record and Eject controls,
-plus tape fast loading, sound and auto-load. Disk controls select device
-8–11, eject the image, and switch disk fast loading, drive sounds and
-auto-load. Alt+F toggles drive fast loading, Alt+S drive sounds, and Alt+T
+The control OSD has tape Play, Stop, Rewind, Record and Eject actions.
+The Media settings page selects device 8–11, disk/tape fast loading,
+sounds and auto-load. Alt+F toggles drive fast loading, Alt+S drive sounds, and Alt+T
 tape sound. `machine.options.drive_device` stores the device number.
 Saving to TAP creates and mounts a recording target: use BASIC SAVE to
 record the program. Saving a blank D64 creates and inserts that image.
@@ -204,6 +224,10 @@ guest cycle still executed. Manual F10 full speed continues to mute sound.
 ## Snapshots
 
 Ctrl+F5 saves the selected slot; Ctrl+F6 restores it, including from setup.
+If no slot has been selected since startup, either action opens a popup:
+choose with Up/Down and confirm with Enter/A, or cancel with Escape/B.
+That selection serves both quick actions for the rest of the session.
+The previous slot remains highlighted at the next launch and needs confirmation.
 The States page has ten slots per model, a guest-screen preview, save time,
 and Save/Load actions. Up/Down chooses a slot; Enter on a slot selects it.
 `ui.state_slot` remembers the selection (1–10). Files are stored atomically
@@ -220,5 +244,7 @@ from full speed reanchors pacing immediately.
 
 The headless `drop FILE` command takes the same path as a native drop;
 `insert SLOT FILE` mounts only, for explicit LOAD or tape-control commands.
+Headless `key Pad A|B|X|Y|LB|RB|LT|RT|Start|Back` invokes the same controller
+actions; `key Pad Up|Down|Left|Right` navigates open menus.
 Typing while a file dialog is active edits its search/name field, and
 `enter` activates the current dialog selection.

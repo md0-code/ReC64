@@ -14,10 +14,16 @@ int main(void){
     rc_pads pads;CHECK(rc_pads_open(&pads));CHECK(!SDL_WasInit(SDL_INIT_VIDEO));
     const int device=SDL_JoystickAttachVirtual(SDL_JOYSTICK_TYPE_GAMECONTROLLER,SDL_CONTROLLER_AXIS_MAX,SDL_CONTROLLER_BUTTON_MAX,0);CHECK(device>=0);
     SDL_Event event;while(SDL_PollEvent(&event))rc_pads_event(&pads,&event,NULL);
-    CHECK(rc_pads_present(&pads,0));SDL_Joystick *virtual=SDL_JoystickOpen(device);CHECK(virtual);
+    CHECK(rc_pads_present(&pads,0)&&!rc_pads_keyboard(&pads,1));SDL_Joystick *virtual=SDL_JoystickOpen(device);CHECK(virtual);
     CHECK(!SDL_JoystickSetVirtualAxis(virtual,SDL_CONTROLLER_AXIS_LEFTX,24000));CHECK(!SDL_JoystickSetVirtualButton(virtual,SDL_CONTROLLER_BUTTON_A,1));SDL_JoystickUpdate();
     CHECK(rc_pads_joystick(&pads,0)==(RC_JOY_RIGHT|RC_JOY_FIRE));int x,y;unsigned buttons;rc_pads_paddles(&pads,0,&x,&y,&buttons);CHECK(x>200&&buttons==1);
-    CHECK(!SDL_JoystickDetachVirtual(device));while(SDL_PollEvent(&event))rc_pads_event(&pads,&event,NULL);CHECK(!rc_pads_present(&pads,0)&&!rc_pads_joystick(&pads,0));SDL_JoystickClose(virtual);
+    CHECK(!SDL_JoystickSetVirtualButton(virtual,SDL_CONTROLLER_BUTTON_B,1));SDL_JoystickUpdate();CHECK(!(rc_pads_joystick(&pads,0)&RC_JOY_FIRE2));
+    rc_pad_key key;event=(SDL_Event){0};event.type=SDL_CONTROLLERBUTTONDOWN;event.cbutton.which=SDL_JoystickInstanceID(virtual);event.cbutton.button=SDL_CONTROLLER_BUTTON_Y;
+    CHECK(rc_pads_event(&pads,&event,&key)==RC_PADS_KEY&&key==RC_PAD_Y);
+    event.type=SDL_CONTROLLERAXISMOTION;event.caxis.which=SDL_JoystickInstanceID(virtual);event.caxis.axis=SDL_CONTROLLER_AXIS_TRIGGERRIGHT;event.caxis.value=25000;
+    CHECK(rc_pads_event(&pads,&event,&key)==RC_PADS_KEY&&key==RC_PAD_TRIGGER_RIGHT);CHECK(rc_pads_event(&pads,&event,&key)==RC_PADS_NONE);
+    event.caxis.value=0;CHECK(rc_pads_event(&pads,&event,&key)==RC_PADS_NONE);event.caxis.value=25000;CHECK(rc_pads_event(&pads,&event,&key)==RC_PADS_KEY);
+    CHECK(!SDL_JoystickDetachVirtual(device));while(SDL_PollEvent(&event))rc_pads_event(&pads,&event,NULL);CHECK(!rc_pads_present(&pads,0)&&!rc_pads_joystick(&pads,0)&&rc_pads_keyboard(&pads,1));SDL_JoystickClose(virtual);
     int keys[]={1,2,3,4,5,6};rc_joykeys joy;rc_joykeys_init(&joy,keys,0);CHECK(!rc_joykeys_key(&joy,1,1));CHECK(rc_joykeys_switch(&joy));CHECK(rc_joykeys_key(&joy,1,1)&&rc_joykeys_key(&joy,2,1));CHECK(!rc_joykeys_held(&joy));CHECK(rc_joykeys_key(&joy,2,0)&&rc_joykeys_held(&joy)==RC_JOY_UP);CHECK(!rc_joykeys_switch(&joy)&&!rc_joykeys_held(&joy));
     rc_config c;char error[256];const char *yaml="keyboard: {RUN STOP: F8, F2: F1}\ncontrollers: {joystick1: {type: mouse1351}, joystick2: {type: paddles, device: mouse}}\n";
     CHECK(rc_config_parse(yaml,strlen(yaml),"",&c,error,sizeof error));

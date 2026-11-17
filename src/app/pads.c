@@ -60,15 +60,25 @@ rc_pads_result rc_pads_event(rc_pads *p, const union SDL_Event *e, rc_pad_key *k
             if (!controller(p, i) || SDL_JoystickInstanceID(SDL_GameControllerGetJoystick(controller(p, i))) != e->cdevice.which) continue;
             SDL_GameControllerClose(controller(p, i));
             p->pad[i] = NULL;
+            memset(p->trigger[i],0,sizeof p->trigger[i]);
             p->held = RC_PAD_NONE;
             return RC_PADS_CHANGED;
         }
         return RC_PADS_NONE;
     }
-    if (e->type != SDL_CONTROLLERBUTTONDOWN) return RC_PADS_NONE;
+    if(e->type==SDL_CONTROLLERAXISMOTION&&(e->caxis.axis==SDL_CONTROLLER_AXIS_TRIGGERLEFT||e->caxis.axis==SDL_CONTROLLER_AXIS_TRIGGERRIGHT)){
+        for(unsigned i=0;i<RC_PADS_MAX;++i)if(controller(p,i)&&SDL_JoystickInstanceID(SDL_GameControllerGetJoystick(controller(p,i)))==e->caxis.which){
+            const unsigned trigger=e->caxis.axis==SDL_CONTROLLER_AXIS_TRIGGERLEFT?0u:1u;const int pressed=e->caxis.value>=RC_STICK_DEAD_ZONE;
+            const int edge=pressed&&!p->trigger[i][trigger];p->trigger[i][trigger]=(uint8_t)pressed;
+            if(edge){*key=trigger?RC_PAD_TRIGGER_RIGHT:RC_PAD_TRIGGER_LEFT;return RC_PADS_KEY;}break;
+        }return RC_PADS_NONE;
+    }
+    if (e->type != SDL_CONTROLLERBUTTONDOWN||!known(p,e->cbutton.which)) return RC_PADS_NONE;
     switch (e->cbutton.button) {
     case SDL_CONTROLLER_BUTTON_A: *key = RC_PAD_A; break;
     case SDL_CONTROLLER_BUTTON_B: *key = RC_PAD_B; break;
+    case SDL_CONTROLLER_BUTTON_X: *key = RC_PAD_X; break;
+    case SDL_CONTROLLER_BUTTON_Y: *key = RC_PAD_Y; break;
     case SDL_CONTROLLER_BUTTON_LEFTSHOULDER: *key = RC_PAD_SHOULDER_LEFT; break;
     case SDL_CONTROLLER_BUTTON_RIGHTSHOULDER: *key = RC_PAD_SHOULDER_RIGHT; break;
     case SDL_CONTROLLER_BUTTON_START:
@@ -110,6 +120,8 @@ int rc_pads_repeat(rc_pads *p, uint32_t now_ms, rc_pad_key *key) {
 }
 
 int rc_pads_present(const rc_pads *p, unsigned index) { return controller(p, index) != NULL; }
+int rc_pads_any(const rc_pads *p){for(unsigned i=0;i<RC_PADS_MAX;++i)if(rc_pads_present(p,i))return 1;return 0;}
+int rc_pads_keyboard(const rc_pads *p,int requested){return requested&&!rc_pads_any(p);}
 
 const char *rc_pads_name(const rc_pads *p, unsigned index) {
     SDL_GameController *c = controller(p, index);
@@ -128,7 +140,6 @@ unsigned rc_pads_joystick(const rc_pads *p, unsigned index) {
     if (SDL_GameControllerGetButton(c, SDL_CONTROLLER_BUTTON_DPAD_RIGHT)) held |= RC_JOY_RIGHT;
     held |= rc_stick_directions(SDL_GameControllerGetAxis(c, SDL_CONTROLLER_AXIS_LEFTX), SDL_GameControllerGetAxis(c, SDL_CONTROLLER_AXIS_LEFTY));
     if (SDL_GameControllerGetButton(c, SDL_CONTROLLER_BUTTON_A)) held |= RC_JOY_FIRE;
-    if (SDL_GameControllerGetButton(c, SDL_CONTROLLER_BUTTON_B)) held |= RC_JOY_FIRE2;
     return rc_stick_resolve(held);
 }
 
@@ -138,5 +149,5 @@ void rc_pads_paddles(const rc_pads *p,unsigned index,int *x,int *y,unsigned *but
     SDL_GameController *c=controller(p,index);*x=*y=128;*buttons=0;if(!c)return;
     *x=(SDL_GameControllerGetAxis(c,SDL_CONTROLLER_AXIS_LEFTX)+32768)/256;
     *y=(SDL_GameControllerGetAxis(c,SDL_CONTROLLER_AXIS_LEFTY)+32768)/256;
-    *buttons=(SDL_GameControllerGetButton(c,SDL_CONTROLLER_BUTTON_A)?1u:0)|(SDL_GameControllerGetButton(c,SDL_CONTROLLER_BUTTON_B)?2u:0);
+    *buttons=SDL_GameControllerGetButton(c,SDL_CONTROLLER_BUTTON_A)?1u:0;
 }

@@ -26,6 +26,12 @@ void rc_tui_frame(rc_tui *t,const uint32_t palette[16],rc_frame *f){
         for(unsigned x=0;x<8;++x)t->pixels[(36u+r*8u+y)*384+32+c*8+x]=(uint8_t)(bits&(128u>>x)?t->ink[r][c]:t->paper[r][c]);}
     *f=(rc_frame){384,272,384,t->pixels,palette,16,4,3,++t->serial};
 }
+void rc_tui_fit(rc_tui *t,const rc_frame *guest,rc_frame *out){
+    if(guest->width<320||guest->width>RC_TUI_W||guest->height<200||guest->height>RC_TUI_H)return;
+    const unsigned left=(RC_TUI_W-guest->width)/2,top=(RC_TUI_H-guest->height)/2;
+    for(unsigned y=0;y<guest->height;++y)memmove(t->pixels+(size_t)y*guest->width,t->pixels+(size_t)(top+y)*RC_TUI_W+left,guest->width);
+    out->width=guest->width;out->height=guest->height;out->pitch=guest->width;out->aspect_w=guest->aspect_w;out->aspect_h=guest->aspect_h;
+}
 size_t rc_tui_text(const rc_tui *t,char *out,size_t cap){size_t n=0;for(unsigned r=0;r<25;++r){unsigned last=40;while(last&&t->ch[r][last-1]==' ')--last;
     for(unsigned c=0;c<last&&n+1<cap;++c){const unsigned ch=t->ch[r][c];out[n++]=ch<128?(char)ch:' ';}if(n+1<cap)out[n++]='\n';}if(cap)out[n]=0;return n;}
 int rc_tui_overlay(rc_tui *t,unsigned rows,const rc_frame *guest,rc_frame *out){

@@ -30,6 +30,7 @@ def main():
             reply=json.loads(line);assert reply['ok'],(command,reply)
             return reply
         try:
+            call('insert cartridge '+image.as_posix())
             call('frames 100');call('expect '+text);call('shot '+(work/f'{name}.png').as_posix())
             if name=='ultimax':
                 saved=work/'cart.rcs'; expected=work/'expected.rcs'; actual=work/'actual.rcs'

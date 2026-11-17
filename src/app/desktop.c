@@ -45,6 +45,7 @@ typedef struct desktop {
     size_t input_size;
     int stdin_control, full, io_failed,source_slot;
     int states_dirty,states_slot;char states_model[RC_STATE_ID];
+    unsigned slot_picker,slot_row;int slot_selected;
 } desktop;
 static void media_status(desktop *d);
 static int load_palette(desktop *d,char *error,size_t cap);
@@ -54,10 +55,13 @@ static void states_status(desktop *d);
 static void media_options(desktop *d);
 static int restart(desktop *d,char *error,size_t cap);
 static void restore_machine_config(desktop *d);
+static int shell_key(void *ctx,const char *name,int down);
+static void controller_key(desktop *d,rc_pad_key key,int down);
+static void slot_draw(desktop *d,rc_frame *frame);
 static void virtual_key(void *ctx,unsigned key,int down){desktop *d=ctx;rc_keymap_virtual(&d->keymap,key,down);}
 static void panel_draw(desktop *d,rc_frame *frame){
     rc_machine_status s;if(!d->panel_visible||!rc_machine_get_status(d->machine,&s))return;
-    const rc_panel_status p={s.drive_present,s.drive_device,s.drive_halftrack,s.drive_led,s.drive_motor,s.tape_counter,s.tape_motor,s.tape_play,s.tape_record,d->config->keyboard_joystick?(unsigned)d->config->keyboard_port+1u:0};
+    const rc_panel_status p={s.drive_present,s.drive_device,s.drive_halftrack,s.drive_led,s.drive_motor,s.tape_counter,s.tape_motor,s.tape_play,s.tape_record,rc_joykeys_on(&d->joykeys)?(unsigned)d->config->keyboard_port+1u:0};
     rc_panel_draw(&d->panel,frame,&p,frame);
 }
 static rc_machine *machine(void *ctx) { return ((desktop *)ctx)->machine; }
@@ -65,12 +69,14 @@ static int message_active(const desktop *d){return d->osd.text[0]&&(int32_t)(d->
 static void message(desktop *d,const char *text){rc_osd_show(&d->osd,(uint32_t)(d->frames*20u),"%s",text);}
 static int picture(desktop *d,rc_frame *f,char *error,size_t cap) {
     media_status(d);if(!load_palette(d,error,cap))return 0;
-    if(d->browser.active)rc_browser_draw(&d->browser,d->palette,f);
-    else if(d->setup.active)rc_setup_draw(&d->setup,d->palette,f);
+    rc_frame guest;if(!rc_machine_frame(d->machine,&guest)){snprintf(error,cap,"No machine frame");return 0;}
+    if(d->browser.active){rc_browser_draw(&d->browser,d->palette,f);rc_tui_fit(&d->browser.tui,&guest,f);}
+    else if(d->setup.active){rc_setup_draw(&d->setup,d->palette,f);rc_tui_fit(&d->setup.tui,&guest,f);}
     else {rc_machine_status s;rc_machine_get_status(d->machine,&s);
-        if(d->player.active&&s.sid_loaded)rc_sidplayer_draw(&d->player,s.sid_song,s.sid_cycles,s.sid_hz,s.sid_paused,d->palette,f);
-        else if(!rc_machine_frame(d->machine,f)) { snprintf(error,cap,"No machine frame");return 0; }
+        if(d->player.active&&s.sid_loaded){rc_sidplayer_draw(&d->player,s.sid_song,s.sid_cycles,s.sid_hz,s.sid_paused,d->palette,f);rc_tui_fit(&d->player.tui,&guest,f);}
+        else *f=guest;
         panel_draw(d,f);rc_osk_draw(&d->osk,f,0u,f);if(d->transport)transport_draw(d,f);
+        if(d->slot_picker)slot_draw(d,f);
     }
     f->palette=d->palette;
     const size_t n=(size_t)f->width*f->height;
@@ -143,9 +149,9 @@ static int state_load(void *ctx,const char *path,char *error,size_t cap) {
     for(unsigned i=0;i<RC_CONFIG_MEDIA;++i){rc_media_close(d->media[i]);d->media[i]=NULL;d->media_entry[i]=entries[i];
         if(i<family->media_count){rc_config_media *setting=rc_config_media_slot(d->config,family->media[i].key);if(setting){snprintf(setting->image,sizeof setting->image,"%s",info.media[i].present?info.media[i].path:"");setting->write_protect=info.media[i].write_protect;setting->explicit_flags|=RC_MEDIA_SETTING_PROTECT;}}}
     snprintf(d->config->model,sizeof d->config->model,"%s",config.model);d->config->option_count=config.option_count;memcpy(d->config->options,config.options,sizeof config.options);
-    d->keymap=keys;d->osk=osk;rc_osk_bind(&d->osk,virtual_key,d);d->typist=typist;rc_joykeys_set(&d->joykeys,d->config->keyboard_joystick);d->source_slot=source;d->running_config=*d->config;
+    d->keymap=keys;d->osk=osk;rc_osk_bind(&d->osk,virtual_key,d);d->typist=typist;rc_joykeys_set(&d->joykeys,rc_pads_keyboard(&d->pads,d->config->keyboard_joystick));d->source_slot=source;d->running_config=*d->config;
     rc_media *sid=family->media_count>4?rc_machine_media(d->machine,4):NULL;rc_sidplayer_close(&d->player);if(sid)rc_sidplayer_open(&d->player,sid->data,sid->size,NULL,0);
-    d->setup.active=0;d->transport=0;rc_browser_close(&d->browser);d->restart_pending=d->freeze_pending=0;d->pace_dirty=d->states_dirty=1;media_options(d);
+    d->setup.active=0;d->transport=0;d->slot_picker=0;rc_browser_close(&d->browser);d->restart_pending=d->freeze_pending=0;d->pace_dirty=d->states_dirty=1;media_options(d);
     if(d->audio.device){SDL_ClearQueuedAudio(d->audio.device);d->audio.flowing=0;}
     free(data);return 1;
 invalid:
@@ -153,14 +159,14 @@ invalid:
 failed:
     rc_osk_close(&osk);rc_machine_destroy(next);free(data);return 0;
 }
-static void release_keys(desktop *d){d->freeze_pending=0;rc_osk_release(&d->osk);rc_typist_cancel(&d->typist);rc_keymap_clear(&d->keymap);rc_joykeys_set(&d->joykeys,d->config->keyboard_joystick);const rc_family *f=rc_machine_family(d->machine);for(unsigned i=0;i<f->key_count;++i)rc_machine_key(d->machine,i,0);for(unsigned p=0;p<f->joysticks;++p){rc_machine_joystick(d->machine,p,0);if(d->config->sticks[p].type==RC_CONTROL_MOUSE1351)rc_machine_pointer(d->machine,p,RC_CONTROL_MOUSE1351,0,0,0);}d->suppress_text=0;}
+static void release_keys(desktop *d){d->freeze_pending=0;rc_osk_release(&d->osk);rc_typist_cancel(&d->typist);rc_keymap_clear(&d->keymap);rc_joykeys_set(&d->joykeys,rc_pads_keyboard(&d->pads,d->config->keyboard_joystick));const rc_family *f=rc_machine_family(d->machine);for(unsigned i=0;i<f->key_count;++i)rc_machine_key(d->machine,i,0);for(unsigned p=0;p<f->joysticks;++p){rc_machine_joystick(d->machine,p,0);if(d->config->sticks[p].type==RC_CONTROL_MOUSE1351)rc_machine_pointer(d->machine,p,RC_CONTROL_MOUSE1351,0,0,0);}d->suppress_text=0;}
 static void input_config(desktop *d){
     release_keys(d);int keys[RC_CONFIG_STICK_KEYS];for(unsigned i=0;i<RC_CONFIG_STICK_KEYS;++i)keys[i]=(int)SDL_GetScancodeFromName(d->config->stick_keys[i]);rc_joykeys_set_keys(&d->joykeys,keys);
     for(unsigned p=0;p<2;++p)rc_machine_pointer(d->machine,p,d->config->sticks[p].type,d->config->sticks[p].type==RC_CONTROL_PADDLES?255:0,d->config->sticks[p].type==RC_CONTROL_PADDLES?255:0,0);
-    if(!d->hidden){int mouse=0;for(unsigned p=0;p<2;++p)if(d->config->sticks[p].type==RC_CONTROL_MOUSE1351)mouse=1;SDL_SetRelativeMouseMode(mouse&&!d->setup.active&&!d->browser.active&&!d->transport&&!d->paused&&!d->osk.visible?SDL_TRUE:SDL_FALSE);}
+    if(!d->hidden){int mouse=0;for(unsigned p=0;p<2;++p)if(d->config->sticks[p].type==RC_CONTROL_MOUSE1351)mouse=1;SDL_SetRelativeMouseMode(mouse&&!d->slot_picker&&!d->setup.active&&!d->browser.active&&!d->transport&&!d->paused&&!d->osk.visible?SDL_TRUE:SDL_FALSE);}
 }
 static void input_poll(desktop *d){
-    if(d->setup.active||d->browser.active||d->paused||d->osk.visible||d->transport)return;
+    if(d->setup.active||d->browser.active||d->paused||d->osk.visible||d->transport||d->slot_picker)return;
     const unsigned keyboard=rc_joykeys_held(&d->joykeys);
     for(unsigned p=0;p<2;++p){const rc_config_stick *st=&d->config->sticks[p];
         if(st->type==RC_CONTROL_JOYSTICK){unsigned held=st->device==RC_STICK_CONTROLLER?rc_pads_joystick(&d->pads,st->pad-1):0;
@@ -173,7 +179,7 @@ static void input_poll(desktop *d){
         }else if(st->type==RC_CONTROL_NONE)rc_machine_pointer(d->machine,p,st->type,0,0,0);
     }
 }
-static void reset(void *ctx,int power) { desktop *d=ctx;release_keys(d);if(power!=2){d->setup.active=0;d->transport=0;rc_browser_close(&d->browser);rc_machine_reset(d->machine,power==1);d->pace_dirty=1;input_config(d);} }
+static void reset(void *ctx,int power) { desktop *d=ctx;release_keys(d);if(power!=2){d->setup.active=0;d->transport=0;d->slot_picker=0;rc_browser_close(&d->browser);rc_machine_reset(d->machine,power==1);d->pace_dirty=1;input_config(d);} }
 static void speed(void *ctx,int full) { desktop *d=ctx;d->full=full!=0;d->pace_dirty=1; }
 static int audio_capture(void *ctx,const char *path,char *error,size_t cap) {
     desktop *d=ctx;
@@ -187,7 +193,7 @@ static size_t screen_text(void *ctx,char *out,size_t cap){desktop *d=ctx;size_t 
     if(d->browser.active)n=rc_browser_text(&d->browser,out,cap);
     else if(d->setup.active){rc_frame f;rc_setup_draw(&d->setup,d->palette,&f);n=rc_tui_text(&d->setup.tui,out,cap);}
     else {rc_frame f;char error[128];if(!picture(d,&f,error,sizeof error))return 0;
-        if(d->transport)n=rc_tui_text(&d->setup.tui,out,cap);
+        if(d->transport||d->slot_picker)n=rc_tui_text(&d->setup.tui,out,cap);
         else if(d->player.active)n=rc_sidplayer_text(&d->player,out,cap);else n=rc_machine_text(d->machine,out,cap);
         if(d->panel_visible&&!d->transport&&!d->osk.visible&&!message_active(d)&&n<cap)n+=rc_panel_text(&d->panel,out+n,cap-n);
         if(d->osk.visible&&n<cap)n+=rc_osk_text(&d->osk,out+n,cap-n);
@@ -216,7 +222,7 @@ static int store_config(desktop *d,char *error,size_t cap){
 }
 static int media_available(const desktop *d){return !strcmp(rc_machine_family(d->machine)->id,"c64");}
 static void states_status(desktop *d){
-    if(!d->setup.active||d->setup.page!=RC_SETUP_STATES)return;const rc_family *f=rc_machine_family(d->machine);const char *model=f->models[rc_machine_model(d->machine)].id;
+    if(!d->slot_picker&&(!d->setup.active||d->setup.page!=RC_SETUP_STATES))return;const rc_family *f=rc_machine_family(d->machine);const char *model=f->models[rc_machine_model(d->machine)].id;
     if(!d->states_dirty&&d->states_slot==d->config->state_slot&&!strcmp(d->states_model,model))return;
     d->states_dirty=0;d->states_slot=d->config->state_slot;snprintf(d->states_model,sizeof d->states_model,"%s",model);memset(&d->setup.state_thumb,0,sizeof d->setup.state_thumb);d->setup.state_version[0]=0;
     for(unsigned i=0;i<RC_STATES_SLOTS;++i){char path[RC_HOST_PATH];rc_states_info info={0};rc_states_slot_path(d->config->source,model,i+1,path,sizeof path);
@@ -227,6 +233,7 @@ static void states_status(desktop *d){
 }
 static void media_status(desktop *d){
     states_status(d);
+    d->setup.controller_present=rc_pads_any(&d->pads);d->setup.keyboard_active=rc_pads_keyboard(&d->pads,d->config->keyboard_joystick);
     d->setup.media_available=media_available(d);d->setup.cartridge_available=d->browser.cartridges_enabled=d->browser.sid_enabled=0;d->setup.has_cartridge=d->setup.can_freeze=0;d->setup.has_disk=0;d->setup.has_tape=d->setup.tape_writable=d->setup.tape_playing=d->setup.tape_recording=0;
     if(!d->setup.media_available)return;rc_media *media=rc_machine_media(d->machine,0);rc_tape_deck *deck=rc_machine_tape_deck(d->machine,0);
     d->setup.has_tape=media!=NULL;d->setup.tape_writable=media&&media->writable&&rc_media_extension_in(media->path,"tap");d->setup.tape_playing=deck&&deck->play;d->setup.tape_recording=deck&&deck->record;
@@ -316,7 +323,7 @@ static int browser_open(desktop *d,int save,char *error,size_t cap){
     if(!flush_media(d,error,cap))return 0;
     if(d->browser.path[0])snprintf(folder,sizeof folder,"%s",d->browser.path);
     else if(d->config->source[0]){snprintf(folder,sizeof folder,"%s",d->config->source);char *slash=strrchr(folder,'/'),*back=strrchr(folder,'\\');if(back&&(!slash||back>slash))slash=back;if(slash)slash[1]=0;else snprintf(folder,sizeof folder,".");}
-    if(!rc_browser_open(&d->browser,folder,save,error,cap))return 0;d->transport=0;release_keys(d);input_config(d);d->pace_dirty=1;return 1;
+    if(!rc_browser_open(&d->browser,folder,save,error,cap))return 0;d->transport=0;d->slot_picker=0;release_keys(d);input_config(d);d->pace_dirty=1;return 1;
 }
 /* Leaving the player stops the tune and returns to the file list it came
  * from, with the cursor on that tune. */
@@ -405,58 +412,103 @@ static int needs_restart(desktop *d){
     return 0;
 }
 static int quick_state(desktop *d,int save,char *error,size_t cap){
+    if(!d->slot_selected){
+        if(d->restart_pending){if(!restart(d,error,cap))return 0;d->restart_pending=0;}
+        release_keys(d);d->setup.active=0;d->transport=0;rc_browser_close(&d->browser);rc_osk_open(&d->osk,0);
+        d->slot_picker=save?1u:2u;d->slot_row=(unsigned)d->config->state_slot-1u;d->osd.text[0]=0;d->states_dirty=d->pace_dirty=1;states_status(d);input_config(d);return 1;
+    }
     const rc_family *f=rc_machine_family(d->machine);char path[RC_HOST_PATH];const unsigned slot=(unsigned)d->config->state_slot;
     rc_states_slot_path(d->config->source,f->models[rc_machine_model(d->machine)].id,slot,path,sizeof path);
     const int ok=save?state_save(d,path,error,cap):state_load(d,path,error,cap);if(ok){char text[64];snprintf(text,sizeof text,"%s slot %u",save?"Saved":"Loaded",slot);message(d,text);return store_config(d,error,cap);}return 0;
 }
-/* Compact transport widgets operate the same controls as the Media page. */
+static void slot_draw(desktop *d,rc_frame *frame){
+    rc_tui *t=&d->setup.tui;rc_tui_clear(t);rc_tui_bar(t,0,d->slot_picker==1?"QUICK SAVE":"QUICK LOAD");rc_tui_box(t,1,0,13,40);
+    rc_tui_put(t,2,3,"SELECT SNAPSHOT SLOT",1,6);
+    for(unsigned i=0;i<RC_STATES_SLOTS;++i){char line[37];snprintf(line,sizeof line," SLOT %02u   %-21.21s",i+1,d->setup.state_status[i]==1?d->setup.state_time[i]:d->setup.state_status[i]==2?"INVALID":"EMPTY");
+        const int selected=i==d->slot_row,enabled=d->slot_picker==1||d->setup.state_status[i]==1;rc_tui_put(t,3+i,2,line,(uint8_t)(selected?6:enabled?14:12),(uint8_t)(selected?14:6));}
+    rc_tui_put(t,14,1,"UP/DOWN SELECT  A/ENTER CONFIRM",14,6);rc_tui_put(t,15,1,"B/ESC CANCEL",14,6);rc_tui_overlay(t,16,frame,frame);
+}
+static void slot_key(desktop *d,const char *key){
+    if(!strcmp(key,"ESCAPE")||!strcmp(key,"F12")){d->slot_picker=0;input_config(d);d->pace_dirty=1;return;}
+    if(!strcmp(key,"UP")||!strcmp(key,"DOWN")){d->slot_row=(d->slot_row+(!strcmp(key,"UP")?RC_STATES_SLOTS-1u:1u))%RC_STATES_SLOTS;return;}
+    if(strcmp(key,"RETURN")&&strcmp(key,"ENTER")&&strcmp(key,"SPACE"))return;
+    if(d->slot_picker==2&&d->setup.state_status[d->slot_row]!=1){message(d,"No snapshot in this slot");return;}
+    const int save=d->slot_picker==1;d->config->state_slot=(int)d->slot_row+1;d->slot_selected=1;d->slot_picker=0;input_config(d);d->pace_dirty=1;
+    char error[256];if(!quick_state(d,save,error,sizeof error))message(d,error);
+}
+static void keyboard_switch(desktop *d,int swap){
+    char error[256];release_keys(d);
+    if(swap){const rc_config_stick temp=d->config->sticks[0];d->config->sticks[0]=d->config->sticks[1];d->config->sticks[1]=temp;d->config->keyboard_port^=1u;message(d,d->config->keyboard_port?"Joystick port 2":"Joystick port 1");}
+    else if(rc_pads_any(&d->pads)){message(d,"Keyboard joystick disabled: controller connected");return;}
+    else {d->config->keyboard_joystick=!d->config->keyboard_joystick;message(d,d->config->keyboard_joystick?"Keyboard joystick on":"Keyboard joystick off");}
+    input_config(d);if(!store_config(d,error,sizeof error))message(d,error);
+}
+/* Controls act on media; persistent preferences belong to setup. */
 static void transport_draw(desktop *d,rc_frame *frame){
-    rc_tui *t=&d->setup.tui;rc_tui_clear(t);rc_tui_bar(t,0,d->transport==1?"DRIVE 1/2":"TAPE 2/2");rc_tui_box(t,1,0,12,40);
+    rc_tui *t=&d->setup.tui;rc_tui_clear(t);rc_tui_bar(t,0,d->transport==1?"DRIVE 1/3":d->transport==2?"TAPE 2/3":"CARTRIDGE 3/3");rc_tui_box(t,1,0,12,40);
     rc_machine_status status={0};rc_machine_get_status(d->machine,&status);
-    rc_media *media=rc_machine_media(d->machine,d->transport==1?2u:0u);const char *name=media?media->path:"NO IMAGE INSERTED";const char *slash=strrchr(name,'/'),*back=strrchr(name,'\\');if(back&&(!slash||back>slash))slash=back;if(slash)name=slash+1;
+    rc_media *media=rc_machine_media(d->machine,d->transport==1?2u:d->transport==2?0u:3u);const char *name=media?media->path:"NO IMAGE INSERTED";const char *slash=strrchr(name,'/'),*back=strrchr(name,'\\');if(back&&(!slash||back>slash))slash=back;if(slash)name=slash+1;
     char line[64];snprintf(line,sizeof line,"%.36s",name);rc_tui_put(t,2,2,line,1,6);
     if(d->transport==1)snprintf(line,sizeof line,"#%u TRACK %u.%u LED %s MOTOR %s",status.drive_device,status.drive_halftrack/2,(status.drive_halftrack&1)?5u:0u,status.drive_led?"ON":"OFF",status.drive_motor?"ON":"OFF");
-    else snprintf(line,sizeof line,"POS %llu  %s  MOTOR %s",(unsigned long long)status.tape_counter,status.tape_record?"RECORD":status.tape_play?"PLAY":"STOP",status.tape_motor?"ON":"OFF");
+    else if(d->transport==2)snprintf(line,sizeof line,"POS %llu  %s  MOTOR %s",(unsigned long long)status.tape_counter,status.tape_record?"RECORD":status.tape_play?"PLAY":"STOP",status.tape_motor?"ON":"OFF");
+    else snprintf(line,sizeof line,"%s",d->setup.can_freeze?"FREEZER READY":"");
     rc_tui_put(t,3,2,line,14,6);
-    static const char *const disk[]={"LOAD IMAGE","EJECT","FAST LOAD","SOUNDS","AUTO-LOAD"};
-    static const char *const tape[]={"PLAY","STOP","REWIND","RECORD","EJECT","LOAD IMAGE"};
-    rc_config_media settings;rc_config_media_settings(d->config,d->transport==1?"disk":"tape",&settings);
-    for(unsigned i=0;i<(d->transport==1?5u:6u);++i){
-        const int enabled=d->transport==1?(i!=1||media!=NULL):(i==5||(media&&(i!=3||d->setup.tape_writable)));
+    static const char *const disk[]={"LOAD IMAGE","EJECT","SAVE FILE"};
+    static const char *const tape[]={"PLAY","STOP","REWIND","RECORD","EJECT","LOAD IMAGE","SAVE FILE"};
+    static const char *const cart[]={"LOAD CARTRIDGE","EJECT","FREEZE"};
+    for(unsigned i=0;i<(d->transport==2?7u:3u);++i){
+        const int enabled=d->transport==1?(i!=1||media!=NULL):d->transport==2?(i>=5||(media&&(i!=3||d->setup.tape_writable))):i==0||(media&&(i!=2||d->setup.can_freeze));
         const int selected=i==d->transport_row;const char *value="ENTER";
-        if(d->transport==1&&i>=2)value=(i==2?settings.fast:i==3?settings.sound:settings.autoload)?"ON":"OFF";
-        snprintf(line,sizeof line," %-20s %12s ",d->transport==1?disk[i]:tape[i],value);
+        snprintf(line,sizeof line," %-20s %12s ",d->transport==1?disk[i]:d->transport==2?tape[i]:cart[i],value);
         rc_tui_put(t,5+i,2,line,(uint8_t)(enabled?(selected?6:14):12),(uint8_t)(enabled&&selected?14:6));
     }
     rc_tui_put(t,13,1,"UP/DOWN SELECT  ENTER ACT  ESC CLOSE",14,6);
-    rc_tui_put(t,14,1,"LEFT/RIGHT DRIVE/TAPE",14,6);rc_tui_overlay(t,15,frame,frame);
+    rc_tui_put(t,14,1,"LEFT/RIGHT DRIVE/TAPE/CARTRIDGE",14,6);rc_tui_overlay(t,15,frame,frame);
 }
 static void transport_open(desktop *d,unsigned kind){
     char error[256];
     if(d->restart_pending){if(!restart(d,error,sizeof error)){restore_machine_config(d);message(d,error);}d->restart_pending=0;}
-    release_keys(d);d->setup.active=0;rc_browser_close(&d->browser);rc_osk_open(&d->osk,0);
+    release_keys(d);d->setup.active=0;d->slot_picker=0;rc_browser_close(&d->browser);rc_osk_open(&d->osk,0);
     d->transport=d->transport==kind?0:kind;d->transport_row=0;input_config(d);
 }
 static void transport_key(desktop *d,const char *key){
     if(!strcmp(key,"ESCAPE")){d->transport=0;input_config(d);return;}
-    if(!strcmp(key,"LEFT")||!strcmp(key,"RIGHT")){d->transport=3u-d->transport;d->transport_row=0;return;}
-    const unsigned count=d->transport==1?5u:6u;
+    if(!strcmp(key,"LEFT")||!strcmp(key,"RIGHT")){d->transport=(d->transport+(!strcmp(key,"LEFT")?1u:0u))%3u+1u;d->transport_row=0;return;}
+    const unsigned count=d->transport==2?7u:3u;
     if(!strcmp(key,"UP")||!strcmp(key,"DOWN")){d->transport_row=(d->transport_row+(!strcmp(key,"UP")?count-1u:1u))%count;return;}
     if(strcmp(key,"RETURN")&&strcmp(key,"ENTER")&&strcmp(key,"SPACE"))return;
     char error[256];const unsigned row=d->transport_row;media_status(d);
-    if((d->transport==1&&row==0)||(d->transport==2&&row==5)){d->transport=0;if(!browser_open(d,0,error,sizeof error))message(d,error);return;}
+    if((d->transport==1&&row==0)||(d->transport==2&&row==5)||(d->transport==3&&row==0)){d->transport=0;if(!browser_open(d,0,error,sizeof error))message(d,error);return;}
+    if((d->transport==1&&row==2)||(d->transport==2&&row==6)){d->transport=0;if(!browser_open(d,1,error,sizeof error))message(d,error);return;}
     if(d->transport==1){
         if(row==1){if(d->setup.has_disk)eject(d,2);return;}
-        rc_config_media effective;rc_config_media_settings(d->config,"disk",&effective);rc_config_media *disk=rc_config_media_slot(d->config,"disk");if(!disk)return;
-        if(row==2){disk->fast=!effective.fast;disk->explicit_flags|=RC_MEDIA_SETTING_FAST;}
-        else if(row==3){disk->sound=!effective.sound;disk->explicit_flags|=RC_MEDIA_SETTING_SOUND;}
-        else {disk->autoload=!effective.autoload;disk->explicit_flags|=RC_MEDIA_SETTING_AUTOLOAD;}
-        media_options(d);if(!store_config(d,error,sizeof error))message(d,error);
+    }else if(d->transport==3){
+        if(row==1&&d->setup.has_cartridge)eject(d,3);
+        else if(row==2&&d->setup.can_freeze){release_keys(d);rc_machine_control(d->machine,3,RC_MEDIA_FREEZE,0);d->transport=0;input_config(d);}
     }else if(d->setup.has_tape){
         if(row==4){eject(d,0);return;}
         if(row==3&&!d->setup.tape_writable)return;
         const unsigned actions[]={RC_MEDIA_PLAY,RC_MEDIA_STOP,RC_MEDIA_REWIND,RC_MEDIA_RECORD};
         if(!rc_machine_control(d->machine,0,actions[row],0))message(d,"Tape control unavailable");
+    }
+}
+static void controller_key(desktop *d,rc_pad_key key,int down){
+    if(d->osk.visible&&!d->setup.active&&!d->browser.active&&!d->slot_picker&&(key==RC_PAD_A||key==RC_PAD_B)){
+        rc_osk_key(&d->osk,key==RC_PAD_A?"A":"B",down);if(!d->osk.visible)input_config(d);return;
+    }
+    if(!down)return;
+    switch(key){
+    case RC_PAD_A:if(d->setup.active||d->browser.active||d->transport||d->slot_picker)shell_key(d,"RETURN",1);break;
+    case RC_PAD_B:case RC_PAD_START:shell_key(d,"F12",1);break;
+    case RC_PAD_X:shell_key(d,"Ctrl+F1",1);break;
+    case RC_PAD_Y:if(media_available(d))transport_open(d,d->transport?d->transport:1u);break;
+    case RC_PAD_SHOULDER_LEFT:shell_key(d,"Shift+F11",1);break;
+    case RC_PAD_SHOULDER_RIGHT:shell_key(d,"F10",1);break;
+    case RC_PAD_TRIGGER_LEFT:shell_key(d,"Ctrl+F5",1);break;
+    case RC_PAD_TRIGGER_RIGHT:shell_key(d,"Ctrl+F6",1);break;
+    case RC_PAD_BACK:shell_key(d,"Shift+F9",1);break;
+    case RC_PAD_UP:case RC_PAD_DOWN:case RC_PAD_LEFT:case RC_PAD_RIGHT:{const char *names[]={"","UP","DOWN","LEFT","RIGHT"};shell_key(d,names[key],1);break;}
+    default:break;
     }
 }
 /* The same host controls serve SDL and the headless harness. */
@@ -466,9 +518,15 @@ static int shell_key(void *ctx,const char *name,int down){
     const char *bare=strrchr(key,'+');bare=bare?bare+1:key;
     const int ctrl=strstr(key,"CTRL+")!=NULL,alt=strstr(key,"ALT+")!=NULL,shifted=strstr(key,"SHIFT+")!=NULL;
     char error[256]="";
+    if(!strncmp(key,"PAD ",4)){
+        static const char *const names[]={"UP","DOWN","LEFT","RIGHT","A","B","LB","RB","START","BACK","X","Y","LT","RT"};
+        for(unsigned i=0;i<sizeof names/sizeof names[0];++i)if(!strcmp(key+4,names[i])){controller_key(d,(rc_pad_key)(i+1),down);return 1;}
+        return 0;
+    }
+    if(!strcmp(bare,"F11")){if(down)keyboard_switch(d,shifted);return 1;}
     const int right_alt=!strcmp(bare,"RIGHT ALT")||!strcmp(bare,"RALT")||!strcmp(bare,"RIGHTALT");
     if(right_alt){
-        if(down){d->freeze_pending=!ctrl&&!shifted&&!d->setup.active&&!d->browser.active&&!d->paused&&rc_machine_control(d->machine,3,RC_MEDIA_FREEZE,UINT32_MAX);}
+        if(down){d->freeze_pending=!ctrl&&!shifted&&!d->setup.active&&!d->browser.active&&!d->transport&&!d->slot_picker&&!d->paused&&rc_machine_control(d->machine,3,RC_MEDIA_FREEZE,UINT32_MAX);}
         else {const int freeze=d->freeze_pending;d->freeze_pending=0;if(freeze){release_keys(d);rc_machine_control(d->machine,3,RC_MEDIA_FREEZE,0);d->pace_dirty=1;}}
         return 1;
     }
@@ -483,7 +541,7 @@ static int shell_key(void *ctx,const char *name,int down){
     if(ctrl&&(!strcmp(bare,"F3")||!strcmp(bare,"F4"))){if(down&&media_available(d))transport_open(d,!strcmp(bare,"F3")?1u:2u);return 1;}
     if(ctrl&&(!strcmp(bare,"F5")||!strcmp(bare,"F6"))){if(down&&!quick_state(d,!strcmp(bare,"F5"),error,sizeof error))message(d,error);return 1;}
     if(!strcmp(bare,"F9")){
-        if(down&&media_available(d)){if(shifted){const int visible=!d->osk.visible;d->transport=0;release_keys(d);rc_osk_open(&d->osk,visible);input_config(d);}else d->panel_visible=!d->panel_visible;}
+        if(down&&media_available(d)){if(shifted){const int visible=!d->osk.visible;d->transport=0;d->slot_picker=0;release_keys(d);rc_osk_open(&d->osk,visible);input_config(d);}else d->panel_visible=!d->panel_visible;}
         return 1;
     }
     if(!strcmp(bare,"F10")){if(down){speed(d,!d->full);message(d,d->full?"Full speed (sound muted)":"100% speed");}return 1;}
@@ -501,12 +559,14 @@ static int shell_key(void *ctx,const char *name,int down){
         if(!down)return 1;
         if(alt||ctrl){reset(d,ctrl?1:0);message(d,ctrl?"Cold boot":"Reset");return 1;}
         if(shifted){d->quit=1;return 2;}
+        if(d->slot_picker){slot_key(d,"F12");return 1;}
         if(d->browser.active){close_browser(d);return 1;}
         if(d->transport){d->transport=0;input_config(d);return 1;}
         if(!d->setup.active){release_keys(d);d->setup.active=1;d->setup.row=d->setup.page==RC_SETUP_STATES?(unsigned)d->config->state_slot-1u:0;d->states_dirty=1;}
         else {d->setup.active=0;if(d->restart_pending){if(!restart(d,error,sizeof error)){restore_machine_config(d);message(d,error);}d->restart_pending=0;}if(!store_config(d,error,sizeof error))message(d,error);}
         d->pace_dirty=1;input_config(d);return 1;
     }
+    if(d->slot_picker){if(down)slot_key(d,bare);return 1;}
     if(d->transport){if(down)transport_key(d,bare);return 1;}
     if(d->setup.active){
         if(!down)return 1;media_status(d);const rc_config before=*d->config;const unsigned action=rc_setup_key(&d->setup,bare);
@@ -514,6 +574,8 @@ static int shell_key(void *ctx,const char *name,int down){
         if(action&(RC_SETUP_DRIVE|RC_SETUP_TAPE))transport_open(d,(action&RC_SETUP_DRIVE)?1u:2u);
         if(action&RC_SETUP_MEDIA_OPTIONS)media_options(d);
         if(action&RC_SETUP_STATE_REFRESH)d->states_dirty=1;
+        if(action&RC_SETUP_STATE_SELECT)d->slot_selected=1;
+        if(action&(RC_SETUP_KEYBOARD|RC_SETUP_SWAP))keyboard_switch(d,(action&RC_SETUP_SWAP)!=0);
         if(action&(RC_SETUP_STATE_SAVE|RC_SETUP_STATE_LOAD)){if(!quick_state(d,(action&RC_SETUP_STATE_SAVE)!=0,error,sizeof error))message(d,error);}
         if(action&RC_SETUP_EJECT){if(!eject(d,0))message(d,"Cannot eject tape");}
         if(action&RC_SETUP_EJECT_DISK){if(!eject(d,2))message(d,"Cannot eject disk");}
@@ -542,12 +604,6 @@ static int shell_key(void *ctx,const char *name,int down){
             else if(action==RC_SIDPLAYER_PAUSE){rc_machine_control(d->machine,4,RC_MEDIA_PAUSE,!s.sid_paused);d->pace_dirty=1;if(d->audio.device){SDL_ClearQueuedAudio(d->audio.device);d->audio.flowing=0;}}
         }
         if(action||!strcmp(bare,"LEFT")||!strcmp(bare,"RIGHT")||!strcmp(bare,"SPACE")||!strcmp(bare,"ESCAPE"))return 1;
-    }
-    if(!strcmp(bare,"F11")){
-        if(down){release_keys(d);if(shifted){const rc_config_stick temp=d->config->sticks[0];d->config->sticks[0]=d->config->sticks[1];d->config->sticks[1]=temp;d->config->keyboard_port^=1u;message(d,d->config->keyboard_port?"Joystick port 2":"Joystick port 1");}
-            else {d->config->keyboard_joystick=!d->config->keyboard_joystick;message(d,d->config->keyboard_joystick?"Keyboard joystick on":"Keyboard joystick off");}
-            input_config(d);if(!store_config(d,error,sizeof error))message(d,error);
-        }return 1;
     }
     if(!strcmp(bare,"PAUSE")){if(down){d->paused=!d->paused;d->pace_dirty=1;release_keys(d);message(d,d->paused?"Paused":"Running");input_config(d);}return 1;}
     if(alt&&(!strcmp(bare,"F")||!strcmp(bare,"S"))){if(down)message(d,"Control unavailable");return 1;}
@@ -649,16 +705,13 @@ int rc_desktop_run(rc_machine **owner,rc_config *c,const rc_rom_index *roms,cons
             while(SDL_PollEvent(&e)) {
                 if(e.type==SDL_QUIT) { status=0;goto done; }
                 rc_pad_key pad=RC_PAD_NONE;const rc_pads_result change=rc_pads_event(&d.pads,&e,&pad);
-                if(change==RC_PADS_CHANGED){rc_osk_release(&d.osk);input_poll(&d);message(&d,"Controller connections changed");}
-                if(change==RC_PADS_KEY&&pad==RC_PAD_BACK){shell_key(&d,"Shift+F9",1);continue;}
-                if(d.osk.visible&&!d.setup.active&&!d.browser.active&&e.type==SDL_CONTROLLERBUTTONUP&&e.cbutton.button==SDL_CONTROLLER_BUTTON_A){rc_osk_key(&d.osk,"A",0);continue;}
-                if(change==RC_PADS_KEY&&d.osk.visible&&!d.setup.active&&!d.browser.active&&(pad==RC_PAD_A||pad==RC_PAD_B)){rc_osk_key(&d.osk,pad==RC_PAD_A?"A":"B",1);if(!d.osk.visible)input_config(&d);continue;}
-                if(change==RC_PADS_KEY&&(d.setup.active||d.browser.active||d.transport||pad==RC_PAD_START)){
-                    const char *names[]={"","UP","DOWN","LEFT","RIGHT","RETURN","ESCAPE","-","+","F12",""};if(pad!=RC_PAD_NONE&&pad!=RC_PAD_BACK)shell_key(&d,names[pad],1);}
+                if(change==RC_PADS_CHANGED){if(!rc_pads_any(&d.pads))d.config->keyboard_joystick=1;input_config(&d);input_poll(&d);message(&d,rc_pads_any(&d.pads)?"Controller connected: keyboard joystick off":"Controller disconnected: keyboard joystick on");}
+                if(change==RC_PADS_KEY){controller_key(&d,pad,1);continue;}
+                if(e.type==SDL_CONTROLLERBUTTONUP&&e.cbutton.button==SDL_CONTROLLER_BUTTON_A){controller_key(&d,RC_PAD_A,0);continue;}
                 if(e.type==SDL_WINDOWEVENT&&e.window.event==SDL_WINDOWEVENT_FOCUS_LOST)release_keys(&d);
                 else if(e.type==SDL_DROPFILE){if(!drop(&d,e.drop.file,error,cap))message(&d,error);SDL_free(e.drop.file);}
                 else if(e.type==SDL_TEXTINPUT){d.freeze_pending=0;if(d.browser.active){if(!d.suppress_text)rc_browser_input(&d.browser,e.text.text);}
-                    else if(!d.setup.active&&!d.transport&&!d.paused&&!d.suppress_text){rc_typist_cancel(&d.typist);if(!rc_keymap_text(&d.keymap,e.text.text))message(&d,"Character unavailable on C64 keyboard");}}
+                    else if(!d.setup.active&&!d.transport&&!d.slot_picker&&!d.paused&&!d.suppress_text){rc_typist_cancel(&d.typist);if(!rc_keymap_text(&d.keymap,e.text.text))message(&d,"Character unavailable on C64 keyboard");}}
                 else if(e.type==SDL_FINGERDOWN||e.type==SDL_FINGERMOTION||e.type==SDL_FINGERUP){
                     if(d.osk.visible){SDL_Window *window=SDL_GetWindowFromID(e.tfinger.windowID);if(window){int window_w,window_h,x,y;SDL_GetWindowSize(window,&window_w,&window_h);
                         const int inside=rc_video_to_screen(d.video,(int)(e.tfinger.x*window_w),(int)(e.tfinger.y*window_h),&x,&y);
@@ -670,11 +723,11 @@ int rc_desktop_run(rc_machine **owner,rc_config *c,const rc_rom_index *roms,cons
                     if(d.osk.visible){int x,y;const int wx=e.type==SDL_MOUSEMOTION?e.motion.x:e.button.x,wy=e.type==SDL_MOUSEMOTION?e.motion.y:e.button.y;const int inside=rc_video_to_screen(d.video,wx,wy,&x,&y);
                         if(e.type==SDL_MOUSEMOTION){if(e.motion.state&SDL_BUTTON_LMASK)pointer_input(&d,INT64_MIN,x,y,inside?1:-1);}
                         else if(e.button.button==SDL_BUTTON_LEFT)pointer_input(&d,INT64_MIN,x,y,e.type==SDL_MOUSEBUTTONUP?0:inside?1:-1);continue;}
-                    if(!d.setup.active&&!d.browser.active&&!d.transport&&!d.paused){const unsigned held=SDL_GetMouseState(NULL,NULL),buttons=(held&SDL_BUTTON_LMASK?1u:0)|(held&SDL_BUTTON_RMASK?2u:0);
+                    if(!d.setup.active&&!d.browser.active&&!d.transport&&!d.slot_picker&&!d.paused){const unsigned held=SDL_GetMouseState(NULL,NULL),buttons=(held&SDL_BUTTON_LMASK?1u:0)|(held&SDL_BUTTON_RMASK?2u:0);
                         for(unsigned p=0;p<2;++p)if(c->sticks[p].type==RC_CONTROL_MOUSE1351)rc_machine_pointer(d.machine,p,RC_CONTROL_MOUSE1351,e.type==SDL_MOUSEMOTION?e.motion.xrel:0,e.type==SDL_MOUSEMOTION?e.motion.yrel:0,buttons);}}
                 else if(e.type==SDL_KEYDOWN||e.type==SDL_KEYUP){
                     if(e.key.keysym.scancode!=SDL_SCANCODE_RALT)d.freeze_pending=0;
-                    if(e.key.repeat&&(!(d.setup.active||d.browser.active||d.transport)||(e.key.keysym.mod&(KMOD_ALT|KMOD_CTRL))||e.key.keysym.scancode==SDL_SCANCODE_F12))continue;
+                    if(e.key.repeat&&(!(d.setup.active||d.browser.active||d.transport||d.slot_picker)||(e.key.keysym.mod&(KMOD_ALT|KMOD_CTRL))||e.key.keysym.scancode==SDL_SCANCODE_F12))continue;
                     const int down=e.type==SDL_KEYDOWN;const char *name=SDL_GetScancodeName(e.key.keysym.scancode);
                     char hostkey[96];snprintf(hostkey,sizeof hostkey,"%s%s%s%s",e.key.keysym.mod&KMOD_CTRL?"Ctrl+":"",e.key.keysym.mod&KMOD_ALT?"Alt+":"",e.key.keysym.mod&KMOD_SHIFT?"Shift+":"",name);
                     /* Always release the original binding, even if modifiers changed. */
@@ -693,7 +746,7 @@ int rc_desktop_run(rc_machine **owner,rc_config *c,const rc_rom_index *roms,cons
 
             }
         }
-        if(!o->hidden){rc_pad_key pad;if((d.setup.active||d.browser.active||d.transport||d.osk.visible)&&rc_pads_repeat(&d.pads,SDL_GetTicks(),&pad)){const char *names[]={"","UP","DOWN","LEFT","RIGHT"};shell_key(&d,names[pad],1);}input_poll(&d);}
+        if(!o->hidden){rc_pad_key pad;if((d.setup.active||d.browser.active||d.transport||d.osk.visible||d.slot_picker)&&rc_pads_repeat(&d.pads,SDL_GetTicks(),&pad))controller_key(&d,pad,1);input_poll(&d);}
         m=d.machine;
         if(d.pace_dirty){rc_pace_init(&pace,SDL_GetPerformanceFrequency(),rc_machine_clock(m),100);rc_pace_reset(&pace,SDL_GetPerformanceCounter(),rc_machine_time(m));d.pace_dirty=0;}
         uint64_t ticks=rc_machine_frame_period(m);int present=1,input_frame=1;
@@ -701,7 +754,7 @@ int rc_desktop_run(rc_machine **owner,rc_config *c,const rc_rom_index *roms,cons
             const int action=rc_harness_step(h);
             if(action==RC_HARNESS_QUIT) { status=rc_harness_status(h);if(status) snprintf(error,cap,"%s",rc_harness_error(h));break; }
             if(action==RC_HARNESS_IDLE) { rc_host_sleep_us(1000);continue; }
-        } else if(!o->hidden&&(d.setup.active||d.browser.active||d.paused)) {rc_host_sleep_us(16000);d.pace_dirty=1;}
+        } else if(!o->hidden&&(d.setup.active||d.browser.active||d.slot_picker||d.paused)) {rc_host_sleep_us(16000);d.pace_dirty=1;}
         else if(!o->hidden) {
             const int free_running=d.full||automatic_speed(&d);
             const rc_pace_step step=rc_pace_next(&pace,free_running,SDL_GetPerformanceCounter(),rc_machine_time(m),ticks);
@@ -716,11 +769,11 @@ int rc_desktop_run(rc_machine **owner,rc_config *c,const rc_rom_index *roms,cons
             input_frame=free_running?step.action==RC_PACE_RUN:present;
         }
         if(d.quit){status=0;break;}m=d.machine;
-        if(!d.setup.active&&!d.browser.active&&!d.paused&&input_frame&&rc_typist_frame(&d.typist,m,&d.keymap)<0)message(&d,d.typist.error);
-        if(!d.setup.active&&!d.browser.active&&!d.paused&&rc_machine_run(m,ticks)!=RC_RUN_OK) { snprintf(error,cap,"%s",rc_machine_error(m));goto done; }
-        if(present)++d.frames;if(input_frame&&!d.setup.active&&!d.browser.active&&!d.paused)rc_keymap_frame(&d.keymap);
+        if(!d.setup.active&&!d.browser.active&&!d.slot_picker&&!d.paused&&input_frame&&rc_typist_frame(&d.typist,m,&d.keymap)<0)message(&d,d.typist.error);
+        if(!d.setup.active&&!d.browser.active&&!d.slot_picker&&!d.paused&&rc_machine_run(m,ticks)!=RC_RUN_OK) { snprintf(error,cap,"%s",rc_machine_error(m));goto done; }
+        if(present)++d.frames;if(input_frame&&!d.setup.active&&!d.browser.active&&!d.slot_picker&&!d.paused)rc_keymap_frame(&d.keymap);
         if(d.wav.file) rc_wav_pump(&d.wav,m);
-        else rc_host_audio_pump(&d.audio,m,(unsigned)c->volume,o->hidden||d.full||!c->sound||d.setup.active||d.browser.active||d.paused);
+        else rc_host_audio_pump(&d.audio,m,(unsigned)c->volume,o->hidden||d.full||!c->sound||d.setup.active||d.browser.active||d.slot_picker||d.paused);
         if(d.video&&present) {
             rc_frame f;if(!picture(&d,&f,error,cap)) goto done;
             rc_video_set_geometry(d.video,(int)f.width,(int)f.height,(int)f.aspect_w,(int)f.aspect_h);

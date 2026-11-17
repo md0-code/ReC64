@@ -75,7 +75,7 @@ def main() -> None:
         client = Client('pal', 'c64-pal')
         try:
             client.call('frames 200'); client.call('expect READY.'); client.call(f'drop {fixture.as_posix()}'); client.call('enter')
-            client.call('until 90 LOADING'); client.call('key Ctrl+F5')
+            client.call('until 90 LOADING'); client.call('key Ctrl+F5'); client.call('enter')
             slot = work/'states/c64-pal/slot-1.rcs'; assert slot.is_file()
             _, rows = chunks(slot.read_bytes()); assert {b'MDIA',b'THMB',b'AUTO',b'SHA2'} <= {r[0] for r in rows}
             client.call('frames 2600'); client.call(f'shot {(work/"expected.png").as_posix()}'); expected = client.save('expected')
@@ -131,7 +131,7 @@ def main() -> None:
         ntsc.call('poke 0400 FF'); ntsc.call('key Ctrl+F6'); ntsc.call('expect Loaded slot 10')
     finally: ntsc.close()
     ntsc = Client('ntsc', 'c64-ntsc', existing=True)
-    try: ntsc.call('key Ctrl+F6'); ntsc.call('expect Loaded slot 10')
+    try: ntsc.call('key Ctrl+F6'); ntsc.call('expect SELECT SNAPSHOT SLOT'); ntsc.call('enter'); ntsc.call('expect Loaded slot 10')
     finally: ntsc.close()
     trace.close()
     result = {'status':'passed', 'continuation_artifacts_reused':args.restart_only, 'version':subprocess.check_output([str(binary), '--version'], text=True).strip(),
