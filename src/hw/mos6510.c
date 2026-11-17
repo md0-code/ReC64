@@ -261,7 +261,9 @@ void rc_mos6510_clock(rc_mos6510 *c,uint8_t value,int ready) {
 void rc_mos6510_input(rc_mos6510 *c,int pin,int level) {
     level=level!=0;
     if(pin==RC_CPU_IRQ)c->irq=(uint8_t)level;
-    else if(pin==RC_CPU_NMI){if(level&&!c->nmi)c->nmi_edge=1;c->nmi=(uint8_t)level;}
+    /* RESET suppresses edge capture; a line already active on release has
+     * no new NMI edge (FC3 powers up with both RESET and NMI asserted). */
+    else if(pin==RC_CPU_NMI){if(level&&!c->nmi&&!c->resetting)c->nmi_edge=1;c->nmi=(uint8_t)level;}
     else if(pin==RC_CPU_RESET&&level)rc_mos6510_reset(c);
     else if(pin==RC_CPU_SO){if(level&&!c->so)c->p|=RC_P_V;c->so=(uint8_t)level;}
 }

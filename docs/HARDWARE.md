@@ -350,6 +350,12 @@ Snapshots retain the image bytes, dirty flag, bank, control, lock and BA;
 restoring a borrowed image retains its media pointer and write protection.
 External flash/freezer mappers bind callbacks to this same port.
 
+Epyx Fastload maps its 8 KiB ROM at 8000-9FFF and its final page at DF00-DFFF.
+CPU ROML or I/O1 reads discharge the enable capacitor; after 512 inactive
+CPU clocks EXROM is released. The remaining capacitor clocks are saved.
+The 6510 suppresses NMI edge capture during RESET, including FC3's simultaneous
+power-on RESET/NMI assertion; a later falling NMI edge remains effective.
+
 `test_cart --fixtures <existing-work-folder>` emits original test CRTs that
 display each mapper's name. Their firmware and Ultimax glyphs are original
 test material, not real cartridge software; mapper-register and exact-state
@@ -357,9 +363,19 @@ checks accompany these startup fixtures.
 ## Freezer cartridges
 
 `hw/cart_freezer` models CRT 1 (Action Replay 4.1/4.2/5/6), 30 (earlier
-MK4 without cartridge RAM), 36 (Retro Replay), and 3 (Final Cartridge III).
+MK4 without cartridge RAM), 36 (Retro Replay), 3 (Final Cartridge III),
+13 (Final Cartridge I/II), 2 (KCS Power Cartridge) and 20 (Super Snapshot 5).
 Original hardware documents and unmodified verification firmware are pinned
 in `sources.lock.json`; test firmware stays under ignored `work/`.
+
+Final Cartridge I/II maps 16 KiB plus its DE/DF ROM mirrors; I/O1 accesses
+disable its main ROM and I/O2 accesses enable it. Its BA-qualified freeze
+counter preloads one and reaches carry after fourteen available clocks.
+KCS provides 16 KiB ROM, 128 bytes of I/O2 RAM, a 9E00 I/O1 mirror and
+GAME/EXROM sensing on I/O2's upper half. I/O1 address A1 and R/W latch
+the mapping. Super Snapshot 5 uses the mirrored DE control latch, 16 KiB
+ROM banks and the expanded four-bank 32 KiB RAM arrangement. It counts
+three CPU writes before switching to its frozen Ultimax RAM/ROM map.
 
 Action Replay 5/6 decoding follows the physical 82S129 PROM dump, including
 its empty ROM windows and cartridge RAM accesses when ROML is not selected.

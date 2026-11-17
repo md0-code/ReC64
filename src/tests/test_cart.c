@@ -80,6 +80,13 @@ int main(int argc,char **argv){
         rc_cart_close(&c);rc_media_close(m);free(f.data);
     }
     f=header(0,0,1,"ULTIMAX");CHECK(f.data);chip(&f,0,0xe000,0x2000,0x63);m=rc_media_from("ultimax-test.crt",f.data,f.size);CHECK(m&&rc_cart_attach(&c,m,error,sizeof error));CHECK(rc_cart_read(&c,0xfffc,RC_CART_ROMH,0,1,1)==0x63);CHECK(!roundtrip(&c));rc_cart_close(&c);rc_media_close(m);free(f.data);
+    f=header(RC_CRT_EPYX,1,1,"EPYX");CHECK(f.data);chip(&f,0,0x8000,0x2000,0x5a);
+    m=rc_media_from("epyx-test.crt",f.data,f.size);CHECK(m&&rc_cart_attach(&c,m,error,sizeof error));
+    CHECK(!rc_cart_get_lines(&c).exrom&&rc_cart_read(&c,0xdf40,RC_CART_IO2,0,1,0)==0x5a);
+    rc_cart_tick(&c,511,1);CHECK(!roundtrip(&c)&&c.capacitor==1);rc_cart_tick(&c,1,1);CHECK(rc_cart_get_lines(&c).exrom);
+    rc_cart_read(&c,0xde00,RC_CART_IO1,0xa5,0,0);CHECK(rc_cart_get_lines(&c).exrom);
+    rc_cart_read(&c,0xde00,RC_CART_IO1,0xa5,1,0);CHECK(c.capacitor==512&&!rc_cart_get_lines(&c).exrom);
+    rc_cart_close(&c);rc_media_close(m);free(f.data);
     /* Flash storage is changed in the borrowed file, including dirty state. */
     f=header(32,0,1,"FLASH STORAGE");CHECK(f.data);chip(&f,0,0x8000,0x2000,0xff);put16(f.data+72,2);m=rc_media_from("flash-test.crt",f.data,f.size);CHECK(m);m->writable=1;CHECK(rc_cart_attach(&c,m,error,sizeof error));CHECK(rc_crt_write(&c.crt,&c.crt.chips[0],3,0x5a)&&m->dirty&&m->data[83]==0x5a);CHECK(!roundtrip(&c));rc_cart_close(&c);rc_media_close(m);free(f.data);
     if(argc==3&&!strcmp(argv[1],"--fixtures"))CHECK(!emit(argv[2]));

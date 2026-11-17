@@ -9,7 +9,7 @@ void rc_setup_init(rc_setup *s,rc_config *c){memset(s,0,sizeof *s);s->config=c;s
     for(unsigned i=0;i<8;++i)if(!strcmp(c->setup_page,IDS[i]))s->page=i;
     if(s->page==RC_SETUP_STATES)s->row=(unsigned)c->state_slot-1u;
 }
-static unsigned rows(const rc_setup *s){return s->page==RC_SETUP_MACHINE?5u:s->page==RC_SETUP_DISPLAY?7u:s->page==RC_SETUP_SOUND?2u:s->page==RC_SETUP_CONTROLLERS?6u:s->page==RC_SETUP_MEDIA?13u:s->page==RC_SETUP_CARTRIDGE?5u:s->page==RC_SETUP_STATES?12u:0;}
+static unsigned rows(const rc_setup *s){return s->page==RC_SETUP_MACHINE?5u:s->page==RC_SETUP_DISPLAY?7u:s->page==RC_SETUP_SOUND?2u:s->page==RC_SETUP_CONTROLLERS?6u:s->page==RC_SETUP_MEDIA?13u:s->page==RC_SETUP_CARTRIDGE?6u:s->page==RC_SETUP_STATES?12u:0;}
 static unsigned cycle(unsigned value,unsigned count,int direction){return (value+count+(direction<0?count-1u:1u))%count;}
 unsigned rc_setup_key(rc_setup *s,const char *key){
     if(!strcmp(key,"ESCAPE")||!strcmp(key,"F12")){s->active=0;return RC_SETUP_CLOSE;}
@@ -24,6 +24,7 @@ unsigned rc_setup_key(rc_setup *s,const char *key){
     if(s->page==RC_SETUP_CARTRIDGE){
         if(!s->cartridge_available)return 0;
         if(s->row<3)return !s->row?RC_SETUP_LOAD:s->row==1?(s->has_cartridge?RC_SETUP_EJECT_CART:0):(s->can_freeze?RC_SETUP_FREEZE:0);
+        if(s->row==5){if(!s->has_cartridge)return 0;rc_config_media *cart=rc_config_media_slot(c,"cartridge");if(cart)cart->startup=!cart->startup;return RC_SETUP_MEDIA_OPTIONS;}
         const rc_family *family=rc_family_of_model(c->model,NULL);const unsigned index=s->row==3?2u:3u,other=index==2?3u:2u;
         if(!family||family->option_count<=other)return 0;
         const rc_option_desc *option=&family->options[index];const char *current=rc_config_option_value(c,option->key);unsigned value=option->initial,value_count=0;
@@ -109,7 +110,8 @@ void rc_setup_draw(rc_setup *s,const uint32_t palette[16],rc_frame *f){
         rc_tui_put(&s->tui,2,2,length>36?name+length-36:name,12,6);
         row(s,0,"LOAD CARTRIDGE","ENTER",s->cartridge_available);row(s,1,"EJECT CARTRIDGE","ENTER",s->has_cartridge);row(s,2,"FREEZE","RIGHT ALT",s->can_freeze);
         const char *reu=rc_config_option_value(c,"reu"),*geo=rc_config_option_value(c,"georam");
-        row(s,3,"REU",reu?reu:"off",s->cartridge_available);row(s,4,"GEORAM",geo?geo:"off",s->cartridge_available);break;}
+        row(s,3,"REU",reu?reu:"off",s->cartridge_available);row(s,4,"GEORAM",geo?geo:"off",s->cartridge_available);
+        row(s,5,"START INSERTED",cart.startup?"ON":"OFF",s->has_cartridge);break;}
     case RC_SETUP_STATES:{
         for(unsigned i=0;i<RC_STATES_SLOTS;++i){char line[22];const int selected=s->row==i;
             snprintf(line,sizeof line,"%c%02u %-14.14s",(unsigned)c->state_slot==i+1?'>':' ',i+1,s->state_status[i]==1?(s->state_time[i][0]?s->state_time[i]+5:"SAVED"):s->state_status[i]==2?"INVALID":"EMPTY");

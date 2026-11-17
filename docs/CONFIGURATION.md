@@ -12,12 +12,18 @@ reSID engine still load: registers are restored and notes start again.
 The Cartridge page loads/ejects CRT images and selects expansion memory.
 Supported cartridges are Normal 8K/16K, Ultimax, Ocean, Magic Desk, Fun Play,
 Super Games, Dinamic, Zaxxon, System 3, Simons' BASIC, EasyFlash, Action
-Replay 4-6, Retro Replay and Final Cartridge III. Attaching or ejecting a
+Replay 4-6, Retro Replay, Final Cartridge I/II and III, Epyx Fastload,
+KCS Power Cartridge and Super Snapshot 5. Attaching or ejecting a
 cartridge resets the machine. Right Alt pressed and released alone triggers
 the physical freeze button; using AltGr with another key does not freeze.
 The page's Freeze row performs the same action. EasyFlash retains completed
 flash writes in the attached CRT, including banks omitted from a sparse
 image; write protection inhibits programming.
+The **Start inserted** row remembers the attached cartridge for the next
+launch (`media.cartridge.startup: true`). It defaults to off. Ejecting the
+cartridge clears the saved image; switching the option off restores
+session-only insertion. Final Cartridge III starts its desktop on cold boot;
+hold RUN/STOP during startup to enter BASIC instead.
 
 `machine.options.reu` accepts `off`, `128k`, `256k`, `512k`, `1m`, `2m`,
 `4m`, `8m`, or `16m`. The first three sizes model the original 1700, 1764
@@ -34,9 +40,10 @@ NTSC and the C64/C64C model. Loading a tune disconnects the cartridge;
 disk and tape images remain attached. Multi-SID files and MUS data requiring
 an external player are refused.
 
-Media choices last for the current session. Reopening ReC64 starts with no
-images attached; snapshots retain their media references. Old configuration
-image paths are ignored and removed when settings are saved. Auto-load
+Disk, tape and program choices last for the current session. Cartridges
+also last for the session unless **Start inserted** is on; snapshots retain
+their media references. Configuration image paths without this opt-in are
+ignored and removed when settings are saved. Auto-load
 pastes each complete command instantly at the BASIC prompt.
 
 F9 toggles one status line: `D8:18.5*M T:001234PM J:2` identifies
@@ -157,7 +164,7 @@ Left or Backspace goes back; at a filesystem root it lists the available
 roots. Typing a name searches the list. Space inserts a selected image
 without loading it. D64 and T64 contents show their PETSCII names, including
 reverse controls; TAP contents use the machine's tape-directory decoder.
-Snapshot files load directly. Cartridge and SID files remain disabled.
+Snapshot, cartridge and SID files load directly on C64 models.
 
 The Save page uses Tab to switch between the file list, format and name.
 Left/Right or Enter changes the format (PRG program, TAP recording or blank

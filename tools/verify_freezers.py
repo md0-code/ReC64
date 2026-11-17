@@ -55,6 +55,7 @@ def main():
         def key(keyname):
             call('key '+keyname); call('frames 5'); call('release '+keyname)
         try:
+            call('insert cartridge '+fixture.as_posix())
             # Original FC3 manual: RUN/STOP during power-on enters BASIC.
             if name == 'fc3': call('key Escape')
             call('frames 150')

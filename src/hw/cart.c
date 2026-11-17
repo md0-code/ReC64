@@ -3,18 +3,19 @@
 #include <string.h>
 void rc_cart_init(rc_cart *c){memset(c,0,sizeof *c);c->ba=1;}
 void rc_cart_close(rc_cart *c){rc_crt_close(&c->crt);rc_cart_init(c);}
-int rc_cart_supported(unsigned h){switch(h){case RC_CRT_NORMAL:case RC_CRT_SIMONS_BASIC:case RC_CRT_OCEAN:case RC_CRT_FUN_PLAY:case RC_CRT_SUPER_GAMES:case RC_CRT_SYSTEM3:case RC_CRT_DINAMIC:case RC_CRT_ZAXXON:case RC_CRT_MAGIC_DESK:return 1;default:return 0;}}
+int rc_cart_supported(unsigned h){switch(h){case RC_CRT_NORMAL:case RC_CRT_EPYX:case RC_CRT_SIMONS_BASIC:case RC_CRT_OCEAN:case RC_CRT_FUN_PLAY:case RC_CRT_SUPER_GAMES:case RC_CRT_SYSTEM3:case RC_CRT_DINAMIC:case RC_CRT_ZAXXON:case RC_CRT_MAGIC_DESK:return 1;default:return 0;}}
 int rc_cart_attach(rc_cart *c,rc_media *m,char *error,size_t cap){
     if(!rc_crt_attach(&c->crt,m,error,cap))return 0;c->ops=NULL;c->ctx=NULL;rc_cart_reset(c);return 1;
 }
 void rc_cart_bind(rc_cart *c,const rc_cart_ops *ops,void *ctx){c->ops=ops;c->ctx=ctx;rc_cart_reset(c);}
-void rc_cart_reset(rc_cart *c){c->bank=0;c->control=0;c->locked=0;c->ba=1;if(c->ops&&c->ops->reset)c->ops->reset(c->ctx);}
+void rc_cart_reset(rc_cart *c){c->bank=0;c->control=0;c->locked=0;c->ba=1;c->capacitor=c->crt.hardware==RC_CRT_EPYX?512:0;if(c->ops&&c->ops->reset)c->ops->reset(c->ctx);}
 void rc_cart_observe(rc_cart *c,uint16_t a,int write,int effects,int vic){if(c->ops&&c->ops->observe)c->ops->observe(c->ctx,a,write,effects,vic);}
 rc_cart_lines rc_cart_get_lines(const rc_cart *c){
     rc_cart_lines p={1,1,1,1,1,c->ba};if(c->ops&&c->ops->lines){p=c->ops->lines(c->ctx);p.ba=c->ba;return p;}
     if(!c->crt.image||!rc_cart_supported(c->crt.hardware))return p;
     p.game=c->crt.game;p.exrom=c->crt.exrom;
     switch(c->crt.hardware){
+    case RC_CRT_EPYX:p.game=1;p.exrom=c->capacitor==0;break;
     case RC_CRT_SIMONS_BASIC:p.game=c->control&1u;p.exrom=0;break;
     case RC_CRT_FUN_PLAY:p.game=c->control==0x86;p.exrom=p.game;break;
     case RC_CRT_SUPER_GAMES:p.game=(c->control>>2)&1u;p.exrom=p.game;break;
@@ -25,6 +26,7 @@ rc_cart_lines rc_cart_get_lines(const rc_cart *c){
     }return p;
 }
 static const rc_crt_chip *read_chip(const rc_cart *c,uint16_t a,unsigned sel,unsigned *address){
+    if(c->crt.hardware==RC_CRT_EPYX&&(sel&RC_CART_IO2)){*address=0x9f00u+(a&255u);return rc_crt_find(&c->crt,0,*address);}
     if(!c->crt.image||!(sel&(RC_CART_ROML|RC_CART_ROMH))||!rc_cart_supported(c->crt.hardware))return NULL;
     unsigned bank=c->bank;*address=(sel&RC_CART_ROMH?0xa000u:0x8000u)+(a&0x1fffu);
     if(c->crt.hardware==RC_CRT_NORMAL){bank=0;*address=a;}
@@ -52,6 +54,7 @@ uint8_t rc_cart_read(rc_cart *c,uint16_t a,unsigned sel,uint8_t bus,int effects,
     if(c->ops&&c->ops->read)return c->ops->read(c->ctx,a,sel,bus,effects,vic);
     if(!c->crt.image||!rc_cart_supported(c->crt.hardware))return bus;
     if(effects&&!vic){
+        if(c->crt.hardware==RC_CRT_EPYX&&(sel&(RC_CART_ROML|RC_CART_IO1)))c->capacitor=512;
         if((sel&RC_CART_IO1)&&c->crt.hardware==RC_CRT_DINAMIC)c->bank=a&15u;
         if((sel&RC_CART_IO1)&&c->crt.hardware==RC_CRT_SYSTEM3)c->bank=0;
         if((sel&RC_CART_IO1)&&a==0xde00&&c->crt.hardware==RC_CRT_SIMONS_BASIC)c->control=1;
@@ -74,20 +77,21 @@ void rc_cart_write(rc_cart *c,uint16_t a,unsigned sel,uint8_t v){
     default:break;
     }
 }
-void rc_cart_tick(rc_cart *c,uint64_t cycles,int ba){c->ba=(uint8_t)(ba!=0);if(c->ops&&c->ops->tick)c->ops->tick(c->ctx,cycles,ba);}
+void rc_cart_tick(rc_cart *c,uint64_t cycles,int ba){c->ba=(uint8_t)(ba!=0);if(c->capacitor)c->capacitor=cycles>=c->capacitor?0:(uint16_t)(c->capacitor-cycles);if(c->ops&&c->ops->tick)c->ops->tick(c->ctx,cycles,ba);}
 void rc_cart_freeze(rc_cart *c,int pressed){if(c->ops&&c->ops->freeze)c->ops->freeze(c->ctx,pressed);}
 void rc_cart_save(const rc_cart *c,rc_state_writer *w){
-    rc_sw_u32(w,1);rc_sw_u16(w,c->bank);rc_sw_u8(w,c->control);rc_sw_u8(w,c->locked);rc_sw_u8(w,c->ba);rc_sw_u8(w,c->ops!=NULL);rc_crt_save(&c->crt,w);
+    rc_sw_u32(w,2);rc_sw_u16(w,c->bank);rc_sw_u8(w,c->control);rc_sw_u8(w,c->locked);rc_sw_u8(w,c->ba);rc_sw_u8(w,c->ops!=NULL);rc_sw_u16(w,c->capacitor);rc_crt_save(&c->crt,w);
     if(c->ops){if(c->ops->save)c->ops->save(c->ctx,w);else w->failed=1;}
 }
 int rc_cart_load(rc_cart *c,rc_state_reader *r){
-    if(rc_sr_u32(r)!=1)return 0;uint16_t bank=rc_sr_u16(r);uint8_t control=rc_sr_u8(r),locked=rc_sr_u8(r),ba=rc_sr_u8(r),external=rc_sr_u8(r);
-    if(!rc_sr_ok(r)||locked>1||ba>1||external>1||external!=(c->ops!=NULL))return 0;
+    unsigned version=rc_sr_u32(r);if(version<1||version>2)return 0;uint16_t bank=rc_sr_u16(r);uint8_t control=rc_sr_u8(r),locked=rc_sr_u8(r),ba=rc_sr_u8(r),external=rc_sr_u8(r);
+    uint16_t capacitor=version>=2?rc_sr_u16(r):0;
+    if(!rc_sr_ok(r)||capacitor>512||locked>1||ba>1||external>1||external!=(c->ops!=NULL))return 0;
     rc_crt next;rc_crt_init(&next);if(!rc_crt_load(&next,r))return 0;
     if(external&&(!c->crt.image||!next.image||next.hardware!=c->crt.hardware||!c->ops->load||!c->ops->load(c->ctx,r))){rc_crt_close(&next);return 0;}
     if(c->crt.image&&!c->crt.owned&&next.image){
         rc_media *m=c->crt.image;
         free(m->data);m->data=next.image->data;m->size=next.image->size;m->dirty=next.image->dirty;next.image->data=NULL;rc_media_close(next.image);next.image=m;next.owned=0;
     }
-    rc_crt_close(&c->crt);c->crt=next;c->bank=bank;c->control=control;c->locked=locked;c->ba=ba;return rc_sr_ok(r);
+    rc_crt_close(&c->crt);c->crt=next;c->bank=bank;c->control=control;c->locked=locked;c->ba=ba;c->capacitor=capacitor;return rc_sr_ok(r);
 }

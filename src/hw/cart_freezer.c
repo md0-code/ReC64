@@ -1,5 +1,5 @@
-/* Hardware only: Kontros AR5/6 circuit/PROM, Schoenfeld MK4 and Retro Replay,
- * Giesel FC3 errata and Mantione's measured FC3 freeze timing. */
+/* Hardware only: Kontros AR5/6, Schoenfeld MK4/RR, Giesel/Mantione FC3,
+ * FC1 and de Keijzer KCS schematics, Gonzalez SS5-compatible hardware notes. */
 #include "cart_freezer.h"
 #include <string.h>
 
@@ -20,10 +20,13 @@ static const uint8_t ar_prom[128]={
 
 int rc_freezer_supported(unsigned h){
     return h==RC_CRT_ACTION_REPLAY || h==RC_CRT_ACTION_REPLAY4 ||
-           h==RC_CRT_RETRO_REPLAY || h==RC_CRT_FINAL_III;
+           h==RC_CRT_RETRO_REPLAY || h==RC_CRT_FINAL_III ||
+           h==RC_CRT_KCS || h==RC_CRT_FINAL_I || h==RC_CRT_SUPER_SNAPSHOT5;
 }
 static unsigned bank(const rc_freezer *f){
     if(f->hardware==RC_CRT_FINAL_III)return f->control&3u;
+    if(f->hardware==RC_CRT_SUPER_SNAPSHOT5)return ((f->control>>2)&1u)|((f->control>>3)&2u)|((f->control>>3)&4u);
+    if(f->hardware==RC_CRT_KCS||f->hardware==RC_CRT_FINAL_I)return 0;
     if(f->hardware==RC_CRT_ACTION_REPLAY4)return (f->control&1u)|((f->control>>3)&2u);
     return ((f->control>>3)&3u)|(f->hardware==RC_CRT_RETRO_REPLAY?((f->control>>5)&4u):0u);
 }
@@ -45,9 +48,27 @@ static uint8_t prom(const rc_freezer *f,uint16_t a,unsigned selected){
     if(f->frozen)return n>=0x78?10:11;
     return ar_prom[n];
 }
-/* 0=no driver, 1=ROM, 2=RAM, 3=Retro Replay read register. */
+/* 0=no driver, 1=ROM, 2=RAM, 3=read register or KCS line sensing. */
 static int decode(const rc_freezer *f,uint16_t a,unsigned s,int vic,unsigned *offset){
     *offset=a&0x1fffu;
+    if(f->hardware==RC_CRT_KCS){
+        if(s&RC_CART_IO1){*offset=0x1e00u+(a&255u);return 1;}
+        if(s&RC_CART_IO2){*offset=a&127u;return (a&128u)?3:2;}
+        if(s&RC_CART_ROMH){*offset+=0x2000u;return 1;}
+        return (s&RC_CART_ROML)?1:0;
+    }
+    if(f->hardware==RC_CRT_FINAL_I){
+        if(s&(RC_CART_IO1|RC_CART_IO2)){*offset=a&0x3fffu;return 1;}
+        if(s&RC_CART_ROMH){*offset+=0x2000u;return 1;}
+        return (s&RC_CART_ROML)?1:0;
+    }
+    if(f->hardware==RC_CRT_SUPER_SNAPSHOT5){
+        if(f->control&8)return 0;
+        if(s&RC_CART_IO1){*offset=0x1e00u+(a&255u);return 1;}
+        if(s&RC_CART_ROMH){*offset+=0x2000u;return 1;}
+        if(s&RC_CART_ROML){if(!(f->control&2)){*offset+=(bank(f)&3u)*8192u;return 2;}return 1;}
+        return 0;
+    }
     if(f->hardware==RC_CRT_FINAL_III){
         if(s&(RC_CART_IO1|RC_CART_IO2)){*offset=0x1e00u+(a&0x1ffu);return 1;}
         if(s&RC_CART_ROMH){*offset=0x2000u+(a&0x1fffu);return 1;}
@@ -84,6 +105,8 @@ static int decode(const rc_freezer *f,uint16_t a,unsigned s,int vic,unsigned *of
     return (f->control&1) && !f->frozen?0:1;
 }
 static uint8_t drive_mask(const void *ctx,uint16_t a,unsigned selected,int vic){
+    const rc_freezer *f=ctx;
+    if(f->hardware==RC_CRT_KCS&&(selected&RC_CART_IO2)&&(a&128u))return 0xc0;
     unsigned offset;return decode(ctx,a,selected,vic,&offset)?255:0;
 }
 static void control(rc_freezer *f,uint8_t v){
@@ -97,8 +120,15 @@ static void control(rc_freezer *f,uint8_t v){
 static uint8_t read(void *ctx,uint16_t a,unsigned selected,uint8_t bus,int effects,int vic){
     rc_freezer *f=ctx;unsigned offset;
     int d=decode(f,a,selected,vic,&offset);
-    uint8_t value=d==1?rom(f,offset,bus):d==2?f->ram[offset]:
+    const rc_cart_lines l=rc_freezer_ops.lines(f);
+    uint8_t value=f->hardware==RC_CRT_KCS&&d==3?(uint8_t)((bus&63u)|(l.game<<6)|(l.exrom<<7)):
+        d==1?rom(f,offset,bus):d==2?f->ram[offset]:
         d==3?(uint8_t)((f->control&0x98)|(f->extended&0x42)|(f->button?4:0)):bus;
+    if(effects&&!vic){
+        if(f->hardware==RC_CRT_KCS&&(selected&RC_CART_IO1)){f->control=(uint8_t)(1u|(a&2u));f->frozen=f->pending=0;}
+        if(f->hardware==RC_CRT_KCS&&(selected&RC_CART_IO2)&&(a&128u))f->pending=0;
+        if(f->hardware==RC_CRT_FINAL_I&&(selected&(RC_CART_IO1|RC_CART_IO2))){f->control=(selected&RC_CART_IO1)?3:0;f->frozen=f->pending=0;}
+    }
     /* Both Datel circuits clock IO1 reads too; data is the preceding VIC bus. */
     if(effects && !vic && (selected&RC_CART_IO1) &&
        (f->hardware==RC_CRT_ACTION_REPLAY || f->hardware==RC_CRT_ACTION_REPLAY4))control(f,bus);
@@ -106,6 +136,17 @@ static uint8_t read(void *ctx,uint16_t a,unsigned selected,uint8_t bus,int effec
 }
 static void write(void *ctx,uint16_t a,unsigned selected,uint8_t value){
     rc_freezer *f=ctx;
+    if(f->hardware==RC_CRT_KCS){
+        if(selected&RC_CART_IO1){f->control=(uint8_t)(a&2u);f->frozen=f->pending=0;}
+        if(selected&RC_CART_IO2){if(a&128u)f->pending=0;else f->ram[a&127u]=value;}
+        return;
+    }
+    if(f->hardware==RC_CRT_FINAL_I){if(selected&(RC_CART_IO1|RC_CART_IO2)){f->control=(selected&RC_CART_IO1)?3:0;f->frozen=f->pending=0;}return;}
+    if(f->hardware==RC_CRT_SUPER_SNAPSHOT5){
+        if((selected&RC_CART_IO1)&&!(f->control&8)){f->control=value&63u;f->pending=f->frozen=0;}
+        else if((selected&RC_CART_ROML)&&!(f->control&10u))f->ram[(bank(f)&3u)*8192u+(a&8191u)]=value;
+        return;
+    }
     if(f->hardware==RC_CRT_FINAL_III){
         if((selected&RC_CART_IO2) && a==0xdfff && (!(f->control&128)||f->button))f->control=value;
         return;
@@ -124,6 +165,11 @@ static void write(void *ctx,uint16_t a,unsigned selected,uint8_t value){
 }
 static rc_cart_lines lines(const void *ctx){
     const rc_freezer *f=ctx;rc_cart_lines l={1,1,1,1,1,f->ba};
+    if(f->hardware==RC_CRT_KCS||f->hardware==RC_CRT_FINAL_I||f->hardware==RC_CRT_SUPER_SNAPSHOT5){
+        l.game=f->control&1u;l.exrom=(f->control>>1)&1u;
+        if(f->hardware==RC_CRT_SUPER_SNAPSHOT5)l.exrom^=1;
+        if(f->frozen){l.game=0;l.exrom=1;}l.nmi=(uint8_t)!f->pending;return l;
+    }
     if(f->hardware==RC_CRT_FINAL_III){
         l.game=(uint8_t)((f->control>>5)&1);l.exrom=(uint8_t)((f->control>>4)&1);
         l.nmi=(uint8_t)(((f->control>>6)&1) && !f->button);
@@ -142,15 +188,16 @@ static void reset(void *ctx){
     rc_freezer *f=ctx;f->control=f->extended=f->extended_written=0;
     f->button=f->pending=f->frozen=f->count=f->button_age=0;f->ba=1;
     f->enabled=(uint8_t)(f->hardware!=RC_CRT_ACTION_REPLAY4);
+    if(f->hardware==RC_CRT_SUPER_SNAPSHOT5)f->control=2;
 }
 int rc_freezer_init(rc_freezer *f,rc_crt *crt){
     if(!f || !crt || !rc_freezer_supported(crt->hardware) || !crt->image ||
        !crt->image->data || !crt->chips || !crt->count)return 0;
-    unsigned banks=crt->hardware==RC_CRT_RETRO_REPLAY?8:4;
-    unsigned bytes=crt->hardware==RC_CRT_FINAL_III?16384:8192;
+    unsigned banks=crt->hardware==RC_CRT_RETRO_REPLAY||crt->hardware==RC_CRT_SUPER_SNAPSHOT5?8:4;
+    unsigned bytes=crt->hardware==RC_CRT_FINAL_III||crt->hardware==RC_CRT_SUPER_SNAPSHOT5||crt->hardware==RC_CRT_FINAL_I?16384:8192;
     for(size_t i=0;i<crt->count;++i){
         const rc_crt_chip *c=&crt->chips[i];
-        if(c->type==1 || c->type>2 || c->bank>=banks || c->address!=0x8000 ||
+        if(c->type==1 || c->type>2 || c->bank>=banks || (c->address!=0x8000&&!(crt->hardware==RC_CRT_KCS&&c->address==0xa000)) ||
            c->size!=bytes || c->offset>crt->image->size ||
            c->size>crt->image->size-c->offset)return 0;
     }
@@ -158,6 +205,7 @@ int rc_freezer_init(rc_freezer *f,rc_crt *crt){
 }
 static void observe(void *ctx,uint16_t a,int wr,int effects,int vic){
     rc_freezer *f=ctx;(void)a;
+    if(effects&&!vic&&f->hardware==RC_CRT_SUPER_SNAPSHOT5&&f->pending&&!f->frozen&&wr&&++f->count==3){f->frozen=1;f->control=0;}
     if(!effects || vic || f->hardware!=RC_CRT_RETRO_REPLAY || !f->pending)return;
     f->count=wr?(uint8_t)(f->count+1):0;
     if(f->count==3){f->pending=0;f->frozen=1;f->enabled=1;f->control=0;}
@@ -171,7 +219,9 @@ static void tick(void *ctx,uint64_t cycles,int ba){
         if(f->button && ba && f->count<7){
             uint64_t n=cycles+f->count;f->count=(uint8_t)(n<7?n:7);
         }
-    }else if(f->hardware!=RC_CRT_RETRO_REPLAY && f->pending){
+    }else if(f->hardware==RC_CRT_FINAL_I&&f->pending){
+        if(!ba)f->count=0;else if(cycles>=(uint64_t)(14-f->count)){f->count=14;f->frozen=1;}else f->count=(uint8_t)(f->count+cycles);
+    }else if(f->hardware!=RC_CRT_RETRO_REPLAY && f->hardware!=RC_CRT_KCS&&f->hardware!=RC_CRT_SUPER_SNAPSHOT5&&f->pending){
         if(!ba)f->count=0; /* /LOAD, not count-enable: five consecutive free clocks */
         else if(cycles>=(uint64_t)(5-f->count)){
             f->count=5;f->pending=0;f->frozen=1;f->enabled=1;f->control=0;
@@ -181,6 +231,10 @@ static void tick(void *ctx,uint64_t cycles,int ba){
 static void freeze(void *ctx,int pressed){
     rc_freezer *f=ctx;pressed=!!pressed;if(f->button==pressed)return;
     f->button=(uint8_t)pressed;
+    if(f->hardware==RC_CRT_KCS||f->hardware==RC_CRT_FINAL_I||f->hardware==RC_CRT_SUPER_SNAPSHOT5){
+        if(pressed){f->pending=1;f->count=0;f->frozen=(uint8_t)(f->hardware==RC_CRT_KCS);}
+        return;
+    }
     if(f->hardware==RC_CRT_FINAL_III){f->count=0;f->button_age=0;return;}
     if(pressed){
         f->button_age=0;
@@ -207,7 +261,7 @@ int rc_freezer_load(rc_freezer *f,rc_state_reader *r){
     t.count=rc_sr_u8(r);t.button_age=rc_sr_u8(r);t.ba=rc_sr_u8(r);
     rc_sr_packed(r,t.ram,sizeof t.ram);
     if(!rc_sr_ok(r)||t.extended_written>1||t.enabled>1||t.button>1||t.pending>1||
-       t.frozen>1||t.count>7||t.button_age>3||t.ba>1||(t.extended&~0x47))return 0;
+       t.frozen>1||t.count>(f->hardware==RC_CRT_FINAL_I?14:7)||t.button_age>3||t.ba>1||(t.extended&~0x47))return 0;
     *f=t;return 1;
 }
 static void save_op(const void *ctx,rc_state_writer *w){rc_freezer_save(ctx,w);}

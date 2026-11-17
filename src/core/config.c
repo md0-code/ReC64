@@ -254,7 +254,7 @@ void rc_config_media_settings(const rc_config *c,const char *key,rc_config_media
     out->fast=out->sound=out->autoload=out->full_speed=out->traps=out->save_traps=out->accelerate=1;
     const rc_config_media *shared=!strcmp(key,"program")?rc_config_media_find(c,"tape"):NULL,*own=rc_config_media_find(c,key);
     if(shared){out->fast=shared->fast;out->sound=shared->sound;out->autoload=shared->autoload;out->full_speed=shared->full_speed;out->traps=shared->traps;out->save_traps=shared->save_traps;out->accelerate=shared->accelerate;}
-    if(own){snprintf(out->image,sizeof out->image,"%s",own->image);out->write_protect=own->write_protect;out->explicit_flags=own->explicit_flags;
+    if(own){snprintf(out->image,sizeof out->image,"%s",own->image);out->write_protect=own->write_protect;out->startup=own->startup;out->explicit_flags=own->explicit_flags;
 #define OVERRIDE(field,flag) if(!shared||(own->explicit_flags&flag))out->field=own->field
         OVERRIDE(fast,RC_MEDIA_SETTING_FAST);OVERRIDE(sound,RC_MEDIA_SETTING_SOUND);OVERRIDE(autoload,RC_MEDIA_SETTING_AUTOLOAD);OVERRIDE(full_speed,RC_MEDIA_SETTING_FULL_SPEED);
         OVERRIDE(traps,RC_MEDIA_SETTING_TRAPS);OVERRIDE(save_traps,RC_MEDIA_SETTING_SAVE_TRAPS);OVERRIDE(accelerate,RC_MEDIA_SETTING_ACCELERATE);
@@ -421,6 +421,7 @@ static int media_section(reader *r, yaml_node_t *v, const char *base, rc_config 
                 ok = s != NULL;
                 if (ok && *s) ok = path_value(r, s, base, m->image);
             } else if (!strcmp(key, "write_protect")) ok = boolean(r, x, &m->write_protect);
+            else if (!strcmp(key, "startup") && !strcmp(name,"cartridge")) ok = boolean(r, x, &m->startup);
             else if (!strcmp(key, "fast")) ok = boolean(r, x, &m->fast);
             else if (!strcmp(key, "sound")) ok = boolean(r, x, &m->sound);
             else if (!strcmp(key, "autoload")) ok = boolean(r, x, &m->autoload);
@@ -428,7 +429,7 @@ static int media_section(reader *r, yaml_node_t *v, const char *base, rc_config 
             else if (!strcmp(key, "traps")) ok = boolean(r, x, &m->traps);
             else if (!strcmp(key, "save_traps")) ok = boolean(r, x, &m->save_traps);
             else if (!strcmp(key, "accelerate")) ok = boolean(r, x, &m->accelerate);
-            else ok = fail(r, "Unknown media key; expected image, write_protect, fast, sound, autoload, full_speed, traps, save_traps or accelerate");
+            else ok = fail(r, "Unknown media key; expected image, write_protect, startup (cartridge only), fast, sound, autoload, full_speed, traps, save_traps or accelerate");
             if (!ok) return 0;
             static const char *const fields[]={"fast","sound","autoload","full_speed","traps","save_traps","accelerate","write_protect"};
             for(unsigned bit=0;bit<8;++bit)if(!strcmp(key,fields[bit]))m->explicit_flags|=1u<<bit;
@@ -813,7 +814,10 @@ int rc_config_store(const rc_config *c, struct rc_ydoc *doc) {
     for (unsigned i = 0; ok && i < c->media_count; ++i) {
         const rc_config_media *m = &c->media[i];
         const char *image[3]={"media",m->key,"image"};
-        ok=rc_ydoc_remove(doc,image,3);
+        char base[RC_CONFIG_PATH];folder_of(c->source,base);size_t n=strlen(base);
+        const char *image_path=n&&!strncmp(m->image,base,n)?m->image+n:m->image;
+        ok=!strcmp(m->key,"cartridge")&&m->startup&&m->image[0]?set_scalar(doc,image,3,image_path,1):rc_ydoc_remove(doc,image,3);
+        if(ok&&!strcmp(m->key,"cartridge")){const char *path[3]={"media",m->key,"startup"};ok=set_unless_default(doc,path,3,m->startup?"true":"false",2,!m->startup);}
         static const char *const names[]={"fast","sound","autoload","full_speed","traps","save_traps","accelerate","write_protect"};
         const int values[]={m->fast,m->sound,m->autoload,m->full_speed,m->traps,m->save_traps,m->accelerate,m->write_protect};
         for(unsigned bit=0;ok&&bit<8;++bit){const char *path[3]={"media",m->key,names[bit]};

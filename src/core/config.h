@@ -57,6 +57,7 @@ typedef struct rc_config_media {
     char key[RC_CONFIG_NAME];
     char image[RC_CONFIG_PATH];         /* empty: an empty slot */
     int write_protect;
+    int startup;                        /* cartridge: keep this image inserted on launch */
     int fast;                           /* not original: the shell runs at full speed while this slot works; a tape is also
                                          * loaded and saved by the fast means below */
     /* Media playback and loading. */

@@ -47,6 +47,8 @@ Load CRT cartridges through Ctrl+F1, drag and drop, or the Cartridge page.
 That page also selects REU or GeoRAM memory. Right Alt pressed and released
 alone activates supported freezer cartridges. EasyFlash writes are saved
 to the attached CRT image unless it is write protected.
+Turn on **Start inserted** on the Cartridge page to keep the attached
+cartridge inserted when ReC64 next starts.
 
 SID files open in the music player with title, author, release, elapsed time
 and sub-tune selection. Left/Right changes tune, Space pauses, and Escape

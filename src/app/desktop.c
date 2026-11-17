@@ -615,8 +615,13 @@ int rc_desktop_run(rc_machine **owner,rc_config *c,const rc_rom_index *roms,cons
         if(c->sound) rc_host_audio_open(&d.audio);
     }
     input_config(&d);
-    /* Media choices belong to this session; old saved paths are ignored. */
-    for(unsigned i=0;i<c->media_count;++i)c->media[i].image[0]=0;
+    /* Only the explicitly selected startup cartridge survives a new session. */
+    for(unsigned i=0;i<c->media_count;++i)if(strcmp(c->media[i].key,"cartridge")||!c->media[i].startup)c->media[i].image[0]=0;
+    const rc_config_media *startup=rc_config_media_find(c,"cartridge");
+    if(startup&&startup->startup&&startup->image[0]&&rc_machine_family(d.machine)->media_count>3){
+        char path[RC_CONFIG_PATH];snprintf(path,sizeof path,"%s",startup->image);
+        if(!mount_media(&d,3,path,error,cap))message(&d,error);
+    }
     media_options(&d);media_status(&d);
     if(!store_config(&d,error,cap))message(&d,error);
     if(o->audio&&!audio_capture(&d,o->audio,error,cap)) goto done;

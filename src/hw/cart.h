@@ -23,6 +23,7 @@ typedef struct rc_cart {
     rc_crt crt;
     const rc_cart_ops *ops; void *ctx; /* external mapper, board owned */
     uint16_t bank;
+    uint16_t capacitor;                /* Epyx ROM enable decay, CPU clocks */
     uint8_t control,locked,ba;
 } rc_cart;
 void rc_cart_init(rc_cart *c);

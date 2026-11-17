@@ -65,5 +65,24 @@ int main(void){
     CHECK(roundtrip()==0);o->tick(&f,1,1);CHECK(!o->lines(&f).game);
     wr(0xdfff,RC_CART_IO2,0x13);o->freeze(&f,0);CHECK(!o->lines(&f).game&&!o->lines(&f).nmi);
     wr(0xdfff,RC_CART_IO2,0x73);CHECK(o->lines(&f).nmi&&o->lines(&f).game);
+    crt.hardware=RC_CRT_FINAL_I;crt.count=1;CHECK(rc_freezer_init(&f,&crt));
+    rd(0xde00,RC_CART_IO1);CHECK(o->lines(&f).game&&o->lines(&f).exrom);
+    rd(0xdf00,RC_CART_IO2);CHECK(!o->lines(&f).game&&!o->lines(&f).exrom);
+    pulse();o->tick(&f,14,1);CHECK(f.frozen&&!roundtrip());
+
+    crt.hardware=RC_CRT_SUPER_SNAPSHOT5;crt.count=4;CHECK(rc_freezer_init(&f,&crt));
+    wr(0xde01,RC_CART_IO1,0x14);wr(0x8123,RC_CART_ROML,0x5a);CHECK(rd(0x8123,RC_CART_ROML)==0x5a);
+    wr(0xde00,RC_CART_IO1,0x16);CHECK(rd(0xa000,RC_CART_ROMH)==0xe0);
+    wr(0xde00,RC_CART_IO1,9);pulse();o->observe(&f,0x1ff,1,1,0);o->observe(&f,0x1fe,1,1,0);
+    CHECK(!f.frozen&&!roundtrip());o->observe(&f,0x1fd,1,1,0);CHECK(f.frozen&&!(f.control&3));
+    CHECK(!roundtrip());wr(0xde00,RC_CART_IO1,1);CHECK(!f.frozen&&o->lines(&f).nmi);
+
+    chips[0]=(rc_crt_chip){0,0,0x8000,8192,0};chips[1]=(rc_crt_chip){0,0,0xa000,8192,8192};
+    crt.hardware=RC_CRT_KCS;crt.count=2;CHECK(rc_freezer_init(&f,&crt));
+    wr(0xdf22,RC_CART_IO2,0x9a);CHECK(rd(0xdf22,RC_CART_IO2)==0x9a);
+    rd(0xde02,RC_CART_IO1);CHECK(o->lines(&f).game&&o->lines(&f).exrom);
+    wr(0xde00,RC_CART_IO1,0);CHECK(!o->lines(&f).game&&!o->lines(&f).exrom);
+    pulse();CHECK(!o->lines(&f).nmi&&o->lines(&f).exrom);CHECK((rd(0xdf80,RC_CART_IO2)&0xc0)==0x80&&o->lines(&f).nmi);
+    CHECK(!roundtrip());
     puts("Freezer banking, RAM, I/O, physical freeze sequencing and state OK");return 0;
 }
