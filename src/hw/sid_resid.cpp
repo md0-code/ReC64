@@ -15,6 +15,17 @@ extern "C" {
 }
 enum { CLOCK=1,WRITE=2,READ=3 };
 struct entry {uint8_t kind,reg,value;uint32_t cycles;};
+static uint32_t probe_bus_lifetime(unsigned model){
+    void *storage=std::calloc(1,sizeof(reSID::SID));if(!storage)throw std::bad_alloc();
+    reSID::SID *probe=nullptr;
+    try{probe=new(storage) reSID::SID();probe->set_chip_model(model==RC_SID_8580?reSID::MOS8580:reSID::MOS6581);
+        const uint32_t ttl=static_cast<uint32_t>(probe->read_state().bus_value_ttl);probe->~SID();std::free(storage);return ttl;
+    }catch(...){if(probe)probe->~SID();std::free(storage);throw;}
+}
+static uint32_t nominal_bus_lifetime(unsigned model){
+    /* read_state changes the oracle's live bus. Query isolated instances once. */
+    static const uint32_t ttl[2]={probe_bus_lifetime(RC_SID_6581),probe_bus_lifetime(RC_SID_8580)};return ttl[model];
+}
 struct engine {
     /* The pinned library expects zeroed construction storage on this host. */
     static void *operator new(size_t bytes){void *p=std::calloc(1,bytes);if(!p)throw std::bad_alloc();return p;}
@@ -22,10 +33,10 @@ struct engine {
     reSID::SID sid;
     std::vector<entry> journal;
     std::deque<int16_t> samples;
-    uint32_t model,hz,rate;
+    uint32_t model,hz,rate,bus_lifetime;
     uint8_t pot_bus=0;uint32_t pot_ttl=0;
     bool failed;
-    engine(uint32_t m,uint32_t h,uint32_t r):model(m),hz(h),rate(r),failed(false){
+    engine(uint32_t m,uint32_t h,uint32_t r):model(m),hz(h),rate(r),bus_lifetime(nominal_bus_lifetime(m)),failed(false){
         sid.set_chip_model(m==RC_SID_8580?reSID::MOS8580:reSID::MOS6581);
         if(!sid.set_sampling_parameters(h,reSID::SAMPLE_RESAMPLE,r))throw std::bad_alloc();
         sid.reset();
@@ -65,11 +76,17 @@ uint8_t rc_sid_read(rc_sid *s,unsigned reg){engine *e=get(s);if(!e||e->failed)re
         if((reg&31u)>=25&&(reg&31u)<=28){e->pot_ttl=0;return value;}return e->pot_ttl?e->pot_bus:value;}catch(...){e->failed=true;return 255;}}
 uint8_t rc_sid_pot_read(rc_sid *s,unsigned reg,uint8_t value){
     rc_sid_read(s,reg);engine *e=get(s);if(!e||e->failed)return 255;
-    /* The public State supplies the selected model's bus lifetime. The
-     * ADC overlay leaves reSID's analogue filters and FIR history intact. */
-    e->pot_bus=value;e->pot_ttl=static_cast<uint32_t>(e->sid.read_state().bus_value_ttl);return value;
+    e->pot_bus=value;e->pot_ttl=e->bus_lifetime;return value;
 }
-uint8_t rc_sid_peek(rc_sid *s,unsigned reg){engine *e=get(s);if(!e||e->failed)return 255;const reSID::SID::State state=e->sid.read_state();reg&=31u;if(e->pot_ttl&&(reg<25||reg>28))return e->pot_bus;return static_cast<uint8_t>(reg>=25&&reg<=28?state.sid_register[reg]:state.bus_value);}
+uint8_t rc_sid_peek(rc_sid *s,unsigned reg){
+    engine *e=get(s);if(!e||e->failed)return 255;reg&=31u;if(e->pot_ttl&&(reg<25||reg>28))return e->pot_bus;
+    /* A debugger read must not call read_state on the live chip: that public
+     * API performs register reads and changes its bus. Replay into a copy. */
+    try{std::unique_ptr<engine> copy(new engine(e->model,e->hz,e->rate));
+        for(const entry &v:e->journal){if(v.kind==CLOCK)copy->clock(v.cycles,false);else if(v.kind==WRITE)copy->sid.write(v.reg,v.value);else copy->sid.read(v.reg);}
+        return static_cast<uint8_t>(copy->sid.read(reg));
+    }catch(...){return 255;}
+}
 void rc_sid_write(rc_sid *s,unsigned reg,uint8_t v){engine *e=get(s);if(!e||e->failed)return;try{e->record(entry{WRITE,static_cast<uint8_t>(reg&31u),v,0});e->sid.write(reg&31u,v);e->pot_ttl=0;}catch(...){e->failed=true;}}
 int rc_sid_clock(rc_sid *s,uint32_t cycles){engine *e=get(s);if(!e||e->failed)return 0;try{if(cycles){e->record(entry{CLOCK,0,0,cycles});e->clock(cycles,true);e->pot_ttl=cycles>=e->pot_ttl?0:e->pot_ttl-cycles;}return 1;}catch(...){e->failed=true;return 0;}}
 size_t rc_sid_audio_pull(rc_sid *s,int16_t *mono,size_t frames){engine *e=get(s);if(!e||e->failed)return 0;size_t n=0;while(n<frames&&!e->samples.empty()){mono[n++]=e->samples.front();e->samples.pop_front();}return n;}

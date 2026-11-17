@@ -420,6 +420,12 @@ firmware, including EAPI, changes only through guest flash operations.
 
 ## SID files and player
 
+SID debugger peeks replay the access journal into an isolated reSID instance.
+The public `read_state()` API performs register reads and changes the live
+bus, so it is never used on the running chip for a peek or a POT lifetime
+query. Model bus lifetimes are obtained once from isolated public-API probes.
+Actual guest reads remain journaled on the live chip.
+
 The HVSC PSID v1-v4 and RSID v2-v4 reader keeps the original payload separate
 from its header and optional little-endian load prefix. It checks the 64 KiB
 load boundary, song range, RSID reserved fields and init address, and driver
