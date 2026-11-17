@@ -6,13 +6,8 @@ to the configuration file. `src/app/rec64.yaml` is an example. Models are
 `c64-pal` (default), `c64c-pal`, `c64-ntsc`, `c64c-ntsc`, and the firmware-free
 diagnostic model `test`. Run `python tools/fetch_roms.py` to obtain the pinned
 firmware. `machine.options.sid` accepts `default`, `6581`, or `8580`.
-This selects the chip model. In F12 setup, open Sound, select SID ENGINE,
-and choose `RESID` or `BUILT-IN (EXPERIMENTAL)`; close setup to apply it.
-The same choice is `machine.options.sid_engine: resid` (default) or `builtin`.
-Both engines support 6581 and 8580. The built-in engine has known timing,
-combined-waveform and filter differences; see [LIMITATIONS.md](LIMITATIONS.md).
-Snapshots restore their engine choice automatically, including older reSID
-snapshots. Switching engines restarts the machine while retaining mounted media.
+This selects the chip model. Snapshots saved by the releases that used the
+reSID engine still load: registers are restored and notes start again.
 
 The Cartridge page loads/ejects CRT images and selects expansion memory.
 Supported cartridges are Normal 8K/16K, Ultimax, Ocean, Magic Desk, Fun Play,

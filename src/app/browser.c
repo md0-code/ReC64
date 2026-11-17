@@ -31,6 +31,9 @@ static int refresh(rc_browser *b,char *error,size_t cap){clear_items(b);b->conte
 void rc_browser_init(rc_browser *b){memset(b,0,sizeof *b);rc_tui_init(&b->tui);snprintf(b->filename,sizeof b->filename,"program.prg");}
 void rc_browser_close(rc_browser *b){clear_items(b);b->active=b->confirm=0;}
 void rc_browser_set_tape_reader(rc_browser *b,rc_browser_tape_list_fn reader,void *ctx){b->tape_list=reader;b->tape_ctx=ctx;}
+void rc_browser_select(rc_browser *b,const char *name){
+    for(size_t i=0;i<b->count;++i)if(!strcmp(b->items[i].name,name)){b->selected=i;b->top=i>=LIST_ROWS?i-LIST_ROWS/2:0;return;}
+}
 void rc_browser_error(rc_browser *b,const char *message){snprintf(b->message,sizeof b->message,"%s",message?message:"");}
 int rc_browser_open(rc_browser *b,const char *folder,int save,char *error,size_t cap){
     if(cap)error[0]=0;

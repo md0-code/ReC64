@@ -58,8 +58,8 @@ def main() -> None:
         'key Alt+S', 'expect Drive sounds off', 'frames 5',
         f'audio {(work/"muted.wav").as_posix()}',
         'type LOAD"SECOND",11', 'enter', 'frames 200', 'audio off',
-        'key Alt+S', 'expect Drive sounds on', 'key F12', 'expect DRIVE DEVICE',
-        'expect DISK FAST LOAD', f'shot {(work/"media.png").as_posix()}', 'key F12'
+        'key Alt+S', 'expect Drive sounds on', 'key F12', 'expect DEVICE',
+        'expect FAST LOAD', f'shot {(work/"media.png").as_posix()}', 'key F12'
     ])
     def peak(path: Path) -> int:
         with wave.open(str(path), 'rb') as wav:

@@ -19,13 +19,6 @@ SingleStepTests/65x02 test vectors are MIT-licensed, downloaded only into
 `work/cpu/` at the commit in the source lock. Their full notice is downloaded
 with them. They are not program source and are not distributed with ReC64.
 
-reSID 1.0-pre2 is vendored unchanged from VICE 3.9.0 at the commit and file
-hashes in the source lock. Copyright (C) 1998-2010 Dag Lem and the authors
-listed in `src/third_party/resid/AUTHORS`; GPL-2.0-or-later. Its complete
-licence is in `licenses/reSID-GPL-2`. Only its public `sid.h` API is used by
-ReC64. Its original Perl build generator produces waveform headers in the
-build tree; no generated header changes a vendored file.
-
 Built-in RGB tables use Christopher Jam's published colors for the
 color-corrected profile and Pepto's published PAL/NTSC colors for the
 automatic default profile. Their pinned data references remain in

@@ -43,7 +43,7 @@ def main() -> None:
                   'key F9','expect D8:','key Shift+F9','expect ON-SCREEN KEYBOARD OPEN',
                   'key Right','key Pad A','frames 3','release Pad A',
                   'shot '+(target/'player-overlays.png').as_posix(),'key Shift+F9','key Escape',
-                  'frames 200','expect READY.','quit']
+                  'expect LOAD ','expect Commando.sid','key Escape','frames 200','expect READY.','quit']
         run=subprocess.run([str(binary),'--hidden','--config',str(config),'--control','stdin'],cwd=target,
                            input='\n'.join(commands)+'\n',text=True,capture_output=True,timeout=45)
         (target/'commands.jsonl').write_text(run.stdout)
@@ -116,7 +116,7 @@ def main() -> None:
             if int(old[2])>1:
                 c.call('key Right'); c.call(f'expect SUB-TUNE {int(old[1])+1} /'); c.call('expect 00:00'); c.call('frames 180')
                 c.call('key Left'); c.call(f'expect SUB-TUNE {old[1]} /'); c.call('expect 00:00')
-            c.call('key Escape'); c.call('frames 200'); c.call('expect READY.')
+            c.call('key Escape'); c.call('expect LOAD '); c.call('key Escape'); c.call('frames 200'); c.call('expect READY.')
             assert 'SID PLAYER' not in c.text()
             results.append({'file':name,'peak':peak,'samples_above_64':nonzero,'pcm_bytes':len(sound),'screen':display})
         finally: c.close()

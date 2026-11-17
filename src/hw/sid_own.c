@@ -413,8 +413,8 @@ static void audio_push(rc_sid_own *s,double sample) {
     sample=floor(sample+0.5);
     if(sample>32767)sample=32767;
     if(sample< -32768)sample= -32768;
-    /* Unconsumed host audio must not stop the guest clock. Keep the
-     * newest samples, as the reSID bridge does for its output queue. */
+    /* Unconsumed host audio must not stop the guest clock: keep the
+     * newest samples. */
     if(s->audio_count==RC_SID_OWN_AUDIO_CAPACITY){s->audio_head=(s->audio_head+1u)%RC_SID_OWN_AUDIO_CAPACITY;--s->audio_count;}
     unsigned tail=(s->audio_head+s->audio_count)%RC_SID_OWN_AUDIO_CAPACITY;
     s->audio[tail]=(int16_t)sample;++s->audio_count;

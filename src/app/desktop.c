@@ -119,14 +119,6 @@ static int state_load(void *ctx,const char *path,char *error,size_t cap) {
     int source=-1;uint32_t entries[RC_CONFIG_MEDIA];for(unsigned i=0;i<RC_CONFIG_MEDIA;++i)entries[i]=UINT32_MAX;
     if(!rc_states_read(data,size,&info,&r,error,cap))goto failed;
     snprintf(config.model,sizeof config.model,"%s",d->running_config.model);config.option_count=d->running_config.option_count;memcpy(config.options,d->running_config.options,sizeof config.options);
-    /* SID payload 1 is the original reSID format; payload 2 is built-in.
-     * Restore this choice before constructing the snapshot candidate. */
-    if(!strcmp(r.family,"c64")){rc_state_reader chip=r;
-        if(!rc_sr_chunk(&chip,"SID ",0)){snprintf(error,cap,"Snapshot SID state is missing");goto failed;}
-        const uint32_t version=rc_sr_u32(&chip);
-        if(!rc_sr_ok(&chip)||(version!=1&&version!=2)){snprintf(error,cap,"Unknown snapshot SID engine");goto failed;}
-        if(!rc_config_set_option(&config,"sid_engine",version==2?"builtin":"resid")){snprintf(error,cap,"Cannot restore SID engine");goto failed;}
-    }
     next=rc_machine_create(&config,d->roms,error,cap);if(!next||!rc_machine_load(next,&r,error,cap))goto failed;rc_machine_border(next,d->config->border);
     rc_typist_init(&typist);rc_keymap_init(&keys,next,d->config);
     if(rc_sr_chunk(&r,"AUTO",0)){
@@ -325,6 +317,18 @@ static int browser_open(desktop *d,int save,char *error,size_t cap){
     if(d->browser.path[0])snprintf(folder,sizeof folder,"%s",d->browser.path);
     else if(d->config->source[0]){snprintf(folder,sizeof folder,"%s",d->config->source);char *slash=strrchr(folder,'/'),*back=strrchr(folder,'\\');if(back&&(!slash||back>slash))slash=back;if(slash)slash[1]=0;else snprintf(folder,sizeof folder,".");}
     if(!rc_browser_open(&d->browser,folder,save,error,cap))return 0;d->transport=0;release_keys(d);input_config(d);d->pace_dirty=1;return 1;
+}
+/* Leaving the player stops the tune and returns to the file list it came
+ * from, with the cursor on that tune. */
+static void sid_to_list(desktop *d){
+    char path[RC_MEDIA_PATH]="",error[128];const rc_media *sid=rc_machine_media(d->machine,4);
+    if(sid)snprintf(path,sizeof path,"%s",sid->path);
+    if(!eject(d,4))return;
+    char *slash=strrchr(path,'/'),*back=strrchr(path,'\\');if(back&&(!slash||back>slash))slash=back;
+    if(!slash)return;
+    *slash=0;snprintf(d->browser.path,sizeof d->browser.path,"%s",path);
+    if(!browser_open(d,0,error,sizeof error)){message(d,error);return;}
+    rc_browser_select(&d->browser,slash+1);
 }
 static int save_program(desktop *d,const char *path,char *error,size_t cap){
     uint8_t pointers[4];for(unsigned i=0;i<4;++i)if(!rc_machine_peek(d->machine,0x2b+i,&pointers[i]))return 0;
@@ -533,7 +537,7 @@ static int shell_key(void *ctx,const char *name,int down){
     if(d->player.active){
         rc_machine_status s;rc_machine_get_status(d->machine,&s);const unsigned action=rc_sidplayer_key(&d->player,bare,s.sid_song,s.sid_paused);
         if(down){
-            if(action==RC_SIDPLAYER_CLOSE)eject(d,4);
+            if(action==RC_SIDPLAYER_CLOSE)sid_to_list(d);
             else if(action==RC_SIDPLAYER_PREVIOUS||action==RC_SIDPLAYER_NEXT){release_keys(d);rc_machine_control(d->machine,4,RC_MEDIA_SONG,action==RC_SIDPLAYER_PREVIOUS?s.sid_song-1u:s.sid_song+1u);d->pace_dirty=1;}
             else if(action==RC_SIDPLAYER_PAUSE){rc_machine_control(d->machine,4,RC_MEDIA_PAUSE,!s.sid_paused);d->pace_dirty=1;if(d->audio.device){SDL_ClearQueuedAudio(d->audio.device);d->audio.flowing=0;}}
         }

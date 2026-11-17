@@ -114,7 +114,8 @@ void rc_c64_media_tick(rc_c64 *c){
     if(c->tape_audio_phase>=c->hz){c->tape_audio_phase-=c->hz;
         if(c->tape_audio_count==48000){c->tape_audio_head=(c->tape_audio_head+1)%48000;--c->tape_audio_count;}
         int sample=(c->source<2&&(c->tape_bits[c->source]&RC_TAPE_SOUND))?rc_datasette_sample(&c->tape):0;
-        const int drive=rc_drivesnd_sample(&c->drive_sound);if(c->tape_bits[2]&RC_TAPE_SOUND)sample+=drive;
+        /* A tune is copied into memory by the player, not loaded from the drive. */
+        const int drive=rc_drivesnd_sample(&c->drive_sound);if((c->tape_bits[2]&RC_TAPE_SOUND)&&!c->sid_session.active)sample+=drive;
         if(sample>32767)sample=32767;if(sample< -32768)sample= -32768;
         c->tape_audio[(c->tape_audio_head+c->tape_audio_count++)%48000]=(int16_t)sample;
     }

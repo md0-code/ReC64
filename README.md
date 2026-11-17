@@ -3,7 +3,7 @@
 A Commodore 64 emulator for Windows and Linux, written in C11.
 Runs the original BASIC and KERNAL firmware on PAL and NTSC C64/C64C models.
 
-Build on Windows with Visual Studio's C++ tools, CMake 3.24 or later and Ninja, plus Perl (included with Git for Windows):
+Build on Windows with Visual Studio's C++ tools, CMake 3.24 or later and Ninja:
 
 ```powershell
 ./src/build.ps1
@@ -50,9 +50,8 @@ to the attached CRT image unless it is write protected.
 
 SID files open in the music player with title, author, release, elapsed time
 and sub-tune selection. Left/Right changes tune, Space pauses, and Escape
-stops playback. Clock and SID chip follow the file's hints.
-Release audio uses reSID for both chip models; see
-[sound engine availability](docs/LIMITATIONS.md).
+stops playback and returns to the file list. Clock and SID chip follow the
+file's hints. The SID is ReC64's own; see [its limitations](docs/LIMITATIONS.md).
 
 F9 toggles live drive, tape and joystick status. Shift+F9 opens the C64
 on-screen keyboard for mouse, multi-touch or controller input; controller

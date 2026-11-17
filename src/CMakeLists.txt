@@ -1,12 +1,9 @@
 cmake_minimum_required(VERSION 3.24)
 file(READ "${CMAKE_CURRENT_SOURCE_DIR}/VERSION" RC_VERSION_TEXT)
 string(STRIP "${RC_VERSION_TEXT}" RC_VERSION_TEXT)
-project(ReC64 VERSION ${RC_VERSION_TEXT} LANGUAGES C CXX)
+project(ReC64 VERSION ${RC_VERSION_TEXT} LANGUAGES C)
 set(CMAKE_C_STANDARD 11)
 set(CMAKE_C_STANDARD_REQUIRED ON)
-set(CMAKE_CXX_STANDARD 11)
-set(CMAKE_CXX_STANDARD_REQUIRED ON)
-set(CMAKE_CXX_EXTENSIONS OFF)
 include(cmake/Warnings.cmake)
 configure_file(rc_version.h.in ${CMAKE_CURRENT_BINARY_DIR}/generated/rc_version.h @ONLY)
 get_filename_component(RC_WORK "${CMAKE_CURRENT_SOURCE_DIR}/../work" ABSOLUTE)
@@ -22,23 +19,6 @@ else()
     add_library(rc_host STATIC host/host_posix.c)
 endif()
 rc_set_warnings(rc_host)
-set(RESID_INLINING 1)
-set(RESID_INLINE inline)
-set(RESID_BRANCH_HINTS 0)
-set(NEW_8580_FILTER 0)
-set(HAVE_BOOL 1)
-set(HAVE_BUILTIN_EXPECT 0)
-set(HAVE_LOG1P 1)
-set(RC_RESID_GENERATED ${CMAKE_CURRENT_BINARY_DIR}/generated/resid)
-file(MAKE_DIRECTORY ${RC_RESID_GENERATED})
-configure_file(third_party/resid/siddefs.h.in ${RC_RESID_GENERATED}/siddefs.h @ONLY)
-find_program(RC_PERL NAMES perl HINTS "C:/Program Files/Git/usr/bin" REQUIRED)
-file(GLOB RC_RESID_WAVES CONFIGURE_DEPENDS third_party/resid/*.dat)
-foreach(wave ${RC_RESID_WAVES})
-    get_filename_component(name ${wave} NAME_WE)
-    execute_process(COMMAND ${RC_PERL} ${CMAKE_CURRENT_SOURCE_DIR}/third_party/resid/samp2src.pl
-        ${name} ${wave} ${RC_RESID_GENERATED}/${name}.h COMMAND_ERROR_IS_FATAL ANY)
-endforeach()
 add_executable(test_c64 tests/test_c64.c)
 target_link_libraries(test_c64 PRIVATE rc_core rc_platform)
 target_compile_definitions(test_c64 PRIVATE RC_WORK="${RC_WORK}" RC_ROM_DIR="${CMAKE_CURRENT_SOURCE_DIR}/../roms")
@@ -48,33 +28,25 @@ add_executable(lorenz_suite tests/lorenz_suite.c)
 target_link_libraries(lorenz_suite PRIVATE rc_core)
 target_compile_definitions(lorenz_suite PRIVATE RC_ROM_DIR="${CMAKE_CURRENT_SOURCE_DIR}/../roms")
 rc_set_warnings(lorenz_suite)
-add_library(rc_resid STATIC third_party/resid/sid.cc third_party/resid/voice.cc
-    third_party/resid/wave.cc third_party/resid/envelope.cc third_party/resid/filter.cc
-    third_party/resid/dac.cc third_party/resid/extfilt.cc third_party/resid/pot.cc third_party/resid/version.cc)
-target_include_directories(rc_resid SYSTEM PUBLIC third_party/resid ${RC_RESID_GENERATED})
-target_compile_definitions(rc_resid PRIVATE VERSION="1.0-pre2" _USE_MATH_DEFINES _CRT_SECURE_NO_WARNINGS)
 add_library(rc_core STATIC core/config.c core/yamledit.c core/romdb.c core/state.c
     core/media.c core/font8x8.c core/palette.c core/keymap.c core/stick.c core/machine.c core/stub_machine.c core/machines/c64.c core/machines/c64_media.c hw/bus.c hw/sched.c hw/mos6510.c
-    hw/traps.c hw/mouse1351.c hw/cia6526.c hw/pla.c hw/c64kbd.c hw/sid_resid.cpp hw/sid_own.c hw/vic2.c hw/via6522.c
+    hw/traps.c hw/mouse1351.c hw/cia6526.c hw/pla.c hw/c64kbd.c hw/sid.c hw/sid_own.c hw/vic2.c hw/via6522.c
     core/media/image.c core/media/d64.c core/media/t64.c core/media/tap.c core/media/prg.c core/media/gcr.c
     core/media/tapedeck.c hw/datasette.c hw/c1541.c hw/iec.c hw/fastload.c hw/drivesnd.c
     core/media/crt.c hw/cart.c hw/cart_freezer.c hw/am29f040.c hw/easyflash.c
     hw/reu.c hw/georam.c core/machines/c64_expansion.c
     core/media/sidfile.c core/machines/c64_sid.c core/machines/c64_layout.c)
 target_include_directories(rc_core PUBLIC core hw PRIVATE ${CMAKE_CURRENT_BINARY_DIR}/generated)
-target_link_libraries(rc_core PUBLIC rc_yaml rc_host rc_resid)
+target_link_libraries(rc_core PUBLIC rc_yaml rc_host)
 if(NOT WIN32)
     target_link_libraries(rc_core PUBLIC m)
 endif()
 rc_set_warnings(rc_core)
 
-# Strict qualification stays independent of the opt-in experimental backend.
-add_executable(test_sid_own EXCLUDE_FROM_ALL tests/test_sid_own.c)
+add_executable(test_sid_own tests/test_sid_own.c)
 target_link_libraries(test_sid_own PRIVATE rc_core)
 rc_set_warnings(test_sid_own)
-add_executable(sid_compare EXCLUDE_FROM_ALL tests/sid_compare.cpp)
-target_link_libraries(sid_compare PRIVATE rc_core)
-rc_set_warnings(sid_compare)
+add_test(NAME sid_own COMMAND test_sid_own)
 
 include(FetchContent)
 set(SDL_SHARED OFF CACHE BOOL "" FORCE)

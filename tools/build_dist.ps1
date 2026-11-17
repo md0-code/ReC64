@@ -57,12 +57,11 @@ foreach ($arch in @('x64', 'arm64')) {
         -not (Get-ChildItem -LiteralPath $paletteFolder -Force | Select-Object -First 1)) {
         Remove-Item -LiteralPath $paletteFolder
     }
-    foreach ($name in @('CONFIGURATION.md', 'THIRD_PARTY.md', 'LIMITATIONS.md', 'SID-COMPARISON.md', 'HARDWARE.md', 'LICENSE', 'sources.lock.json')) {
+    foreach ($name in @('CONFIGURATION.md', 'THIRD_PARTY.md', 'LIMITATIONS.md', 'HARDWARE.md', 'LICENSE', 'sources.lock.json')) {
         Copy-Item -LiteralPath "$repo/docs/$name" -Destination "$target/docs/$name" -Force
     }
     Copy-Item -LiteralPath "$repo/docs/TESTING-BUILD.md" -Destination "$target/README.md" -Force
     Copy-Item -LiteralPath "$repo/src/third_party/libyaml/LICENSE" -Destination "$target/docs/licenses/libyaml-MIT" -Force
-    Copy-Item -LiteralPath "$repo/docs/licenses/reSID-GPL-2" -Destination "$target/docs/licenses/reSID-GPL-2" -Force
     Copy-Item -LiteralPath "$build/_deps/sdl2-src/LICENSE.txt" -Destination "$target/docs/licenses/SDL-zlib" -Force
     foreach ($rom in $lock.roms) {
         $source = "$repo/roms/$($rom.file)"

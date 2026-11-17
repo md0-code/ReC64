@@ -27,6 +27,8 @@ unsigned rc_browser_file(rc_browser *b,const char *path,char *error,size_t cap);
 unsigned rc_browser_key(rc_browser *b,const char *key);
 void rc_browser_input(rc_browser *b,const char *utf8);
 void rc_browser_error(rc_browser *b,const char *message);
+/* Puts the cursor on a listed name; no effect when it is not listed. */
+void rc_browser_select(rc_browser *b,const char *name);
 void rc_browser_draw(rc_browser *b,const uint32_t palette[16],rc_frame *frame);
 size_t rc_browser_text(rc_browser *b,char *out,size_t capacity);
 #endif
