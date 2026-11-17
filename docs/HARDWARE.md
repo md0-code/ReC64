@@ -131,7 +131,8 @@ text/bitmap modes, multicolour, ECM, invalid-mode priority data, scrolling,
 border flip-flops, eight sprites with expansion and priority, collision
 latches, raster IRQ and lightpen. The frame is the complete raw raster in
 time order (504x312 PAL or 520x263 NTSC); visible-area cropping belongs to
-the board/presenter. Every pipeline latch and the partially drawn frame
+the board/presenter. The board hands the shell the last raster the VIC
+completed, never the one in progress. Every pipeline latch and the partially drawn frame
 are saved, including a save between the two bus phases.
 
 ## Media containers

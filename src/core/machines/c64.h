@@ -19,6 +19,8 @@ typedef struct rc_c64 {
     rc_mos6510 cpu;rc_vic2 vic;rc_cia6526 cia[2];rc_c64kbd keyboard;rc_pla pla;rc_sid sid;
     uint8_t model,restore,port_charge,border;uint32_t hz;uint64_t tod_at;
     uint8_t rom_hashes[128],frame[520u*312u];
+    /* The last raster the VIC completed: the picture never shows one in progress. */
+    uint8_t shown[RC_VIC_MAX_PIXELS];uint64_t shown_frames;
     rc_c1541 drive;rc_iec iec;rc_fastload fastload;rc_drivesnd drive_sound;uint64_t drive_phase;
     rc_datasette tape;rc_traps traps;rc_cpu_hooks hooks;uint8_t fetch_watch[8192];
     rc_cart cart;rc_freezer freezer;rc_easyflash easyflash;rc_reu reu;rc_georam georam;uint32_t freeze_cycles;

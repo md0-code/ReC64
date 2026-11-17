@@ -74,6 +74,7 @@ static void host_line(void *ctx,void *dev,int pin,int level){
 }
 static uint64_t host_now(void *ctx){return ((rc_c64 *)ctx)->sched.now;}
 static void host_schedule(void *ctx,void *dev,uint64_t when){rc_sched_set(&((rc_c64 *)ctx)->sched,dev,when);}
+static void latch_picture(rc_c64 *c){memcpy(c->shown,c->vic.pixels,sizeof c->shown);c->shown_frames=c->vic.frames;}
 static void phi1(void *ctx,uint64_t time){
     (void)time;rc_c64 *c=ctx;rc_vic2_begin(&c->vic);const rc_vic_access a=c->vic.bus[0];
     rc_vic2_clock(&c->vic,0,rc_bus_vic(&c->bus,a.address),c->bus.colour[a.address&1023u]);
@@ -97,6 +98,7 @@ static void phi2(void *ctx,uint64_t time){
         rc_vic2_clock(&c->vic,1,rc_bus_vic(&c->bus,a.address),c->bus.colour[a.address&1023u]);
     }
     rc_reu_tick(&c->reu,c->vic.ba,accepted,dma_data);interrupts(c);
+    if(c->vic.frames!=c->shown_frames)latch_picture(c);
     rc_bus_pot_tick(&c->bus);rc_sid_clock(&c->sid,1);rc_c64_media_tick(c);rc_c64_sid_tick(c);
     /* The PAL/NTSC board's mains-derived TOD input is independent of frames. */
     c->tod_at+=c->model>=2?60u:50u;
@@ -111,7 +113,7 @@ static void reset(void *self,int power){
     if(power){for(unsigned i=0;i<65536;++i)c->bus.ram[i]=(uint8_t)((i&64u)?255:0);memset(c->bus.colour,0,1024);rc_sched_init(&c->sched);c->tod_at=0;c->port_charge=0;rc_mos6510_init(&c->cpu,&c->host,RC_MOS6510);}
     else {c->cpu.ddr=0;rc_mos6510_reset(&c->cpu);}
     c->cpu.hooks=&c->hooks;c->tape_audio_phase=0;c->tape_audio_head=c->tape_audio_count=0;
-    if(power){rc_vic2_reset(&c->vic);c->bus.pot_phase=0;memset(c->bus.pot_value,255,2);memset(c->bus.pot_charge,255,2);for(unsigned p=0;p<2;++p)rc_mouse1351_init(&c->bus.mouse[p]);}rc_cia6526_reset(&c->cia[0]);rc_cia6526_reset(&c->cia[1]);if(power)rc_sid_power(&c->sid);else rc_sid_reset(&c->sid);
+    if(power){rc_vic2_reset(&c->vic);latch_picture(c);c->bus.pot_phase=0;memset(c->bus.pot_value,255,2);memset(c->bus.pot_charge,255,2);for(unsigned p=0;p<2;++p)rc_mouse1351_init(&c->bus.mouse[p]);}rc_cia6526_reset(&c->cia[0]);rc_cia6526_reset(&c->cia[1]);if(power)rc_sid_power(&c->sid);else rc_sid_reset(&c->sid);
     c->keyboard.dev.ops->reset(&c->keyboard);c->restore=0;c->bus.data=c->bus.vic_data=255;c->bus.game=c->bus.exrom=1;
     rc_c1541_reset(&c->drive);c->drive_phase=0;rc_iec_init(&c->iec);rc_c64_iec_lines(c);
     rc_fastload_reset(&c->fastload,c->sched.now,c->iec.edges);
@@ -128,7 +130,7 @@ static int frame(void *self,rc_frame *f){
     const unsigned h=c->border==RC_BORDER_NONE?200u:c->border==RC_BORDER_MINIMAL?232u:full_h;
     const unsigned top=c->border==RC_BORDER_NONE?51u:c->border==RC_BORDER_MINIMAL?35u:c->model>=2?8u:16u;
     const unsigned left=c->border==RC_BORDER_NONE?132u:c->border==RC_BORDER_MINIMAL?116u:100u;
-    for(unsigned y=0;y<h;++y)for(unsigned x=0;x<w;++x)c->frame[y*w+x]=c->vic.pixels[((y+top)%raw_h)*raw+(x+left)%raw];
+    for(unsigned y=0;y<h;++y)for(unsigned x=0;x<w;++x)c->frame[y*w+x]=c->shown[((y+top)%raw_h)*raw+(x+left)%raw];
     *f=(rc_frame){w,h,w,c->frame,rc_palette_profile("default",c->model>=2),16,w*4u*full_h,h*3u*384u,c->vic.frames};return 1;
 }
 static size_t text(void *self,char *out,size_t capacity){
@@ -180,7 +182,7 @@ static int load(void *self,rc_state_reader *r){
 #undef LOAD
     for(unsigned i=0;i<2;++i)if(!rc_sr_chunk(r,"CIA ",i)||!rc_cia6526_load(&c->cia[i],r))return 0;
     if(!rc_sr_chunk(r,"CPU ",0)||!rc_mos6510_load(&c->cpu,r))return 0;
-    rc_c64_iec_lines(c);interrupts(c);return 1;
+    rc_c64_iec_lines(c);interrupts(c);latch_picture(c);return 1;
 }
 static const rc_machine_impl IMPL={.destroy=destroy,.description=description,.error=error_text,.reset=reset,.nmi=nmi,
     .clock=clock_hz,.run=rc_c64_run,.time=time_now,.frame_period=period,.frame=frame,.text=text,
