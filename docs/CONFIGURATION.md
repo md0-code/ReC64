@@ -25,29 +25,41 @@ image; write protection inhibits programming.
 and 1750. Larger sizes use a contiguous 24-bit expansion. `georam` accepts
 `off`, `512k`, `1m`, `2m`, or `4m`. Selecting one expansion disables the
 other. Capacity changes restart on closing setup; snapshots retain RAM and
-transfers in progress. Cartridge images use `media.cartridge.image` and
-`media.cartridge.write_protect`.
+transfers in progress. Cartridge write protection uses `media.cartridge.write_protect`.
 
 Single-SID PSID v1-v4 and RSID v2-v4 files open through Load or drag and
 drop. The player shows title, author, release, sub-tune and elapsed guest
 time. Left/Right chooses a sub-tune, Space pauses/resumes, and Escape stops
 playback and returns to BASIC. File clock and SID-chip hints choose PAL or
 NTSC and the C64/C64C model. Loading a tune disconnects the cartridge;
-disk and tape images remain attached. The startup file is
-`media.sid.image`. Multi-SID files and MUS data requiring an external
-player are refused.
+disk and tape images remain attached. Multi-SID files and MUS data requiring
+an external player are refused.
 
-F9 toggles the live status panel while the guest runs, including during
-loads. It shows the 1541 device, track, LED and motor; the Datasette byte
-position, motor and transport; and the keyboard joystick port. Tape position
-counts TAP data bytes after the file header.
+Media choices last for the current session. Reopening ReC64 starts with no
+images attached; snapshots retain their media references. Old configuration
+image paths are ignored and removed when settings are saved. Auto-load
+pastes each complete command instantly at the BASIC prompt.
+
+F9 toggles one status line: `D8:18.5*M T:001234PM J:2` identifies
+drive device/track, LED (`*`) and motor (`M`), tape byte position and
+play/stop/record (`P`/`S`/`R`) with motor, and keyboard joystick port
+(`-` means off). Tape position counts bytes after the TAP header; the compact
+counter wraps at one million bytes. Temporary messages share this line.
+
+Ctrl+F3 opens drive controls; Ctrl+F4 opens tape controls. Up/Down selects,
+Enter acts, Left/Right switches device, and Escape or the same shortcut
+closes the widget. The guest continues running. Drive controls offer image
+loading/eject, fast load, sounds and auto-load. Tape controls offer play,
+stop, rewind, record, eject and image loading. The Media setup page groups
+settings by drive first, then tape.
 
 Shift+F9 or controller Back toggles the on-screen C64 keyboard. Click/touch
 a key to hold it; multiple fingers can press different keys together. Tap
 Shift, C= or Ctrl to latch it, then tap again to release. Controller arrows
 select a key, A holds it, and B closes; host arrows and Return work too.
 Closing the keyboard or losing focus releases its contacts. Snapshots retain
-the keyboard's visibility, selection and latched modifiers.
+the keyboard's visibility, selection and latched modifiers. The keyboard
+always touches the screen bottom and covers the status line while open.
 
 F12 opens setup. Left/Right or Tab changes page, Up/Down selects a row,
 Enter or +/- changes its value, and F12/Escape closes. Model and SID changes
@@ -58,13 +70,11 @@ are disabled.
 `video.look` is `crt` or `plain`; `video.filter` is `nearest` or `linear`.
 The Display page combines these into CRT, Nearest and Linear. Border is
 `full`, `minimal` (16 pixels around the picture), or `none`. Palette is
-`cjam` (Christopher Jam, default), `colodore`, `pepto-pal`, `pepto-ntsc`, or
-a `.vpl` filename in `palettes/` beside the configuration, working directory
-or executable. External palettes appear on the Display page automatically.
-VPL takes sixteen RGB hex triples with `#` comments (legacy dither columns
-are accepted). Full screen, integer scaling, pixel shape and vsync are live.
+`default` (automatically follows the running PAL/NTSC model) or
+`color-corrected` (Christopher Jam colors). Both are built in; no palette
+files are required. Full screen, integer scaling, pixel shape and vsync are live.
 
-Alt+F12 resets; Ctrl+F12 cold boots; Shift+F12 powers off. F10 switches
+Alt+F12 resets; Ctrl+F12 cold boots; both close the menu. Shift+F12 powers off. F10 switches
 100%/full speed (sound is muted at full speed), Pause stops/resumes, and
 Alt+Enter switches full screen, including while setup is open. Print Screen writes a PNG under
 `work/screenshots/`. Setup and status messages use the same presenter as
@@ -91,16 +101,18 @@ controllers:
 
 Binding values are SDL scancode names, case insensitive; F9-F12, Pause and
 Print Screen are reserved by the shell. Character input remains symbolic.
-F11 switches the keyboard joystick; Shift+F11 swaps complete port assignments.
-The keyboard joystick shares port 2 with controller 1 by default. Explicit
-`device: keyboard` assignments select its socket instead of `keyboard_port`.
+F11 switches the keyboard joystick; Shift+F11 swaps complete port assignments
+and identifies the active joystick port. The keyboard joystick shares port 2
+with controller 1 by default. It works alongside the selected physical
+controller, whether that controller is connected or absent. `keyboard_port`
+selects its socket independently of each port's input source.
 Controllers keep their number while connected; disconnect releases their input.
 The d-pad/left stick supplies directions, A fire, and B a second fire button
 (where the connected device supports it). Start opens setup; d-pad navigates,
 A accepts, B goes back, and shoulders change values.
 
 Each port's `type` is `joystick`, `mouse1351`, `paddles`, or `none`; its
-`device` is `none`, `keyboard`, `controller 1` through `controller 8`, or
+`device` is `none`, `controller 1`, `controller 2`, or
 `mouse` (paddles). The 1351 always uses relative host mouse movement and the
 left/right buttons; F12 releases capture while setup is open. Paddles use
 absolute mouse X/Y and the left/right buttons with `device: mouse`, or a

@@ -206,7 +206,7 @@ void rc_config_defaults(rc_config *c) {
     c->aspect = RC_CONFIG_ASPECT_ORIGINAL;
     c->scale = RC_CONFIG_SCALE_FIT;
     c->filter = RC_CONFIG_FILTER_NEAREST;
-    snprintf(c->palette,sizeof c->palette,"cjam");
+    snprintf(c->palette,sizeof c->palette,"default");
     c->vsync = 1;
     c->sound = 1;
     c->volume = 100;
@@ -447,7 +447,7 @@ static int video_section(reader *r, yaml_node_t *v, rc_config *c) {
         else if (!strcmp(name, "scale")) ok = choice(r, x, "video.scale", scales, &c->scale);
         else if (!strcmp(name, "filter")) ok = choice(r, x, "video.filter", filters, &c->filter);
         else if (!strcmp(name, "border")) {static const named borders[]={{"full",RC_BORDER_FULL},{"minimal",RC_BORDER_MINIMAL},{"none",RC_BORDER_NONE},{NULL,0}};ok=choice(r,x,"video.border",borders,&c->border);}
-        else if (!strcmp(name, "palette")) {const char *s=scalar(r,x);ok=s&&*s&&strlen(s)<sizeof c->palette&&!strpbrk(s,"/\\:\r\n");if(ok)snprintf(c->palette,sizeof c->palette,"%s",s);else fail(r,"video.palette needs a built-in id or a file name in palettes/");}
+        else if (!strcmp(name, "palette")) {const char *s=scalar(r,x);ok=s&&*s&&strlen(s)<sizeof c->palette&&!strpbrk(s,"/\\:\r\n");if(ok)snprintf(c->palette,sizeof c->palette,"%s",!strcmp(s,"color-corrected")||!strcmp(s,"cjam")||!strcmp(s,"cjam.vpl")||!strcmp(s,"colodore")||!strcmp(s,"colodore.vpl")?"color-corrected":"default");else fail(r,"video.palette needs default or color-corrected");}
         else if (!strcmp(name, "fullscreen")) ok = boolean(r, x, &c->fullscreen);
         else if (!strcmp(name, "vsync")) ok = boolean(r, x, &c->vsync);
         else ok = fail(r, "Unknown video key; expected look, aspect, scale, filter, border, palette, fullscreen or vsync");
@@ -479,7 +479,7 @@ static int stick_device(reader *r, yaml_node_t *n, const char *key, rc_config_st
     if (!strcmp(s, "keyboard")) { st->device = RC_STICK_KEYBOARD; st->pad = 0; return 1; }
     if (!strncmp(s, "controller ", 11) && s[11] >= '1' && s[11] <= '9' && !s[12]) {
         const unsigned pad = (unsigned)(s[11] - '0');
-        if (pad <= RC_CONFIG_PADS) { st->device = RC_STICK_CONTROLLER; st->pad = pad; return 1; }
+        st->device=pad<=RC_CONFIG_PADS?RC_STICK_CONTROLLER:RC_STICK_NONE;st->pad=pad<=RC_CONFIG_PADS?pad:0;return 1;
     }
     return failf(r, "%s must be none, keyboard or controller 1 to %d", key, RC_CONFIG_PADS);
 }
@@ -736,6 +736,7 @@ int rc_config_parse(const char *text, size_t length, const char *source, rc_conf
     }
     yaml_parser_delete(&parser);
     if (ok) {
+        for(unsigned p=0;p<2;++p)if(c.sticks[p].device==RC_STICK_KEYBOARD){c.sticks[p].device=RC_STICK_NONE;c.keyboard_port=p;c.keyboard_joystick=1;}
         if (capacity) error[0] = 0;
         *out = c;
     }
@@ -793,15 +794,6 @@ static int set_unless_default(struct rc_ydoc *doc, const char *const *path, size
     if (is_default && !rc_ydoc_has(doc, path, depth)) return 1;
     return set_scalar(doc, path, depth, value, mode);
 }
-/* A path as the file holds it: relative to the configuration's folder when
- * it lies inside it. */
-static const char *stored_path(const rc_config *c, const char *path) {
-    char base[RC_CONFIG_PATH];
-    folder_of(c->source, base);
-    const size_t n = strlen(base);
-    return n && !strncmp(path, base, n) ? path + n : path;
-}
-
 int rc_config_store(const rc_config *c, struct rc_ydoc *doc) {
     int ok = set(doc, "machine", "model", c->model);
     /* The options the file has that the configuration no longer does (another model's) go. */
@@ -820,7 +812,7 @@ int rc_config_store(const rc_config *c, struct rc_ydoc *doc) {
     for (unsigned i = 0; ok && i < c->media_count; ++i) {
         const rc_config_media *m = &c->media[i];
         const char *image[3]={"media",m->key,"image"};
-        ok=set_unless_default(doc,image,3,m->image[0]?stored_path(c,m->image):"",1,!m->image[0]);
+        ok=rc_ydoc_remove(doc,image,3);
         static const char *const names[]={"fast","sound","autoload","full_speed","traps","save_traps","accelerate","write_protect"};
         const int values[]={m->fast,m->sound,m->autoload,m->full_speed,m->traps,m->save_traps,m->accelerate,m->write_protect};
         for(unsigned bit=0;ok&&bit<8;++bit){const char *path[3]={"media",m->key,names[bit]};

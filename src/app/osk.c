@@ -110,10 +110,8 @@ int rc_osk_draw(rc_osk *o,const rc_frame *guest,unsigned bottom_margin,rc_frame 
     o->width=source.width<320?(int)source.width:320;o->height=96;o->left=((int)source.width-o->width)/2;
     o->top=(int)(source.height-bottom_margin)-o->height;
     for(int y=0;y<o->height;++y)memset(o->pixels+(size_t)(o->top+y)*source.width+(unsigned)o->left,y<8?14:6,(size_t)o->width);
-    text(o,source.width,o->left,o->top,o->width," ON-SCREEN KEYBOARD",6,14);
+    text(o,source.width,o->left,o->top,o->width," KEYBOARD                         1/1",6,14);
     char line[80];details(o,line);text(o,source.width,o->left,o->top+8,o->width,line,14,6);
-    const uint8_t stripes[5]={2,8,7,5,14};
-    if(o->width>=320)for(unsigned i=0;i<5;++i)glyph(o,source.width,o->left+280+(int)i*8,o->top,RC_GLYPH_STRIPE,stripes[i],0);
     unsigned count;const rc_c64_keycap *caps=rc_c64_layout(&count);
     for(unsigned i=0;i<count;++i){int x,y,w,h;bounds(o,&caps[i],&x,&y,&w,&h);
         const unsigned key=caps[i].key;const unsigned paper=o->sent[key]?14:0,ink=o->sent[key]?6:14;

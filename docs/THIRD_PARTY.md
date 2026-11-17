@@ -26,7 +26,7 @@ licence is in `licenses/reSID-GPL-2`. Only its public `sid.h` API is used by
 ReC64. Its original Perl build generator produces waveform headers in the
 build tree; no generated header changes a vendored file.
 
-The RGB palette data in `palettes/` retains its original VPL comments:
-Christopher Jam, Colodore and Pepto PAL/NTSC, from the pinned VICE data
-files recorded in `sources.lock.json`. The built-in tables use these same
-published values. No palette generator or emulator implementation is copied.
+Built-in RGB tables use Christopher Jam's published colors for the
+color-corrected profile and Pepto's published PAL/NTSC colors for the
+automatic default profile. Their pinned data references remain in
+`sources.lock.json`. No external VPL files or palette generator are shipped.

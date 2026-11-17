@@ -34,7 +34,7 @@ int main(void){
     rc_rom_index roms;rc_rom_index_init(&roms);const char *folders[]={RC_ROM_DIR};CHECK(rc_rom_index_scan(&roms,folders,1));rc_config config;rc_config_defaults(&config);
     rc_machine *m=rc_machine_create(&config,&roms,error,sizeof error);CHECK(m&&!strcmp(rc_machine_family(m)->id,"c64"));const uint64_t frame=rc_machine_frame_period(m);CHECK(rc_machine_run(m,frame*200)==RC_RUN_OK);
     rc_keymap keys;rc_keymap_init(&keys,m,&config);rc_typist typist;CHECK(rc_typist_start(&typist,"PRINT 2+3\\nPRINT 6+7\\n",error,sizeof error));
-    unsigned frames=0;while(rc_typist_busy(&typist)&&frames++<500){CHECK(rc_typist_frame(&typist,m,&keys)>=0);CHECK(rc_machine_run(m,frame)==RC_RUN_OK);rc_keymap_frame(&keys);}
+    unsigned frames=0;while(rc_typist_busy(&typist)&&frames++<8){CHECK(rc_typist_frame(&typist,m,&keys)>=0);CHECK(rc_machine_run(m,frame)==RC_RUN_OK);rc_keymap_frame(&keys);}
     CHECK(!rc_typist_busy(&typist)&&!keys.count);char text[2048];rc_machine_text(m,text,sizeof text);CHECK(strstr(text,"PRINT 2+3")&&strstr(text,"\n 5\n")&&strstr(text,"PRINT 6+7")&&strstr(text,"\n 13\n"));
     rc_machine_destroy(m);rc_rom_index_free(&roms);puts("Known-ROM LOAD/SAVE hooks, VERIFY, bypass, state and prompt-driven typing OK");return 0;
 }

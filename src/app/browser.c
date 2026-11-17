@@ -124,7 +124,7 @@ static void content_row(rc_browser *b,unsigned row,const rc_browser_item *item,i
 }
 static const char *tail(const char *path,size_t width){const size_t length=strlen(path);return length>width?path+length-width:path;}
 void rc_browser_draw(rc_browser *b,const uint32_t palette[16],rc_frame *frame){
-    rc_tui_clear(&b->tui);rc_tui_bar(&b->tui,0,b->save?"REC64  SAVE":"REC64  LOAD");rc_tui_put(&b->tui,2,2,b->roots?"FILESYSTEM ROOTS":tail(b->contents?b->image:b->path,36),14,6);rc_tui_box(&b->tui,4,1,17,38);
+    char title[40];snprintf(title,sizeof title,"%s %zu/%zu",b->save?"SAVE":"LOAD",b->selected/15u+1u,(b->count+14u)/15u? (b->count+14u)/15u:1u);rc_tui_clear(&b->tui);rc_tui_bar(&b->tui,0,title);rc_tui_put(&b->tui,2,2,b->roots?"FILESYSTEM ROOTS":tail(b->contents?b->image:b->path,36),14,6);rc_tui_box(&b->tui,4,1,17,38);
     if(b->save){const char *types[]={"PROGRAM .PRG","RECORD .TAP","BLANK .D64"};char line[37];snprintf(line,sizeof line,"FORMAT: %-27s",types[b->save_type]);rc_tui_put(&b->tui,3,2,line,b->focus==1?6:14,b->focus==1?14:6);}
     else rc_tui_put(&b->tui,3,2,b->contents?"IMAGE CONTENTS":"FILES AND FOLDERS",14,6);
     for(unsigned row=0;row<LIST_ROWS&&b->top+row<b->count;++row){const size_t index=b->top+row;const rc_browser_item *item=&b->items[index];const int selected=index==b->selected&&(!b->save||!b->focus)&&!item->disabled;char line[37];memset(line,' ',36);line[36]=0;rc_tui_put(&b->tui,5+row,2,line,selected?6:item->disabled?12:14,selected?14:6);

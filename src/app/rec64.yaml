@@ -4,7 +4,7 @@ machine:
 video:
   look: crt
   filter: nearest
-  palette: cjam
+  palette: default
   border: full
   aspect: original
   scale: fit

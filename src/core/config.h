@@ -32,7 +32,7 @@ enum { RC_LANG_EN, RC_LANG_COUNT };
  * order the host reports them). What kind of joystick is in the socket
  * (Kempston, Sinclair, Cursor...) is an option of the machine, not here. */
 #define RC_CONFIG_STICKS 2
-#define RC_CONFIG_PADS 8                /* host game controllers numbered 1 to 8 */
+#define RC_CONFIG_PADS 2                /* host game controllers numbered 1 and 2 */
 enum { RC_STICK_NONE, RC_STICK_KEYBOARD, RC_STICK_CONTROLLER, RC_STICK_MOUSE };
 /* controllers.keys: the keyboard joystick's keys, in this order */
 enum { RC_STICK_UP, RC_STICK_DOWN, RC_STICK_LEFT, RC_STICK_RIGHT, RC_STICK_FIRE, RC_STICK_FIRE2, RC_CONFIG_STICK_KEYS };
@@ -101,7 +101,7 @@ typedef struct rc_config {
     /* video */
     uint32_t look, aspect, scale, filter;
     uint32_t border;                    /* full, sixteen-pixel margin, no border */
-    char palette[128];                  /* built-in id or .vpl name in palettes/ */
+    char palette[128];                  /* default or color-corrected */
     int fullscreen, vsync;
     /* sound: enabled is the mute switch, volume 0 to 100 percent */
     int sound, volume;
@@ -167,7 +167,7 @@ const char *rc_config_port_problem_text(int problem);
  * ("Up", "Left Alt"). */
 const char *rc_config_stick_key_name(unsigned function);
 const char *rc_config_stick_key_default(unsigned function);
-/* What the device of a socket is called in the file: "none", "keyboard" or "controller 2". */
+/* Socket input: none, controller 1/2, or mouse for paddles. */
 const char *rc_config_stick_device_name(const rc_config_stick *stick, char *buffer, size_t capacity);
 /* The shell tells the reader which key names the host knows (SDL's, which the core does not link):
  * without one every printable name is taken. */

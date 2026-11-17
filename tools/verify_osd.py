@@ -62,17 +62,17 @@ def main() -> None:
     def pointer(key: int, action: str, ident: int = 1):
         cap = next(c for c in caps if c[0] == key and (key != 15 or c[2] == 12))
         _, x, y, width = cap
-        call(f'pointer {ident} {x*4+width*2} {200-(32 if panel else 0)-96+16+y*4+8} {action}')
+        call(f'pointer {ident} {x*4+width*2} {200-96+16+y*4+8} {action}')
 
     try:
         call('frames 200'); call('expect READY.'); guest = shot('guest')
-        call('key F9'); panel = True; call('expect 1541 #08'); call('expect TAPE POS'); call('expect KEYBOARD JOYSTICK OFF')
+        call('key F9'); panel = True; call('expect D8:'); call('expect T:'); call('expect J:-')
         panel_image = shot('panel'); call('key Shift+F9'); call('expect ON-SCREEN KEYBOARD OPEN')
         combined = shot('combined')
         with Image.open(guest) as a, Image.open(panel_image) as b, Image.open(combined) as c:
             assert a.size == b.size == c.size == (320, 200)
-            assert ImageChops.difference(a.crop((0,0,320,72)), c.crop((0,0,320,72))).getbbox() is None
-            assert ImageChops.difference(b.crop((0,168,320,200)), c.crop((0,168,320,200))).getbbox() is None
+            assert ImageChops.difference(a.crop((0,0,320,104)), c.crop((0,0,320,104))).getbbox() is None
+            assert ImageChops.difference(b.crop((0,0,320,104)), c.crop((0,0,320,104))).getbbox() is None
 
         # Real BASIC takes the virtual A switch, independent of the physical keymap.
         pointer(10, 'down'); call('frames 3'); pointer(10, 'up'); call('frames 3')
@@ -92,7 +92,7 @@ def main() -> None:
         call('key RIGHT'); call('key RIGHT'); call('key Pad A'); assert sum(v.bit_count() for v in matrix('pad-down')) >= 4
         call('release Pad A'); assert sum(v.bit_count() for v in matrix('pad-up')) == 3
         shot('sticky-restored'); call('key Pad B'); assert not any(matrix('pad-closed'))
-        call('key F11'); call('expect KEYBOARD JOYSTICK PORT 2'); call('key Shift+F11'); call('expect KEYBOARD JOYSTICK PORT 1'); call('key F11')
+        call('key F11'); call('expect Keyboard joystick on'); call('frames 126'); call('expect J:2'); call('key Shift+F11'); call('expect Joystick port 1'); call('frames 126'); call('expect J:1'); call('key F11')
         print('Native OSK input, multitouch, sticky snapshot and combined crop passed', flush=True)
 
         # The pinned disk executes its original loader while F9 keeps showing live state.
@@ -102,21 +102,21 @@ def main() -> None:
         with zipfile.ZipFile(archive) as z: original = z.read(pin['file'])
         assert hashlib.sha256(original).hexdigest() == pin['file_sha256']
         fixture = work/'loader.d64'; fixture.write_bytes(original)
-        call('reset power'); call('frames 200'); call(f'drop {fixture.as_posix()}'); call('enter'); call('until 90 LOADING')
+        call('reset power'); call('frames 200'); call(f'drop {fixture.as_posix()}'); call('enter'); call('until 90 LOADING'); call('frames 126')
         seen = []
         for _ in range(16):
-            call('frames 5'); reply = call('text'); line = next(s for s in reply['text'].splitlines() if s.startswith('1541 #'))
+            call('frames 5'); reply = call('text'); line = next(s for s in reply['text'].splitlines() if s.startswith('D8:'))
             seen.append({'frame': reply['frame'], 'drive': line})
-            if 'MOTOR ON' in line and 'LED ON' in line:
+            if '*M' in line:
                 shot('drive-loading'); break
-        assert any('MOTOR ON' in s['drive'] and 'LED ON' in s['drive'] for s in seen), seen
-        start_frame = seen[-1]['frame']; call('key F9'); call('frames 5'); call('key F9'); call('expect 1541 #08')
+        assert any('*M' in s['drive'] for s in seen), seen
+        start_frame = seen[-1]['frame']; call('key F9'); call('frames 5'); call('key F9'); call('expect D8:')
         call('until 90 INSTALLING LOADER'); final = call('text'); assert final['frame'] > start_frame
         shot('loader-running'); (work/'drive-observations.json').write_text(json.dumps(seen, indent=2)+'\n')
         (work/'result.json').write_text(json.dumps({'status': 'passed', 'version': subprocess.check_output([str(binary), '--version'], text=True).strip(),
             'checks': ['native BASIC key touch', 'same-key multitouch and slide/cancel', 'SHIFT+A matrix chord',
                        'sticky SHIFT/CTRL/C= snapshot rebind and close release', 'controller navigation and accept release',
-                       'live keyboard joystick port', '320x200 combined overlay preserves guest and panel',
+                       'live keyboard joystick port', '320x200 combined overlay preserves guest above the keyboard',
                        'F9 shows real drive LED/motor during original custom load; loader continues']}, indent=2)+'\n')
         print('Native status panel during original disk load passed', flush=True)
     finally:

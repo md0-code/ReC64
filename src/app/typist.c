@@ -36,13 +36,28 @@ static int basic_error(const char *text){
 }
 int rc_typist_frame(rc_typist *t,rc_machine *machine,rc_keymap *keys){
     if(!t->active||keys->count)return 0;
-    if(t->queued){t->queued=0;if(t->position==t->length){t->active=0;return 0;}}
+    if(t->queued){uint8_t count;if(!rc_machine_peek(machine,0xc6,&count)||count)return 0;t->queued=0;if(t->position==t->length){t->active=0;return 0;}}
     if(rc_machine_activity(machine))return 0;
     char text[2048];rc_machine_text(machine,text,sizeof text);if(!ready(text))return 0;
     if(t->position&&basic_error(text)){fail(t,"Auto-load stopped after a BASIC error",NULL,0);return -1;}
-    char line[RC_KEYMAP_QUEUE];unsigned count=0;
-    while(t->position<t->length){const char ch=t->commands[t->position++];line[count++]=ch;if(ch=='\n')break;}
-    line[count]=0;
-    if(!rc_keymap_text(keys,line)){fail(t,"Cannot type auto-load command",NULL,0);return -1;}
+    /* Feed the documented KERNAL keyboard FIFO ($0277, length $C6).
+     * Advance the original editor between batches without presenting partial
+     * lines. Firmware and the physical keyboard matrix remain untouched. */
+    unsigned end=t->position;while(end<t->length&&t->commands[end++]!='\n'){}
+    unsigned budget=1000000;
+    while(t->position<end){uint8_t count;
+        if(!rc_machine_peek(machine,0xc6,&count))return fail(t,"Keyboard buffer unavailable",NULL,0),-1;
+        if(!count){
+            /* Let GETIN finish shifting its previous FIFO before refilling. */
+            if(rc_machine_run(machine,256)!=RC_RUN_OK)return fail(t,"Auto-load input failed",NULL,0),-1;
+            const unsigned n=end-t->position<10?end-t->position:10;
+            for(unsigned i=0;i<n;++i){unsigned char ch=(unsigned char)t->commands[t->position++];if(ch=='\n')ch=13;else if(ch>='a'&&ch<='z')ch-=32;rc_machine_poke(machine,0x277+i,ch);}
+            rc_machine_poke(machine,0xc6,(uint8_t)n);
+        }
+        if(budget<256||rc_machine_run(machine,256)!=RC_RUN_OK)return fail(t,"Auto-load keyboard timed out",NULL,0),-1;
+        budget-=256;
+    }
+    /* Finish displaying the last batch (including RETURN) in this update. */
+    for(uint8_t count=1;count&&budget>=256;budget-=256){if(rc_machine_run(machine,256)!=RC_RUN_OK)return -1;rc_machine_peek(machine,0xc6,&count);}
     t->queued=1;return 1;
 }

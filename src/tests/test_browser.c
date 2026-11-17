@@ -10,7 +10,7 @@
 #include <string.h>
 #define CHECK(x) do{if(!(x)){fprintf(stderr,"line %d: %s\n",__LINE__,#x);return 1;}}while(0)
 static int write_file(const char *path,const void *data,size_t size){FILE *file=fopen(path,"wb");if(!file)return 0;const int ok=fwrite(data,1,size,file)==size;return fclose(file)==0&&ok;}
-static int snapshot(rc_browser *b,const char *path){rc_frame frame;rc_browser_draw(b,rc_palette_builtin("cjam"),&frame);uint32_t pixels[384*272];rc_frame_argb(&frame,pixels);return rc_png_write(path,pixels,384,272,384*4,0);}
+static int snapshot(rc_browser *b,const char *path){rc_frame frame;rc_browser_draw(b,rc_palette_builtin("color-corrected"),&frame);uint32_t pixels[384*272];rc_frame_argb(&frame,pixels);return rc_png_write(path,pixels,384,272,384*4,0);}
 int main(void){
     CHECK(rc_host_make_folders(RC_WORK "/browser/child"));char error[128]={0};
     const uint8_t prg[]={1,8,0x42};CHECK(write_file(RC_WORK "/browser/existing.prg",prg,sizeof prg));CHECK(write_file(RC_WORK "/browser/hidden.txt",prg,sizeof prg));CHECK(write_file(RC_WORK "/browser/future.crt",prg,sizeof prg));

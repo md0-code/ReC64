@@ -29,7 +29,7 @@ int main(int argc,char **argv){
     size=fixture(data,0);be16(data+14,64);data[21]=1;CHECK(rc_sidfile_parse(&file,data,size,error,sizeof error));CHECK(!rc_sidfile_cia(&file,32));
     be16(data+118,0x16);CHECK(rc_sidfile_parse(&file,data,size,error,sizeof error)&&rc_sidfile_cia(&file,32));
     size=fixture(data,0);rc_sidplayer player;rc_sidplayer_init(&player);CHECK(rc_sidplayer_open(&player,data,size,error,sizeof error));
-    rc_frame frame;rc_sidplayer_draw(&player,1,985248u*65u,985248,1,rc_palette_builtin("cjam"),&frame);char text[2048];rc_sidplayer_text(&player,text,sizeof text);
+    rc_frame frame;rc_sidplayer_draw(&player,1,985248u*65u,985248,1,rc_palette_builtin("color-corrected"),&frame);char text[2048];rc_sidplayer_text(&player,text,sizeof text);
     CHECK(strstr(text,"ORIGINAL DRIVER CHECK")&&strstr(text,"01:05  PAUSED")&&strstr(text,"SUB-TUNE 2 / 2"));CHECK(rc_sidplayer_key(&player,"Right",1,0)==RC_SIDPLAYER_NONE);
     rc_rom_index roms;rc_rom_index_init(&roms);const char *folders[]={argc>1?argv[1]:RC_ROM_DIR};CHECK(rc_rom_index_scan(&roms,folders,1));
     rc_config cfg;rc_config_defaults(&cfg);snprintf(cfg.model,sizeof cfg.model,"c64-pal");rc_machine *m=rc_machine_create(&cfg,&roms,error,sizeof error);CHECK(m);

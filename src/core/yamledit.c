@@ -603,18 +603,15 @@ static int prune(rc_ydoc *doc, const char *const *path, size_t depth) {
 
 static int remove_entry(rc_ydoc *doc, const char *const *path, size_t depth) {
     entry e;
-    if (!find(doc, path, depth, &e)) return 1;
-    if (depth > 1) {
-        /* A key of a flow mapping: the mapping in block style first. */
-        entry parent;
-        if (find(doc, path, depth - 1, &parent)) {
-            char value[8];
-            inline_value(doc, &parent, value, sizeof value);
-            if (value[0] == '{') {
-                if (!expand(doc, &parent) || !find(doc, path, depth, &e)) return 0;
-            }
-        }
+    if(!depth)return 0;
+    /* Flow mappings hide descendants until every enclosing mapping has
+     * been expanded. A missing ancestor means there is nothing to remove. */
+    for(size_t level=1;level<depth;++level){
+        entry parent;if(!find(doc,path,level,&parent))return 1;
+        char value[8];inline_value(doc,&parent,value,sizeof value);
+        if(value[0]=='{'&&!expand(doc,&parent))return 0;
     }
+    if (!find(doc, path, depth, &e)) return 1;
     const size_t end = block_end(doc, &e);
     delete_lines(doc, e.first, end - e.first + 1);
     return prune(doc, path, depth - 1);

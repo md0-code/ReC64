@@ -34,7 +34,7 @@ $commit = git -C $repo rev-parse HEAD
 foreach ($arch in @('x64', 'arm64')) {
     $build = "$repo/work/build-$arch"
     $target = if ($arch -eq 'x64') { "$repo/dist" } else { "$repo/dist/arm64" }
-    foreach ($folder in @($target, "$target/roms", "$target/palettes", "$target/docs/licenses")) {
+    foreach ($folder in @($target, "$target/roms", "$target/docs/licenses")) {
         New-Item -ItemType Directory -Force -Path $folder | Out-Null
     }
     Publish-Program "$build/rec64.exe" "$target/rec64.exe"
@@ -47,7 +47,16 @@ foreach ($arch in @('x64', 'arm64')) {
     if (-not (Test-Path -LiteralPath "$target/rec64.yaml")) {
         Copy-Item -LiteralPath "$repo/src/app/rec64.yaml" -Destination "$target/rec64.yaml"
     }
-    Copy-Item -Path "$repo/palettes/*.vpl" -Destination "$target/palettes" -Force
+    # Remove only obsolete release palette files; user-owned files stay intact.
+    foreach ($name in @('cjam.vpl', 'colodore.vpl', 'pepto-pal.vpl', 'pepto-ntsc.vpl')) {
+        $obsolete = Join-Path $target "palettes/$name"
+        if (Test-Path -LiteralPath $obsolete -PathType Leaf) { Remove-Item -LiteralPath $obsolete -Force }
+    }
+    $paletteFolder = Join-Path $target 'palettes'
+    if ((Test-Path -LiteralPath $paletteFolder -PathType Container) -and
+        -not (Get-ChildItem -LiteralPath $paletteFolder -Force | Select-Object -First 1)) {
+        Remove-Item -LiteralPath $paletteFolder
+    }
     foreach ($name in @('CONFIGURATION.md', 'THIRD_PARTY.md', 'LIMITATIONS.md', 'SID-COMPARISON.md', 'LICENSE', 'sources.lock.json')) {
         Copy-Item -LiteralPath "$repo/docs/$name" -Destination "$target/docs/$name" -Force
     }
