@@ -380,6 +380,7 @@ static int options_section(reader *r, yaml_node_t *v, rc_config *c) {
         rc_config_option *o = &c->options[c->option_count];
         if (!word(r, name, "An option", o->key) || !word(r, scalar(r, node(r, q->value)), "An option's value", o->value)) return 0;
         if (!strcmp(o->key, "sid_engine")) continue;   /* retired with 0.17: one engine remains */
+        if(!strcmp(o->key,"sid")&&!strcmp(o->value,"default"))snprintf(o->value,sizeof o->value,"6581");
         r->options_line[c->option_count++] = line;
     }
     return 1;

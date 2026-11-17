@@ -257,7 +257,7 @@ static int mount_sid(desktop *d,rc_media *image,char *error,size_t cap){
     const unsigned ntsc=file.clock==RC_SID_PAL?0:file.clock==RC_SID_NTSC?1:model>=2;
     const unsigned modern=file.model==RC_SID_MODEL_6581?0:file.model==RC_SID_MODEL_8580?1:model&1u;
     const char *models[]={"c64-pal","c64c-pal","c64-ntsc","c64c-ntsc"};snprintf(config.model,sizeof config.model,"%s",models[ntsc*2u+modern]);
-    if(file.model==RC_SID_MODEL_6581||file.model==RC_SID_MODEL_8580)rc_config_set_option(&config,"sid","default");
+    if(file.model==RC_SID_MODEL_6581||file.model==RC_SID_MODEL_8580)rc_config_set_option(&config,"sid",modern?"8580":"6581");
     rc_config_media *setting=rc_config_media_slot(&config,"sid");if(setting)snprintf(setting->image,sizeof setting->image,"%s",image->path);
     setting=rc_config_media_slot(&config,"cartridge");if(setting)setting->image[0]=0;
     rc_machine *next=rc_machine_create(&config,d->roms,error,cap);if(!next)return 0;
@@ -445,25 +445,23 @@ static void keyboard_switch(desktop *d,int swap){
 }
 /* Controls act on media; persistent preferences belong to setup. */
 static void transport_draw(desktop *d,rc_frame *frame){
-    rc_tui *t=&d->setup.tui;rc_tui_clear(t);rc_tui_bar(t,0,d->transport==1?"DRIVE 1/3":d->transport==2?"TAPE 2/3":"CARTRIDGE 3/3");rc_tui_box(t,1,0,12,40);
+    rc_tui *t=&d->setup.tui;rc_tui_clear(t);rc_tui_bar(t,0,d->transport==1?"DRIVE 1/2":"TAPE 2/2");rc_tui_box(t,1,0,12,40);
     rc_machine_status status={0};rc_machine_get_status(d->machine,&status);
-    rc_media *media=rc_machine_media(d->machine,d->transport==1?2u:d->transport==2?0u:3u);const char *name=media?media->path:"NO IMAGE INSERTED";const char *slash=strrchr(name,'/'),*back=strrchr(name,'\\');if(back&&(!slash||back>slash))slash=back;if(slash)name=slash+1;
+    rc_media *media=rc_machine_media(d->machine,d->transport==1?2u:0u);const char *name=media?media->path:"NO IMAGE INSERTED";const char *slash=strrchr(name,'/'),*back=strrchr(name,'\\');if(back&&(!slash||back>slash))slash=back;if(slash)name=slash+1;
     char line[64];snprintf(line,sizeof line,"%.36s",name);rc_tui_put(t,2,2,line,1,6);
     if(d->transport==1)snprintf(line,sizeof line,"#%u TRACK %u.%u LED %s MOTOR %s",status.drive_device,status.drive_halftrack/2,(status.drive_halftrack&1)?5u:0u,status.drive_led?"ON":"OFF",status.drive_motor?"ON":"OFF");
-    else if(d->transport==2)snprintf(line,sizeof line,"POS %llu  %s  MOTOR %s",(unsigned long long)status.tape_counter,status.tape_record?"RECORD":status.tape_play?"PLAY":"STOP",status.tape_motor?"ON":"OFF");
-    else snprintf(line,sizeof line,"%s",d->setup.can_freeze?"FREEZER READY":"");
+    else snprintf(line,sizeof line,"POS %llu  %s  MOTOR %s",(unsigned long long)status.tape_counter,status.tape_record?"RECORD":status.tape_play?"PLAY":"STOP",status.tape_motor?"ON":"OFF");
     rc_tui_put(t,3,2,line,14,6);
     static const char *const disk[]={"LOAD IMAGE","EJECT","SAVE FILE"};
     static const char *const tape[]={"PLAY","STOP","REWIND","RECORD","EJECT","LOAD IMAGE","SAVE FILE"};
-    static const char *const cart[]={"LOAD CARTRIDGE","EJECT","FREEZE"};
     for(unsigned i=0;i<(d->transport==2?7u:3u);++i){
-        const int enabled=d->transport==1?(i!=1||media!=NULL):d->transport==2?(i>=5||(media&&(i!=3||d->setup.tape_writable))):i==0||(media&&(i!=2||d->setup.can_freeze));
+        const int enabled=d->transport==1?(i!=1||media!=NULL):(i>=5||(media&&(i!=3||d->setup.tape_writable)));
         const int selected=i==d->transport_row;const char *value="ENTER";
-        snprintf(line,sizeof line," %-20s %12s ",d->transport==1?disk[i]:d->transport==2?tape[i]:cart[i],value);
+        snprintf(line,sizeof line," %-20s %12s ",d->transport==1?disk[i]:tape[i],value);
         rc_tui_put(t,5+i,2,line,(uint8_t)(enabled?(selected?6:14):12),(uint8_t)(enabled&&selected?14:6));
     }
     rc_tui_put(t,13,1,"UP/DOWN SELECT  ENTER ACT  ESC CLOSE",14,6);
-    rc_tui_put(t,14,1,"LEFT/RIGHT DRIVE/TAPE/CARTRIDGE",14,6);rc_tui_overlay(t,15,frame,frame);
+    rc_tui_put(t,14,1,"LEFT/RIGHT DRIVE/TAPE",14,6);rc_tui_overlay(t,15,frame,frame);
 }
 static void transport_open(desktop *d,unsigned kind){
     char error[256];
@@ -473,18 +471,15 @@ static void transport_open(desktop *d,unsigned kind){
 }
 static void transport_key(desktop *d,const char *key){
     if(!strcmp(key,"ESCAPE")){d->transport=0;input_config(d);return;}
-    if(!strcmp(key,"LEFT")||!strcmp(key,"RIGHT")){d->transport=(d->transport+(!strcmp(key,"LEFT")?1u:0u))%3u+1u;d->transport_row=0;return;}
+    if(!strcmp(key,"LEFT")||!strcmp(key,"RIGHT")){d->transport=3u-d->transport;d->transport_row=0;return;}
     const unsigned count=d->transport==2?7u:3u;
     if(!strcmp(key,"UP")||!strcmp(key,"DOWN")){d->transport_row=(d->transport_row+(!strcmp(key,"UP")?count-1u:1u))%count;return;}
     if(strcmp(key,"RETURN")&&strcmp(key,"ENTER")&&strcmp(key,"SPACE"))return;
     char error[256];const unsigned row=d->transport_row;media_status(d);
-    if((d->transport==1&&row==0)||(d->transport==2&&row==5)||(d->transport==3&&row==0)){d->transport=0;if(!browser_open(d,0,error,sizeof error))message(d,error);return;}
+    if((d->transport==1&&row==0)||(d->transport==2&&row==5)){d->transport=0;if(!browser_open(d,0,error,sizeof error))message(d,error);return;}
     if((d->transport==1&&row==2)||(d->transport==2&&row==6)){d->transport=0;if(!browser_open(d,1,error,sizeof error))message(d,error);return;}
     if(d->transport==1){
         if(row==1){if(d->setup.has_disk)eject(d,2);return;}
-    }else if(d->transport==3){
-        if(row==1&&d->setup.has_cartridge)eject(d,3);
-        else if(row==2&&d->setup.can_freeze){release_keys(d);rc_machine_control(d->machine,3,RC_MEDIA_FREEZE,0);d->transport=0;input_config(d);}
     }else if(d->setup.has_tape){
         if(row==4){eject(d,0);return;}
         if(row==3&&!d->setup.tape_writable)return;

@@ -37,7 +37,7 @@ def main():
         call('key F12')
         if 'CARTRIDGE 6/8' not in call('text')['text']:
             for _ in range(5): call('key RIGHT')
-        for _ in range(2): call('key DOWN')
+        for _ in range(5): call('key DOWN')
         call('key RETURN')
 
     def desktop(label):

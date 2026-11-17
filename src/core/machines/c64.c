@@ -11,7 +11,7 @@ static const char *const ROMS[]={"kernal","basic","chargen","dos1541",NULL};
 static const rc_model_desc MODELS[]={
     {"c64-pal","C64 PAL",ROMS,NULL},{"c64c-pal","C64C PAL",ROMS,NULL},
     {"c64-ntsc","C64 NTSC",ROMS,NULL},{"c64c-ntsc","C64C NTSC",ROMS,NULL}};
-static const char *const SID_MODELS[]={"default","6581","8580",NULL};
+static const char *const SID_MODELS[]={"6581","8580",NULL};
 static const char *const DRIVE_DEVICES[]={"8","9","10","11",NULL};
 static const char *const REU_SIZES[]={"off","128k","256k","512k","1m","2m","4m","8m","16m",NULL};
 static const char *const GEO_SIZES[]={"off","512k","1m","2m","4m",NULL};
@@ -206,7 +206,7 @@ void *rc_c64_create(const rc_machine_setup *setup,char *error,size_t capacity){
     rc_mos6510_init(&c->cpu,&c->host,RC_MOS6510);rc_vic2_init(&c->vic,&c->host,vic_models[c->model]);
     for(unsigned i=0;i<2;++i)rc_cia6526_init(&c->cia[i],&c->host,c->model&1u?RC_CIA_8521:RC_CIA_6526);
     rc_c64kbd_init(&c->keyboard,&c->host);rc_pla_init(&c->pla,&c->host);
-    const unsigned sid=setup->options[0]?setup->options[0]-1u:c->model&1u;
+    const unsigned sid=setup->options[0];
     if(!rc_sid_init(&c->sid,&c->host,sid,c->hz,48000)){if(capacity)snprintf(error,capacity,"Cannot initialise SID");free(c);return NULL;}
     const rc_rom_file *drive_rom=rc_rom_index_find(setup->roms,rc_romdb_find("dos1541"));
     if(!drive_rom||drive_rom->size!=16384){if(capacity)snprintf(error,capacity,"Missing 1541 DOS ROM");rc_sid_release(&c->sid);free(c);return NULL;}

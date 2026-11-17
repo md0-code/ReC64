@@ -31,6 +31,7 @@ Pause stops/resumes, and Alt+Enter switches full screen. F11 toggles the
 keyboard joystick; Shift+F11 swaps ports. Controllers, the 1351 mouse and
 paddles are configured on the Controllers page. Keyboard text follows your
 host layout.
+SID selection offers 6581 (the default) or 8580.
 
 Ctrl+F1 opens Load for PRG/P00 files and D64/T64/TAP contents; dropped files
 use the same browser. Ctrl+F2 saves a PRG, creates a TAP recording target,
@@ -44,7 +45,7 @@ page selects among ten slots per model and shows a preview of each save.
 The first quick save/load in a session opens a slot picker.
 Snapshot files (`.rcs`) also open through Ctrl+F1 or drag and drop.
 
-Load CRT cartridges through Ctrl+F1, drag and drop, or the control OSD.
+Load CRT cartridges through Ctrl+F1, drag and drop, or the Cartridge page.
 The Cartridge settings page selects REU or GeoRAM memory. Right Alt pressed and released
 alone activates supported freezer cartridges. EasyFlash writes are saved
 to the attached CRT image unless it is write protected.

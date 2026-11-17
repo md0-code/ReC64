@@ -9,7 +9,7 @@ void rc_setup_init(rc_setup *s,rc_config *c){memset(s,0,sizeof *s);s->config=c;s
     for(unsigned i=0;i<8;++i)if(!strcmp(c->setup_page,IDS[i]))s->page=i;
     if(s->page==RC_SETUP_STATES)s->row=(unsigned)c->state_slot-1u;
 }
-static unsigned rows(const rc_setup *s){return s->page==RC_SETUP_MACHINE?5u:s->page==RC_SETUP_DISPLAY?7u:s->page==RC_SETUP_SOUND?2u:s->page==RC_SETUP_CONTROLLERS?6u:s->page==RC_SETUP_MEDIA?7u:s->page==RC_SETUP_CARTRIDGE?3u:s->page==RC_SETUP_STATES?12u:0;}
+static unsigned rows(const rc_setup *s){return s->page==RC_SETUP_MACHINE?5u:s->page==RC_SETUP_DISPLAY?7u:s->page==RC_SETUP_SOUND?2u:s->page==RC_SETUP_CONTROLLERS?6u:s->page==RC_SETUP_MEDIA?7u:s->page==RC_SETUP_CARTRIDGE?6u:s->page==RC_SETUP_STATES?12u:0;}
 static unsigned cycle(unsigned value,unsigned count,int direction){return (value+count+(direction<0?count-1u:1u))%count;}
 unsigned rc_setup_key(rc_setup *s,const char *key){
     if(!strcmp(key,"ESCAPE")||!strcmp(key,"F12")){s->active=0;return RC_SETUP_CLOSE;}
@@ -23,8 +23,9 @@ unsigned rc_setup_key(rc_setup *s,const char *key){
     rc_config *c=s->config;
     if(s->page==RC_SETUP_CARTRIDGE){
         if(!s->cartridge_available)return 0;
-        if(s->row==2){if(!s->has_cartridge)return 0;rc_config_media *cart=rc_config_media_slot(c,"cartridge");if(cart)cart->startup=!cart->startup;return RC_SETUP_MEDIA_OPTIONS;}
-        const rc_family *family=rc_family_of_model(c->model,NULL);const unsigned index=s->row==0?2u:3u,other=index==2?3u:2u;
+        if(s->row<3)return !s->row?RC_SETUP_LOAD:s->row==1?(s->has_cartridge?RC_SETUP_EJECT_CART:0):(s->can_freeze?RC_SETUP_FREEZE:0);
+        if(s->row==5){if(!s->has_cartridge)return 0;rc_config_media *cart=rc_config_media_slot(c,"cartridge");if(cart)cart->startup=!cart->startup;return RC_SETUP_MEDIA_OPTIONS;}
+        const rc_family *family=rc_family_of_model(c->model,NULL);const unsigned index=s->row==3?2u:3u,other=index==2?3u:2u;
         if(!family||family->option_count<=other)return 0;
         const rc_option_desc *option=&family->options[index];const char *current=rc_config_option_value(c,option->key);unsigned value=option->initial,value_count=0;
         while(option->values[value_count]){if(current&&!strcmp(current,option->values[value_count]))value=value_count;++value_count;}
@@ -34,7 +35,7 @@ unsigned rc_setup_key(rc_setup *s,const char *key){
     if(s->page==RC_SETUP_STATES){if(s->row<10){c->state_slot=(int)s->row+1;return RC_SETUP_STATE_REFRESH|RC_SETUP_STATE_SELECT;}return s->row==10?RC_SETUP_STATE_SAVE:s->state_status[c->state_slot-1]==1?RC_SETUP_STATE_LOAD:0;}
     if(s->page==RC_SETUP_MACHINE){
         if(!s->row){const rc_family *f=rc_family_at(0);unsigned model=0;const rc_family *old=rc_family_of_model(c->model,&model);if(old!=f)model=direction>0?f->model_count-1u:0;model=cycle(model,f->model_count,direction);snprintf(c->model,sizeof c->model,"%s",f->models[model].id);return RC_SETUP_RESTART;}
-        if(s->row==1){if(!strcmp(c->model,"test"))return 0;const char *current=rc_config_option_value(c,"sid");unsigned v=current&&!strcmp(current,"6581")?1u:current&&!strcmp(current,"8580")?2u:0u;const char *values[]={"default","6581","8580"};rc_config_set_option(c,"sid",values[cycle(v,3,direction)]);return RC_SETUP_RESTART;}
+        if(s->row==1){if(!strcmp(c->model,"test"))return 0;const char *current=rc_config_option_value(c,"sid");unsigned v=current&&!strcmp(current,"8580");const char *values[]={"6581","8580"};rc_config_set_option(c,"sid",values[cycle(v,2,direction)]);return RC_SETUP_RESTART;}
         return s->row==2?RC_SETUP_RESET:s->row==3?RC_SETUP_COLD:RC_SETUP_OFF;
     }
     if(s->page==RC_SETUP_DISPLAY){
@@ -81,7 +82,7 @@ void rc_setup_draw(rc_setup *s,const uint32_t palette[16],rc_frame *f){
     rc_config *c=s->config;
     switch(s->page){
     case RC_SETUP_MACHINE:{unsigned model=0;const rc_family *family=rc_family_of_model(c->model,&model);const char *sid=rc_config_option_value(c,"sid");
-        row(s,0,"MODEL",family?family->models[model].name:c->model,1);row(s,1,"SID",sid?sid:"DEFAULT",strcmp(c->model,"test")!=0);row(s,2,"RESET","ENTER",1);row(s,3,"COLD BOOT","ENTER",1);row(s,4,"POWER OFF","ENTER",1);break;}
+        row(s,0,"MODEL",family?family->models[model].name:c->model,1);row(s,1,"SID",sid?sid:"6581",strcmp(c->model,"test")!=0);row(s,2,"RESET","ENTER",1);row(s,3,"COLD BOOT","ENTER",1);row(s,4,"POWER OFF","ENTER",1);break;}
     case RC_SETUP_DISPLAY:row(s,0,"FILTER",c->look==RC_LOOK_CRT?"CRT":c->filter==RC_CONFIG_FILTER_LINEAR?"LINEAR":"NEAREST",1);
         row(s,1,"COLOURS",c->palette,1);row(s,2,"BORDER",c->border==RC_BORDER_NONE?"NONE":c->border==RC_BORDER_MINIMAL?"MINIMAL":"FULL",1);
         row(s,3,"FULL SCREEN",c->fullscreen?"ON":"OFF",1);row(s,4,"SCALE",c->scale?"INTEGER":"FIT",1);row(s,5,"PIXEL SHAPE",c->aspect?"SQUARE":"ORIGINAL",1);row(s,6,"VSYNC",c->vsync?"ON":"OFF",1);break;
@@ -95,16 +96,17 @@ void rc_setup_draw(rc_setup *s,const uint32_t palette[16],rc_frame *f){
     case RC_SETUP_CONTROLLERS:{const char *types[]={"JOYSTICK","1351 MOUSE","PADDLES","NONE"};char source[32];
         row(s,0,"PORT 1",types[c->sticks[0].type],1);rc_config_stick_device_name(&c->sticks[0],source,sizeof source);row(s,1,"INPUT 1",c->sticks[0].type==RC_CONTROL_MOUSE1351?"MOUSE":source,c->sticks[0].type!=RC_CONTROL_MOUSE1351&&c->sticks[0].type!=RC_CONTROL_NONE);
         row(s,2,"PORT 2",types[c->sticks[1].type],1);rc_config_stick_device_name(&c->sticks[1],source,sizeof source);row(s,3,"INPUT 2",c->sticks[1].type==RC_CONTROL_MOUSE1351?"MOUSE":source,c->sticks[1].type!=RC_CONTROL_MOUSE1351&&c->sticks[1].type!=RC_CONTROL_NONE);
-        char label[37],line[37];snprintf(label,sizeof label,"KEYBOARD JOYSTICK (%s)",s->keyboard_active?(c->keyboard_port?"PORT 2":"PORT 1"):s->controller_present?"AUTO OFF":"OFF");snprintf(line,sizeof line," %-29.29s %3s ",label,"F11");
+        char label[37],line[37];snprintf(label,sizeof label,"KEYBOARD JOYSTICK (%s)",s->keyboard_active?(c->keyboard_port?"P2":"P1"):s->controller_present?"AUTO OFF":"OFF");snprintf(line,sizeof line," %-28.28s %3s ",label,"F11");
         const int selected=s->row==4&&!s->controller_present;rc_tui_put(&s->tui,14,2,line,(uint8_t)(s->controller_present?12:selected?6:14),(uint8_t)(selected?14:6));
         row(s,5,"SWAP PORTS","SHIFT+F11",1);break;}
 
     case RC_SETUP_CARTRIDGE:{
         rc_config_media cart;rc_config_media_settings(c,"cartridge",&cart);const char *name=cart.image[0]?cart.image:"NO CARTRIDGE ATTACHED";size_t length=strlen(name);
         rc_tui_put(&s->tui,2,2,length>36?name+length-36:name,12,6);
+        row(s,0,"LOAD CARTRIDGE","ENTER",s->cartridge_available);row(s,1,"EJECT CARTRIDGE","ENTER",s->has_cartridge);row(s,2,"FREEZE","RIGHT ALT",s->can_freeze);
         const char *reu=rc_config_option_value(c,"reu"),*geo=rc_config_option_value(c,"georam");
-        row(s,0,"REU",reu?reu:"off",s->cartridge_available);row(s,1,"GEORAM",geo?geo:"off",s->cartridge_available);
-        row(s,2,"START INSERTED",cart.startup?"ON":"OFF",s->has_cartridge);break;}
+        row(s,3,"REU",reu?reu:"off",s->cartridge_available);row(s,4,"GEORAM",geo?geo:"off",s->cartridge_available);
+        row(s,5,"START INSERTED",cart.startup?"ON":"OFF",s->has_cartridge);break;}
     case RC_SETUP_STATES:{
         for(unsigned i=0;i<RC_STATES_SLOTS;++i){char line[22];const int selected=s->row==i;
             snprintf(line,sizeof line,"%c%02u %-14.14s",(unsigned)c->state_slot==i+1?'>':' ',i+1,s->state_status[i]==1?(s->state_time[i][0]?s->state_time[i]+5:"SAVED"):s->state_status[i]==2?"INVALID":"EMPTY");

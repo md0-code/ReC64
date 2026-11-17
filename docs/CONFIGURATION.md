@@ -5,19 +5,20 @@ invalid values are rejected with a line number. Paths inside it are relative
 to the configuration file. `src/app/rec64.yaml` is an example. Models are
 `c64-pal` (default), `c64c-pal`, `c64-ntsc`, `c64c-ntsc`, and the firmware-free
 diagnostic model `test`. Run `python tools/fetch_roms.py` to obtain the pinned
-firmware. `machine.options.sid` accepts `default`, `6581`, or `8580`.
-This selects the chip model. Snapshots saved by the releases that used the
+firmware. `machine.options.sid` selects `6581` (the default) or `8580`.
+Older configuration files using `default` are updated to `6581`.
+Snapshots saved by the releases that used the
 reSID engine still load: registers are restored and notes start again.
 
-The Cartridge settings page selects expansion memory and startup insertion;
-the control OSD loads, ejects and freezes cartridges.
+The Cartridge settings page loads/ejects CRT images, selects expansion
+memory and startup insertion, and provides the cartridge Freeze action.
 Supported cartridges are Normal 8K/16K, Ultimax, Ocean, Magic Desk, Fun Play,
 Super Games, Dinamic, Zaxxon, System 3, Simons' BASIC, EasyFlash, Action
 Replay 4-6, Retro Replay, Final Cartridge I/II and III, Epyx Fastload,
 KCS Power Cartridge and Super Snapshot 5. Attaching or ejecting a
 cartridge resets the machine. Right Alt pressed and released alone triggers
 the physical freeze button; using AltGr with another key does not freeze.
-The OSD's Freeze row performs the same action. EasyFlash retains completed
+The page's Freeze row performs the same action. EasyFlash retains completed
 flash writes in the attached CRT, including banks omitted from a sparse
 image; write protection inhibits programming.
 The **Start inserted** row remembers the attached cartridge for the next
@@ -55,10 +56,10 @@ counter wraps at one million bytes. Temporary messages share this line.
 
 Ctrl+F3 opens drive controls; Ctrl+F4 opens tape controls. Up/Down selects,
 Enter acts, Left/Right switches device, and Escape or the same shortcut
-closes the widget. Left/Right cycles through drive, tape and cartridge
+closes the widget. Left/Right switches between drive and tape
 controls. The guest continues running. Drive controls offer loading, eject
-and file saving. Tape adds play, stop, rewind and record; cartridge controls
-offer loading, eject and freeze. The Media settings page holds device
+and file saving. Tape adds play, stop, rewind and record. Cartridge
+selection remains on the Cartridge settings page. The Media settings page holds device
 number, fast loading, sounds and auto-load, grouped by drive and tape.
 
 Shift+F9 or controller Back toggles the on-screen C64 keyboard. Click/touch
@@ -115,7 +116,7 @@ Binding values are SDL scancode names, case insensitive; F9-F12, Pause and
 Print Screen are reserved by the shell. Character input remains symbolic.
 F11 switches the keyboard joystick; Shift+F11 swaps complete port assignments
 and identifies the active joystick port. The Controllers page has one
-`KEYBOARD JOYSTICK (PORT N) F11` entry using that same action; it shows OFF
+`KEYBOARD JOYSTICK (P1/P2) F11` entry using that same action; it shows OFF
 when disabled. A connected controller temporarily disables keyboard
 joystick input and the entry shows AUTO OFF. Disconnecting the last
 controller enables the keyboard joystick again. `keyboard_port` selects

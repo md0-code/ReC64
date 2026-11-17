@@ -325,6 +325,9 @@ int rc_machine_load(rc_machine *m, rc_state_reader *r, char *error, size_t capac
             rc_sr_str(r, key, sizeof key);
             if (!key[0] || !rc_sr_ok(r)) break;
             rc_sr_str(r, word, sizeof word);
+            /* Older C64 snapshots named the chip by the machine's default. */
+            if(!strcmp(m->family->id,"c64")&&!strcmp(key,"sid")&&!strcmp(word,"default"))
+                snprintf(word,sizeof word,"%s",m->model&1u?"8580":"6581");
             const int o = rc_family_option(m->family, key);
             if (o >= 0 && o < RC_CONFIG_OPTIONS && strcmp(m->family->options[o].values[m->options[o]], word)) {
                 if (capacity) snprintf(error, capacity, "The state was saved with %s: %s", key, word);
