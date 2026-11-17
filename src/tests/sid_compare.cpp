@@ -23,6 +23,33 @@ struct Oracle {
         sid=new(storage) reSID::SID();
         sid->set_chip_model(model ? reSID::MOS8580 : reSID::MOS6581);
         sid->reset(); sid->enable_external_filter(false);
+        /* Public, specified comparison initial state, not a power-up claim.
+         * Keep the SDK's default rate terminal-count representation (8);
+         * the candidate represents the same interval as 9 nominal clocks. */
+        auto state=sid->read_state();
+        for(unsigned reg=0;reg<25;++reg)state.sid_register[reg]=0;
+        state.bus_value=0;state.bus_value_ttl=0;state.write_pipeline=0;state.write_address=0;
+        for(unsigned v=0;v<3;++v){
+            state.accumulator[v]=0;state.shift_register[v]=0x7ffff8;
+            state.shift_register_reset[v]=0;state.shift_pipeline[v]=0;
+            state.pulse_output[v]=0xfff;state.floating_output_ttl[v]=0;
+            state.rate_counter[v]=0;state.rate_counter_period[v]=8;
+            state.exponential_counter[v]=0;state.exponential_counter_period[v]=1;
+            state.envelope_counter[v]=0;
+            state.envelope_state[v]=static_cast<reSID::EnvelopeGenerator::State>(2);
+            state.hold_zero[v]=true;state.envelope_pipeline[v]=0;
+        }
+        sid->write_state(state);
+        const auto actual=sid->read_state();
+        bool same=actual.bus_value==0&&actual.bus_value_ttl==0&&actual.write_pipeline==0&&actual.write_address==0;
+        for(unsigned reg=0;reg<25;++reg)same=same&&actual.sid_register[reg]==0;
+        for(unsigned v=0;v<3;++v)same=same&&actual.accumulator[v]==0&&actual.shift_register[v]==0x7ffff8
+            &&actual.shift_register_reset[v]==0&&actual.shift_pipeline[v]==0&&actual.pulse_output[v]==0xfff
+            &&actual.floating_output_ttl[v]==0&&actual.rate_counter[v]==0&&actual.rate_counter_period[v]==8
+            &&actual.exponential_counter[v]==0&&actual.exponential_counter_period[v]==1
+            &&actual.envelope_counter[v]==0&&static_cast<int>(actual.envelope_state[v])==2
+            &&actual.hold_zero[v]&&actual.envelope_pipeline[v]==0;
+        if(!same)throw std::runtime_error("public oracle canonical-state readback failed");
     }
     ~Oracle(){if(sid) sid->~SID(); std::free(storage);}
     Oracle(const Oracle&)=delete; Oracle& operator=(const Oracle&)=delete;
@@ -57,6 +84,20 @@ unsigned mapped(unsigned reg,unsigned rotation){
     return reg<21 ? (((reg/7+rotation)%3)*7+reg%7) : reg;
 }
 void discard_audio(rc_sid_own *s){int16_t data[64];while(rc_sid_own_audio_pull(s,data,64)){} }
+void canonical_candidate(rc_sid_own *s){
+    for(unsigned v=0;v<3;++v){
+        auto &voice=s->voice[v];
+        voice.phase=0;voice.lfsr=0x7ffff8;voice.test_cycles=0;voice.floating_cycles=0;
+        voice.waveform=0;voice.pulse_latch=0xfff;voice.tri_saw_latch=0;
+        voice.rate_counter=0;voice.rate_period=9;
+        voice.exponential_counter=0;voice.exponential_period=1;
+        voice.envelope=0;voice.envelope_read=0;voice.envelope_state=RC_SID_OWN_RELEASE;
+        voice.hold_zero=1;voice.noise_pipeline=0;voice.envelope_pipeline=0;
+        voice.exponential_pipeline=0;voice.state_pipeline=0;voice.pending_state=RC_SID_OWN_RELEASE;
+        voice.rate_reset=0;voice.msb_rising=0;
+    }
+    s->bus_value=0;s->bus_cycles=0;s->write_pending=0;s->write_reg=0;s->write_value=0;
+}
 std::vector<uint8_t> save(const rc_sid_own *s){
     rc_state_writer w;rc_sw_init(&w);rc_sw_header(&w,"sid-comparison","candidate",nullptr,0);
     rc_sw_begin(&w,"SIDO",0);rc_sid_own_save(s,&w);rc_sw_end(&w);
@@ -101,6 +142,7 @@ int main(int argc,char **argv){
         for(unsigned rotation=0;rotation<3;++rotation){
             oracles[rotation].reset(new Oracle(model));
             if(!rc_sid_own_init(&candidates[rotation],model,hz,48000))throw std::runtime_error("candidate init failed");
+            canonical_candidate(&candidates[rotation]);
             rc_sid_own_set_external_filter(&candidates[rotation],0);
         }
         Difference phase,lfsr,envelope,osc8,env3,reads,continuation;
@@ -151,7 +193,7 @@ int main(int argc,char **argv){
         }
         continuation.compare(cycles,0,1,save(&candidates[0])==save(resumed.get())?1:0);
         FILE *file=std::fopen(out_path,"wb");if(!file)throw std::runtime_error("cannot open report");
-        std::fprintf(file,"{\"schema\":1,\"completed\":true,\"model\":%u,\"cycles\":%u,\"waveform12\":{\"status\":\"unobservable\",\"checked\":0},\"digital\":{",model?8580:6581,cycles);
+        std::fprintf(file,"{\"schema\":1,\"setup\":\"canonical-public-state-v1\",\"completed\":true,\"model\":%u,\"cycles\":%u,\"waveform12\":{\"status\":\"unobservable\",\"checked\":0},\"digital\":{",model?8580:6581,cycles);
         const Difference *diffs[]={&phase,&lfsr,&envelope,&osc8,&env3,&reads,&continuation};
         const char *names[]={"phase24","noise23","envelope8","osc3_per_voice8","env3_per_voice8","guest_reads","save_load"};
         for(unsigned i=0;i<7;++i){if(i)std::fputc(',',file);diffs[i]->emit(file,names[i]);}
