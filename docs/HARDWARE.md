@@ -531,7 +531,7 @@ are not estimates fitted to the reference engine:
 | 6581 MOS threshold and effective channel beta | 1 V; 20 microampere/V squared |
 | 6581 inverter operating center and usable output displacement | 5 V; -4 to +6 V |
 | Voice buffer DC displacement from the envelope's +5 V reference | +1 V |
-| 6581 output PCM normalization | 3276.8 units per volt, fixed 10 V signed span |
+| 6581 output PCM normalization | 3276.8 units per volt; 10 V maps to magnitude 32768 |
 | Selector low/high driver conductance ratio | 2:1 |
 | Shared triangle/saw neighbor conductance; other adjacent coupling | 1.0; 0.08, relative to a high driver |
 | Per-cycle bitline charge coefficient; digital threshold | 0.25; half the 5 V rail |
