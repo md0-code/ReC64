@@ -1,4 +1,4 @@
-"""Run the frozen, headless SID register-log comparison (exit 1 means excluded)."""
+"""Run the frozen, headless SID register-log comparison (exit 1 means not qualified)."""
 from __future__ import annotations
 
 import argparse
@@ -142,7 +142,7 @@ def main() -> int:
     report["completed"] = True
     report["qualified"] = all(row["gates"]["qualified"] for row in report["results"])
     report_path.write_text(json.dumps(report, indent=2) + "\n", encoding="utf-8")
-    print(f'Comparison complete; candidate {"qualified" if report["qualified"] else "excluded"}. Report: {report_path}')
+    print(f'Comparison complete; candidate {"qualified" if report["qualified"] else "not qualified"}. Report: {report_path}')
     return 0 if report["qualified"] else 1
 
 

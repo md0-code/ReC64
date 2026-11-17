@@ -12,6 +12,7 @@ static const rc_model_desc MODELS[]={
     {"c64-pal","C64 PAL",ROMS,NULL},{"c64c-pal","C64C PAL",ROMS,NULL},
     {"c64-ntsc","C64 NTSC",ROMS,NULL},{"c64c-ntsc","C64C NTSC",ROMS,NULL}};
 static const char *const SID_MODELS[]={"default","6581","8580",NULL};
+static const char *const SID_ENGINES[]={"resid","builtin",NULL};
 static const char *const DRIVE_DEVICES[]={"8","9","10","11",NULL};
 static const char *const REU_SIZES[]={"off","128k","256k","512k","1m","2m","4m","8m","16m",NULL};
 static const char *const GEO_SIZES[]={"off","512k","1m","2m","4m",NULL};
@@ -19,7 +20,8 @@ static const rc_option_desc OPTIONS[]={
     {.key="sid",.values=SID_MODELS,.models=RC_MODELS_ALL,.flags=RC_OPTION_RESET},
     {.key="drive_device",.values=DRIVE_DEVICES,.models=RC_MODELS_ALL,.flags=RC_OPTION_RESET},
     {.key="reu",.values=REU_SIZES,.models=RC_MODELS_ALL,.flags=RC_OPTION_RESET},
-    {.key="georam",.values=GEO_SIZES,.models=RC_MODELS_ALL,.flags=RC_OPTION_RESET}};
+    {.key="georam",.values=GEO_SIZES,.models=RC_MODELS_ALL,.flags=RC_OPTION_RESET},
+    {.key="sid_engine",.values=SID_ENGINES,.models=RC_MODELS_ALL,.flags=RC_OPTION_RESET}};
 static const rc_media_desc MEDIA[]={
     {.key="tape",.kind=RC_MEDIA_TAPE,.extensions="tap,t64",.models=RC_MODELS_ALL},
     {.key="program",.kind=RC_MEDIA_PROGRAM,.extensions="prg,p00",.models=RC_MODELS_ALL},
@@ -111,7 +113,7 @@ static void reset(void *self,int power){
     if(power){for(unsigned i=0;i<65536;++i)c->bus.ram[i]=(uint8_t)((i&64u)?255:0);memset(c->bus.colour,0,1024);rc_sched_init(&c->sched);c->tod_at=0;c->port_charge=0;rc_mos6510_init(&c->cpu,&c->host,RC_MOS6510);}
     else {c->cpu.ddr=0;rc_mos6510_reset(&c->cpu);}
     c->cpu.hooks=&c->hooks;c->tape_audio_phase=0;c->tape_audio_head=c->tape_audio_count=0;
-    if(power){rc_vic2_reset(&c->vic);c->bus.pot_phase=0;memset(c->bus.pot_value,255,2);memset(c->bus.pot_charge,255,2);for(unsigned p=0;p<2;++p)rc_mouse1351_init(&c->bus.mouse[p]);}rc_cia6526_reset(&c->cia[0]);rc_cia6526_reset(&c->cia[1]);rc_sid_reset(&c->sid);
+    if(power){rc_vic2_reset(&c->vic);c->bus.pot_phase=0;memset(c->bus.pot_value,255,2);memset(c->bus.pot_charge,255,2);for(unsigned p=0;p<2;++p)rc_mouse1351_init(&c->bus.mouse[p]);}rc_cia6526_reset(&c->cia[0]);rc_cia6526_reset(&c->cia[1]);if(power)rc_sid_power(&c->sid);else rc_sid_reset(&c->sid);
     c->keyboard.dev.ops->reset(&c->keyboard);c->restore=0;c->bus.data=c->bus.vic_data=255;c->bus.game=c->bus.exrom=1;
     rc_c1541_reset(&c->drive);c->drive_phase=0;rc_iec_init(&c->iec);rc_c64_iec_lines(c);
     rc_fastload_reset(&c->fastload,c->sched.now,c->iec.edges);
@@ -204,7 +206,7 @@ void *rc_c64_create(const rc_machine_setup *setup,char *error,size_t capacity){
     for(unsigned i=0;i<2;++i)rc_cia6526_init(&c->cia[i],&c->host,c->model&1u?RC_CIA_8521:RC_CIA_6526);
     rc_c64kbd_init(&c->keyboard,&c->host);rc_pla_init(&c->pla,&c->host);
     const unsigned sid=setup->options[0]?setup->options[0]-1u:c->model&1u;
-    if(!rc_sid_init(&c->sid,&c->host,sid,c->hz,48000)){if(capacity)snprintf(error,capacity,"Cannot initialise SID");free(c);return NULL;}
+    if(!rc_sid_init_backend(&c->sid,&c->host,sid,c->hz,48000,setup->options[4])){if(capacity)snprintf(error,capacity,"Cannot initialise SID");free(c);return NULL;}
     const rc_rom_file *drive_rom=rc_rom_index_find(setup->roms,rc_romdb_find("dos1541"));
     if(!drive_rom||drive_rom->size!=16384){if(capacity)snprintf(error,capacity,"Missing 1541 DOS ROM");rc_sid_release(&c->sid);free(c);return NULL;}
     rc_c1541_init(&c->drive,drive_rom->data,8u+setup->options[1]);rc_sha256(drive_rom->data,drive_rom->size,c->rom_hashes+96);rc_iec_init(&c->iec);

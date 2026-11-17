@@ -1,4 +1,4 @@
-/* C interface to the unmodified reSID engine. No backend types escape here. */
+/* C interface to selectable SID engines. No backend types escape here. */
 #ifndef RC_SID_H
 #define RC_SID_H
 #include "hw.h"
@@ -7,8 +7,11 @@
 extern "C" {
 #endif
 enum {RC_SID_6581,RC_SID_8580};
-typedef struct rc_sid {rc_dev dev;void *engine;} rc_sid;
+enum {RC_SID_RESID,RC_SID_BUILTIN};
+typedef struct rc_sid {rc_dev dev;void *engine;unsigned backend;} rc_sid;
 int rc_sid_init(rc_sid *s,const rc_hw_host *host,unsigned model,uint32_t clock_hz,uint32_t sample_rate);
+int rc_sid_init_backend(rc_sid *s,const rc_hw_host *host,unsigned model,uint32_t clock_hz,uint32_t sample_rate,unsigned backend);
+void rc_sid_power(rc_sid *s);
 void rc_sid_release(rc_sid *s);
 void rc_sid_reset(rc_sid *s);
 uint8_t rc_sid_read(rc_sid *s,unsigned reg);

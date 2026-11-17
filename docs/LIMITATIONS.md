@@ -1,12 +1,13 @@
 # SID engine availability
 
-The release uses the unmodified reSID backend for both 6581 and 8580. The
-original SID candidate is a separate comparison target and is not linked
-into the emulator or offered as a sound setting.
+reSID remains the default engine for both 6581 and 8580. The Sound page also
+offers **Built-in (experimental)** by explicit opt-in. It is not accuracy-qualified
+and can sound different, especially with combined waveforms, envelope retrigger
+tricks and filtered or volume-sampled music. Changing engines restarts the machine;
+snapshots retain and automatically restore their engine.
 
-Admission requires exact per-voice twelve-bit waveform and envelope output,
-the fixed filter tolerances, and exact state continuation described in
-[SID-COMPARISON.md](SID-COMPARISON.md). All required gates must pass.
+The strict qualification criteria in [SID-COMPARISON.md](SID-COMPARISON.md)
+remain unchanged. Experimental availability is separate from passing those gates.
 
 The permitted reSID interface exposes eight waveform bits through OSC3,
 not the complete twelve-bit word. Public raw debug output is mixed PCM.
@@ -14,9 +15,9 @@ An isolated-wave calibration also maps distinct waveform codes to the same
 PCM value. These observations cannot establish exact twelve-bit equality;
 the comparison reports that requirement as unverified, never as passed.
 
-The comparison implementation and original register logs remain available
-for further work. An unqualified candidate does not alter release audio,
-saved SID states, or SID-player compatibility.
+The comparison implementation and original register logs remain available.
+Existing reSID snapshot payloads remain supported. Built-in snapshots include
+all digital latches, analog history, resampling position and queued PCM.
 
 ## P10 result
 
@@ -34,11 +35,16 @@ No thresholds, gains or time alignment were adjusted to obtain these results.
 
 The worst filter-mode relative RMS errors were 2.119 for 6581 and 1.350 for
 8580, against limits of 0.25 and 0.10. Envelope/retrigger and combined-waveform
-differences also remain. These independent failures exclude the candidate even
+differences also remain. These independent failures prevent accuracy qualification even
 apart from the unavailable twelve-bit observation. Model assumptions and their
 hardware sources are recorded in [HARDWARE.md](HARDWARE.md).
 
-The release retains reSID and includes the SID-query correction found during
-this work: debugger peeks no longer alter the live SID bus. Native PSID and
-RSID checks on both chip models preserve machine state and exact PCM snapshot
-continuation when these queries are inserted.
+A subsequent envelope repair preserves a pending direction transition across
+consecutive GATE writes. In the fixed retrigger log, 6581 envelope mismatches
+fell from 62,217 to 2,168, with guest reads now exact. The 8580 log still has one
+envelope timing mismatch. The all-gates qualification result remains failed.
+
+Both runtime engines have exact snapshot continuation. Native built-in checks
+play a PSID on 6581 and an RSID on 8580, preserve SID state during debugger peeks,
+produce identical captured PCM after restoration, and restore the snapshot's
+engine after switching. These are functionality checks, not accuracy qualification.

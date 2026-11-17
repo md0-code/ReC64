@@ -17,7 +17,7 @@ typedef struct rc_sid_own_voice {
     uint8_t control, attack_decay, sustain_release, envelope, envelope_read;
     uint8_t envelope_state, exponential_counter, exponential_period, hold_zero;
     uint8_t noise_pipeline, envelope_pipeline, exponential_pipeline, state_pipeline;
-    uint8_t pending_state, rate_reset, msb_rising;
+    uint8_t pending_state, rate_reset, msb_rising, previous_state;
     double bitline[12]; /* waveform-selector charge, normalized to its 5 V rail */
 } rc_sid_own_voice;
 typedef struct rc_sid_own_probe {

@@ -2,6 +2,7 @@
  * analogue filters or FIR history. Replaying the compressed access journal
  * reconstructs those as well, so snapshots resume with identical samples. */
 #include "sid.h"
+#include "sid_own.h"
 #include "../third_party/resid/sid.h"
 #include <deque>
 #include <memory>
@@ -57,6 +58,8 @@ struct engine {
         }
     }
 };
+static rc_sid_own *own(rc_sid *s){return static_cast<rc_sid_own *>(s->engine);}
+static const rc_sid_own *own(const rc_sid *s){return static_cast<const rc_sid_own *>(s->engine);}
 static engine *get(rc_sid *s){return static_cast<engine *>(s->engine);}
 static const engine *get(const rc_sid *s){return static_cast<const engine *>(s->engine);}
 static uint8_t read_dev(void *p,unsigned space,uint32_t off){(void)space;return rc_sid_read(static_cast<rc_sid *>(p),off);}
@@ -65,20 +68,30 @@ static void reset_dev(void *p){rc_sid_reset(static_cast<rc_sid *>(p));}
 static void save_dev(const void *p,rc_state_writer *w){rc_sid_save(static_cast<const rc_sid *>(p),w);}
 static int load_dev(void *p,rc_state_reader *r){return rc_sid_load(static_cast<rc_sid *>(p),r);}
 static const rc_dev_ops OPS={read_dev,write_dev,nullptr,reset_dev,nullptr,save_dev,load_dev};
-int rc_sid_init(rc_sid *s,const rc_hw_host *host,unsigned model,uint32_t hz,uint32_t rate){
-    s->dev=rc_dev{&OPS,host,"SID"};s->engine=nullptr;
-    if(model>RC_SID_8580||hz<100000||hz>2000000||rate<8000||rate>192000)return 0;
+int rc_sid_init(rc_sid *s,const rc_hw_host *host,unsigned model,uint32_t hz,uint32_t rate){return rc_sid_init_backend(s,host,model,hz,rate,RC_SID_RESID);}
+int rc_sid_init_backend(rc_sid *s,const rc_hw_host *host,unsigned model,uint32_t hz,uint32_t rate,unsigned backend){
+    s->dev=rc_dev{&OPS,host,"SID"};s->engine=nullptr;s->backend=backend;
+    if(backend>RC_SID_BUILTIN||model>RC_SID_8580||hz<100000||hz>2000000||rate<8000||rate>192000)return 0;
+    if(backend==RC_SID_BUILTIN){s->engine=std::calloc(1,sizeof(rc_sid_own));if(s->engine&&rc_sid_own_init(own(s),model,hz,rate))return 1;std::free(s->engine);s->engine=nullptr;return 0;}
     try{s->engine=new engine(model,hz,rate);return 1;}catch(...){return 0;}
 }
-void rc_sid_release(rc_sid *s){delete get(s);s->engine=nullptr;}
-void rc_sid_reset(rc_sid *s){engine *e=get(s);if(!e)return;try{std::unique_ptr<engine> next(new engine(e->model,e->hz,e->rate));delete e;s->engine=next.release();}catch(...){e->failed=true;}}
-uint8_t rc_sid_read(rc_sid *s,unsigned reg){engine *e=get(s);if(!e||e->failed)return 255;try{e->record(entry{READ,static_cast<uint8_t>(reg&31u),0,0});const uint8_t value=static_cast<uint8_t>(e->sid.read(reg&31u));
+void rc_sid_release(rc_sid *s){if(s->backend==RC_SID_BUILTIN)std::free(s->engine);else delete get(s);s->engine=nullptr;}
+void rc_sid_reset(rc_sid *s){
+    if(s->backend==RC_SID_BUILTIN){if(s->engine){rc_sid_own_reset(own(s));own(s)->audio_head=own(s)->audio_count=0;own(s)->failed=0;}return;}
+    engine *e=get(s);if(!e)return;try{std::unique_ptr<engine> next(new engine(e->model,e->hz,e->rate));delete e;s->engine=next.release();}catch(...){e->failed=true;}
+}
+void rc_sid_power(rc_sid *s){
+    if(s->backend==RC_SID_BUILTIN){if(s->engine){const unsigned model=own(s)->model;const uint32_t hz=own(s)->clock_hz,rate=own(s)->sample_rate;rc_sid_own_init(own(s),model,hz,rate);}return;}rc_sid_reset(s);
+}
+uint8_t rc_sid_read(rc_sid *s,unsigned reg){if(s->backend==RC_SID_BUILTIN)return s->engine?rc_sid_own_read(own(s),reg):255;engine *e=get(s);if(!e||e->failed)return 255;try{e->record(entry{READ,static_cast<uint8_t>(reg&31u),0,0});const uint8_t value=static_cast<uint8_t>(e->sid.read(reg&31u));
         if((reg&31u)>=25&&(reg&31u)<=28){e->pot_ttl=0;return value;}return e->pot_ttl?e->pot_bus:value;}catch(...){e->failed=true;return 255;}}
 uint8_t rc_sid_pot_read(rc_sid *s,unsigned reg,uint8_t value){
+    if(s->backend==RC_SID_BUILTIN)return s->engine?rc_sid_own_pot_read(own(s),reg,value):255;
     rc_sid_read(s,reg);engine *e=get(s);if(!e||e->failed)return 255;
     e->pot_bus=value;e->pot_ttl=e->bus_lifetime;return value;
 }
 uint8_t rc_sid_peek(rc_sid *s,unsigned reg){
+    if(s->backend==RC_SID_BUILTIN)return s->engine?rc_sid_own_peek(own(s),reg):255;
     engine *e=get(s);if(!e||e->failed)return 255;reg&=31u;if(e->pot_ttl&&(reg<25||reg>28))return e->pot_bus;
     /* A debugger read must not call read_state on the live chip: that public
      * API performs register reads and changes its bus. Replay into a copy. */
@@ -87,11 +100,12 @@ uint8_t rc_sid_peek(rc_sid *s,unsigned reg){
         return static_cast<uint8_t>(copy->sid.read(reg));
     }catch(...){return 255;}
 }
-void rc_sid_write(rc_sid *s,unsigned reg,uint8_t v){engine *e=get(s);if(!e||e->failed)return;try{e->record(entry{WRITE,static_cast<uint8_t>(reg&31u),v,0});e->sid.write(reg&31u,v);e->pot_ttl=0;}catch(...){e->failed=true;}}
-int rc_sid_clock(rc_sid *s,uint32_t cycles){engine *e=get(s);if(!e||e->failed)return 0;try{if(cycles){e->record(entry{CLOCK,0,0,cycles});e->clock(cycles,true);e->pot_ttl=cycles>=e->pot_ttl?0:e->pot_ttl-cycles;}return 1;}catch(...){e->failed=true;return 0;}}
-size_t rc_sid_audio_pull(rc_sid *s,int16_t *mono,size_t frames){engine *e=get(s);if(!e||e->failed)return 0;size_t n=0;while(n<frames&&!e->samples.empty()){mono[n++]=e->samples.front();e->samples.pop_front();}return n;}
-int rc_sid_ok(const rc_sid *s){return s->engine&&!get(s)->failed;}
+void rc_sid_write(rc_sid *s,unsigned reg,uint8_t v){if(s->backend==RC_SID_BUILTIN){if(s->engine)rc_sid_own_write(own(s),reg,v);return;}engine *e=get(s);if(!e||e->failed)return;try{e->record(entry{WRITE,static_cast<uint8_t>(reg&31u),v,0});e->sid.write(reg&31u,v);e->pot_ttl=0;}catch(...){e->failed=true;}}
+int rc_sid_clock(rc_sid *s,uint32_t cycles){if(s->backend==RC_SID_BUILTIN)return s->engine&&rc_sid_own_clock(own(s),cycles);engine *e=get(s);if(!e||e->failed)return 0;try{if(cycles){e->record(entry{CLOCK,0,0,cycles});e->clock(cycles,true);e->pot_ttl=cycles>=e->pot_ttl?0:e->pot_ttl-cycles;}return 1;}catch(...){e->failed=true;return 0;}}
+size_t rc_sid_audio_pull(rc_sid *s,int16_t *mono,size_t frames){if(s->backend==RC_SID_BUILTIN)return s->engine?rc_sid_own_audio_pull(own(s),mono,frames):0;engine *e=get(s);if(!e||e->failed)return 0;size_t n=0;while(n<frames&&!e->samples.empty()){mono[n++]=e->samples.front();e->samples.pop_front();}return n;}
+int rc_sid_ok(const rc_sid *s){return s->engine&&(s->backend==RC_SID_BUILTIN?!own(s)->failed:!get(s)->failed);}
 void rc_sid_save(const rc_sid *s,rc_state_writer *w){
+    if(s->backend==RC_SID_BUILTIN){const rc_sid_own *e=own(s);if(!e||e->failed){w->failed=1;return;}rc_sw_u32(w,2);rc_sw_u32(w,e->model);rc_sw_u32(w,e->clock_hz);rc_sw_u32(w,e->sample_rate);rc_sid_own_save(e,w);return;}
     const engine *e=get(s);if(!e||e->failed||e->journal.size()>UINT32_MAX){w->failed=1;return;}
     rc_sw_u32(w,1);rc_sw_u32(w,e->model);rc_sw_u32(w,e->hz);rc_sw_u32(w,e->rate);rc_sw_u32(w,static_cast<uint32_t>(e->journal.size()));
     for(const entry &v:e->journal){rc_sw_u8(w,v.kind);rc_sw_u8(w,v.reg);rc_sw_u8(w,v.value);rc_sw_u32(w,v.cycles);}
@@ -99,6 +113,7 @@ void rc_sid_save(const rc_sid *s,rc_state_writer *w){
     rc_sw_u8(w,e->pot_bus);rc_sw_u32(w,e->pot_ttl);
 }
 int rc_sid_load(rc_sid *s,rc_state_reader *r){
+    if(s->backend==RC_SID_BUILTIN){rc_sid_own *e=own(s);if(!e||r->end-r->at<16||rc_sr_u32(r)!=2)return 0;const uint32_t model=rc_sr_u32(r),hz=rc_sr_u32(r),rate=rc_sr_u32(r);if(model!=e->model||hz!=e->clock_hz||rate!=e->sample_rate)return 0;return rc_sid_own_load(e,r);}
     if(r->end-r->at<24||rc_sr_u32(r)!=1)return 0;
     const uint32_t model=rc_sr_u32(r),hz=rc_sr_u32(r),rate=rc_sr_u32(r),count=rc_sr_u32(r);
     if(model>1||hz<100000||hz>2000000||rate<8000||rate>192000||count>(r->end-r->at-4)/7)return 0;

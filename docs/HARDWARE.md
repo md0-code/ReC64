@@ -452,11 +452,11 @@ view rebuilt from the mounted file and saved machine status.
 
 ## Live status panel
 
-The status panel takes a read-only board status and composites four 8-pixel
-rows onto a copy of the indexed guest frame, retaining its palette, aspect
+The status panel takes a read-only board status and composites one 8-pixel
+row onto a copy of the indexed guest frame, retaining its palette, aspect
 and dimensions. Track display uses halftrack / 2 with odd halftracks shown
 as .5 (halftrack 2 is track 1). The LED is VIA2 PB3, independent of the
-motor at PB2. `TAPE POS` is the TAP data byte offset excluding its 20-byte
+motor at PB2. The compact tape counter is the TAP data byte offset excluding its 20-byte
 header, rather than a mechanical reel counter; motor and PLAY/RECORD are
 independent transport values. The joystick field names the active keyboard
 joystick port, or OFF. The overlay owns no guest state and never advances,
@@ -475,7 +475,7 @@ keymap's virtual contacts, combined with physical host input. Snapshots
 retain visibility, selection and latched modifiers, release transient
 fingers and accept, and bind the restored keyboard only after the snapshot
 machine is accepted. The 320 by 96 indexed overlay preserves the running
-guest and can reserve a lower margin for the status panel.
+guest and attaches to the bottom edge, covering the status line while open.
 
 ## Experimental own SID
 
@@ -544,8 +544,13 @@ comparison contract in [SID-COMPARISON.md](SID-COMPARISON.md).
 The candidate has no dependency on reSID, SDL, an operating system or another
 chip. Save/load stores all counter latches, pending writes, analog integrators,
 fractional resampling position, per-bit selector charge, DAC coefficients and
-queued PCM explicitly (candidate payload version 2), with transactional
+queued PCM explicitly (candidate payload version 3), with transactional
 validation on load. `test_sid_own` checks both chip models for exact continuation
-with active combined waveforms, nonlinear filter history and a pending HMOS write. Its fidelity and selectable-engine status are
-controlled by the phase-10 comparison gate; snapshot equality alone is not
-proof of SID hardware fidelity.
+with active combined waveforms, nonlinear filter history and a pending HMOS write.
+The runtime bridge dispatches to this state or to reSID, with a separate snapshot
+payload marker and engine metadata. Cold boot reinitializes the built-in state;
+RESET retains oscillator phase, envelope and analog charge. An unconsumed host
+sample queue drops its oldest samples without stopping guest cycles. The envelope
+direction pipeline preserves an older transition when the gate changes on the
+following cycle. Experimental selection does not assert phase-10 qualification;
+snapshot equality alone is not proof of SID hardware fidelity.

@@ -119,6 +119,14 @@ static int state_load(void *ctx,const char *path,char *error,size_t cap) {
     int source=-1;uint32_t entries[RC_CONFIG_MEDIA];for(unsigned i=0;i<RC_CONFIG_MEDIA;++i)entries[i]=UINT32_MAX;
     if(!rc_states_read(data,size,&info,&r,error,cap))goto failed;
     snprintf(config.model,sizeof config.model,"%s",d->running_config.model);config.option_count=d->running_config.option_count;memcpy(config.options,d->running_config.options,sizeof config.options);
+    /* SID payload 1 is the original reSID format; payload 2 is built-in.
+     * Restore this choice before constructing the snapshot candidate. */
+    if(!strcmp(r.family,"c64")){rc_state_reader chip=r;
+        if(!rc_sr_chunk(&chip,"SID ",0)){snprintf(error,cap,"Snapshot SID state is missing");goto failed;}
+        const uint32_t version=rc_sr_u32(&chip);
+        if(!rc_sr_ok(&chip)||(version!=1&&version!=2)){snprintf(error,cap,"Unknown snapshot SID engine");goto failed;}
+        if(!rc_config_set_option(&config,"sid_engine",version==2?"builtin":"resid")){snprintf(error,cap,"Cannot restore SID engine");goto failed;}
+    }
     next=rc_machine_create(&config,d->roms,error,cap);if(!next||!rc_machine_load(next,&r,error,cap))goto failed;rc_machine_border(next,d->config->border);
     rc_typist_init(&typist);rc_keymap_init(&keys,next,d->config);
     if(rc_sr_chunk(&r,"AUTO",0)){

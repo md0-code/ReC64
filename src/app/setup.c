@@ -9,7 +9,7 @@ void rc_setup_init(rc_setup *s,rc_config *c){memset(s,0,sizeof *s);s->config=c;s
     for(unsigned i=0;i<8;++i)if(!strcmp(c->setup_page,IDS[i]))s->page=i;
     if(s->page==RC_SETUP_STATES)s->row=(unsigned)c->state_slot-1u;
 }
-static unsigned rows(const rc_setup *s){return s->page==RC_SETUP_MACHINE?5u:s->page==RC_SETUP_DISPLAY?7u:s->page==RC_SETUP_SOUND?2u:s->page==RC_SETUP_CONTROLLERS?6u:s->page==RC_SETUP_MEDIA?13u:s->page==RC_SETUP_CARTRIDGE?5u:s->page==RC_SETUP_STATES?12u:0;}
+static unsigned rows(const rc_setup *s){return s->page==RC_SETUP_MACHINE?5u:s->page==RC_SETUP_DISPLAY?7u:s->page==RC_SETUP_SOUND?3u:s->page==RC_SETUP_CONTROLLERS?6u:s->page==RC_SETUP_MEDIA?13u:s->page==RC_SETUP_CARTRIDGE?5u:s->page==RC_SETUP_STATES?12u:0;}
 static unsigned cycle(unsigned value,unsigned count,int direction){return (value+count+(direction<0?count-1u:1u))%count;}
 unsigned rc_setup_key(rc_setup *s,const char *key){
     if(!strcmp(key,"ESCAPE")||!strcmp(key,"F12")){s->active=0;return RC_SETUP_CLOSE;}
@@ -63,7 +63,7 @@ unsigned rc_setup_key(rc_setup *s,const char *key){
         return RC_SETUP_MEDIA_OPTIONS;
     }
 
-    if(s->page==RC_SETUP_SOUND){if(!s->row)c->sound=!c->sound;else c->volume=(int)cycle((unsigned)c->volume/5,21,direction)*5;return RC_SETUP_AUDIO;}
+    if(s->page==RC_SETUP_SOUND){if(s->row==2){if(!strcmp(c->model,"test"))return 0;const char *engine=rc_config_option_value(c,"sid_engine");rc_config_set_option(c,"sid_engine",engine&&!strcmp(engine,"builtin")?"resid":"builtin");return RC_SETUP_RESTART;}if(!s->row)c->sound=!c->sound;else c->volume=(int)cycle((unsigned)c->volume/5,21,direction)*5;return RC_SETUP_AUDIO;}
     if(s->page==RC_SETUP_CONTROLLERS){
         if(s->row<4){if((s->row&1u)&&(c->sticks[s->row/2].type==RC_CONTROL_MOUSE1351||c->sticks[s->row/2].type==RC_CONTROL_NONE))return 0;rc_config_stick *st=&c->sticks[s->row/2];
             if(!(s->row&1u)){st->type=cycle(st->type,4,direction);if(st->type==RC_CONTROL_PADDLES)st->device=RC_STICK_MOUSE;else if(st->device==RC_STICK_MOUSE)st->device=RC_STICK_NONE;}
@@ -89,7 +89,10 @@ void rc_setup_draw(rc_setup *s,const uint32_t palette[16],rc_frame *f){
     case RC_SETUP_DISPLAY:row(s,0,"FILTER",c->look==RC_LOOK_CRT?"CRT":c->filter==RC_CONFIG_FILTER_LINEAR?"LINEAR":"NEAREST",1);
         row(s,1,"COLOURS",c->palette,1);row(s,2,"BORDER",c->border==RC_BORDER_NONE?"NONE":c->border==RC_BORDER_MINIMAL?"MINIMAL":"FULL",1);
         row(s,3,"FULL SCREEN",c->fullscreen?"ON":"OFF",1);row(s,4,"SCALE",c->scale?"INTEGER":"FIT",1);row(s,5,"PIXEL SHAPE",c->aspect?"SQUARE":"ORIGINAL",1);row(s,6,"VSYNC",c->vsync?"ON":"OFF",1);break;
-    case RC_SETUP_SOUND:{char volume[16];snprintf(volume,sizeof volume,"%d%%",c->volume);row(s,0,"SOUND",c->sound?"ON":"OFF",1);row(s,1,"VOLUME",volume,1);break;}
+    case RC_SETUP_SOUND:{char volume[16];snprintf(volume,sizeof volume,"%d%%",c->volume);row(s,0,"SOUND",c->sound?"ON":"OFF",1);row(s,1,"VOLUME",volume,1);
+        const char *engine=rc_config_option_value(c,"sid_engine");const int builtin=engine&&!strcmp(engine,"builtin"),enabled=strcmp(c->model,"test")!=0,selected=enabled&&s->row==2;
+        char line[37];snprintf(line,sizeof line," %-10s %22s ","SID ENGINE",builtin?"BUILT-IN (EXPERIMENTAL)":"RESID");rc_tui_put(&s->tui,10,2,line,(uint8_t)(enabled?(selected?6:14):12),(uint8_t)(selected?14:6));
+        if(builtin)rc_tui_put(&s->tui,15,3,"EXPERIMENTAL: AUDIO MAY DIFFER",14,6);break;}
     case RC_SETUP_MEDIA:{rc_config_media disk,tape;rc_config_media_settings(c,"disk",&disk);rc_config_media_settings(c,"tape",&tape);const char *device=rc_config_option_value(c,"drive_device");
         rc_tui_put(&s->tui,4,3,"DRIVE",1,6);rc_tui_put(&s->tui,11,3,"TAPE",1,6);
         media_row(s,0,"CONTROLS","CTRL+F3",s->media_available);media_row(s,1,"DEVICE",device?device:"8",s->media_available);
@@ -121,7 +124,7 @@ void rc_setup_draw(rc_setup *s,const uint32_t palette[16],rc_frame *f){
         rc_tui_put(&s->tui,18,3,"SAVE CURRENT SLOT  CTRL+F5",(uint8_t)(s->row==10?6:14),(uint8_t)(s->row==10?14:6));
         const int can_load=s->state_status[c->state_slot-1]==1;
         rc_tui_put(&s->tui,19,3,"LOAD CURRENT SLOT  CTRL+F6",(uint8_t)(can_load?(s->row==11?6:14):12),(uint8_t)(can_load&&s->row==11?14:6));break;}
-    case RC_SETUP_ABOUT:rc_tui_put(&s->tui,7,3,"REC64 " RC_VERSION,14,6);rc_tui_put(&s->tui,10,3,"COMMODORE 64 / C64C",14,6);rc_tui_put(&s->tui,12,3,"GPL-3.0-OR-LATER",14,6);rc_tui_put(&s->tui,15,3,"SID: RESID 1.0-PRE2",14,6);break;
+    case RC_SETUP_ABOUT:rc_tui_put(&s->tui,7,3,"REC64 " RC_VERSION,14,6);rc_tui_put(&s->tui,10,3,"COMMODORE 64 / C64C",14,6);rc_tui_put(&s->tui,12,3,"GPL-3.0-OR-LATER",14,6);{const char *engine=rc_config_option_value(c,"sid_engine");rc_tui_put(&s->tui,15,3,engine&&!strcmp(engine,"builtin")?"SID: BUILT-IN (EXPERIMENTAL)":"SID: RESID 1.0-PRE2",14,6);}break;
     }
     rc_tui_put(&s->tui,22,1,"LEFT/RIGHT PAGE  UP/DOWN SELECT",14,6);rc_tui_put(&s->tui,24,1,"ENTER CHANGE  +/- VALUE  F12 CLOSE",14,6);
     rc_tui_frame(&s->tui,palette,f);

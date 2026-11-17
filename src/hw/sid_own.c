@@ -82,6 +82,9 @@ static void envelope_step(rc_sid_own_voice *v) {
 }
 static void envelope_clock(rc_sid_own_voice *v) {
     v->envelope_read=v->envelope;
+    /* The two direction latches propagate an edge already in flight even
+     * when the gate changes again on the following cycle. */
+    if(v->previous_state){v->envelope_state=(uint8_t)(v->previous_state-1u);v->previous_state=0;envelope_rate(v);}
     if(v->state_pipeline && !--v->state_pipeline) {
         v->envelope_state=v->pending_state;
         envelope_rate(v);
@@ -229,10 +232,9 @@ static void write_register(rc_sid_own *s,unsigned reg,uint8_t value) {
             uint8_t previous=v->control;
             v->control=value;
             if((previous^value)&1) {
+                if(v->state_pipeline==1)v->previous_state=(uint8_t)(v->pending_state+1u);
                 v->pending_state=(value&1)?RC_SID_OWN_ATTACK:RC_SID_OWN_RELEASE;
                 v->state_pipeline=2;
-                /* Counter enable follows the latched attack direction; do
-                 * not let an older release event underflow zero first. */
             }
             if((value&8) && !(previous&8)) {
                 v->phase=0;v->noise_pipeline=0;v->test_cycles=0;
@@ -357,7 +359,7 @@ void rc_sid_own_reset(rc_sid_own *s) {
         v->attack_decay=0;v->sustain_release=0;
         v->envelope_state=v->pending_state=RC_SID_OWN_RELEASE;
         v->rate_counter=0;v->exponential_counter=0;v->exponential_period=1;
-        v->envelope_pipeline=0;v->exponential_pipeline=0;v->state_pipeline=0;
+        v->envelope_pipeline=0;v->exponential_pipeline=0;v->state_pipeline=0;v->previous_state=0;
         v->rate_reset=0;v->hold_zero=(uint8_t)(v->envelope==0);
         v->noise_pipeline=0;v->test_cycles=0;v->msb_rising=0;
         v->pulse_latch=0xfff;v->floating_cycles=s->clock_hz/5;
@@ -437,10 +439,11 @@ void rc_sid_own_tick(rc_sid_own *s) {
             double sample=s->sample_sum/s->clock_hz;
             if(sample>32767)sample=32767;
             if(sample< -32768)sample= -32768;
-            if(s->audio_count<RC_SID_OWN_AUDIO_CAPACITY) {
-                unsigned tail=(s->audio_head+s->audio_count)%RC_SID_OWN_AUDIO_CAPACITY;
-                s->audio[tail]=(int16_t)sample;++s->audio_count;
-            } else s->failed=1;
+            /* Unconsumed host audio must not stop the guest clock. Keep the
+             * newest samples, as the reSID bridge does for its output queue. */
+            if(s->audio_count==RC_SID_OWN_AUDIO_CAPACITY){s->audio_head=(s->audio_head+1u)%RC_SID_OWN_AUDIO_CAPACITY;--s->audio_count;}
+            unsigned tail=(s->audio_head+s->audio_count)%RC_SID_OWN_AUDIO_CAPACITY;
+            s->audio[tail]=(int16_t)sample;++s->audio_count;
             s->sample_phase=0;s->sample_sum=0;
         }
     }
@@ -480,12 +483,12 @@ static double read_double(rc_state_reader *r) {
 }
 #define VOICE_U32(X) X(phase) X(lfsr) X(test_cycles) X(floating_cycles)
 #define VOICE_U16(X) X(frequency) X(pulse_width) X(waveform) X(pulse_latch) X(tri_saw_latch) X(rate_counter) X(rate_period)
-#define VOICE_U8(X) X(control) X(attack_decay) X(sustain_release) X(envelope) X(envelope_read) X(envelope_state) X(exponential_counter) X(exponential_period) X(hold_zero) X(noise_pipeline) X(envelope_pipeline) X(exponential_pipeline) X(state_pipeline) X(pending_state) X(rate_reset) X(msb_rising)
+#define VOICE_U8(X) X(control) X(attack_decay) X(sustain_release) X(envelope) X(envelope_read) X(envelope_state) X(exponential_counter) X(exponential_period) X(hold_zero) X(noise_pipeline) X(envelope_pipeline) X(exponential_pipeline) X(state_pipeline) X(pending_state) X(rate_reset) X(msb_rising) X(previous_state)
 #define CHIP_U32(X) X(clock_hz) X(sample_rate) X(bus_cycles) X(sample_phase) X(sample_cycles) X(audio_head) X(audio_count)
 #define CHIP_U8(X) X(model) X(bus_value) X(write_pending) X(write_reg) X(write_value) X(failed) X(external_filter)
 #define CHIP_DOUBLE(X) X(filter_low) X(filter_band) X(filter_high) X(external_low) X(external_high) X(filter_coefficient) X(filter_damping) X(sample_sum) X(cycle_output) X(waveform_bias) X(cutoff_voltage)
 void rc_sid_own_save(const rc_sid_own *s,rc_state_writer *w) {
-    rc_sw_u32(w,2);
+    rc_sw_u32(w,3);
     for(unsigned i=0;i<3;++i) {
         const rc_sid_own_voice *v=&s->voice[i];
 #define W32(f) rc_sw_u32(w,v->f);
@@ -511,7 +514,7 @@ void rc_sid_own_save(const rc_sid_own *s,rc_state_writer *w) {
 }
 int rc_sid_own_load(rc_sid_own *s,rc_state_reader *r) {
     rc_sid_own next;memset(&next,0,sizeof next);
-    if(rc_sr_u32(r)!=2)return 0;
+    if(rc_sr_u32(r)!=3)return 0;
     for(unsigned i=0;i<3;++i) {
         rc_sid_own_voice *v=&next.voice[i];
 #define R32(f) v->f=rc_sr_u32(r);
@@ -528,7 +531,7 @@ int rc_sid_own_load(rc_sid_own *s,rc_state_reader *r) {
         if(v->phase>PHASE_MASK || v->lfsr>NOISE_MASK || v->pulse_width>0xfff ||
            v->waveform>0xfff || v->pulse_latch>0xfff || v->tri_saw_latch>0xfff ||
            v->envelope_state>RC_SID_OWN_RELEASE || v->pending_state>RC_SID_OWN_RELEASE ||
-           v->rate_counter>32767 || !v->rate_period || v->rate_period>31251 ||
+           v->previous_state>3 || v->rate_counter>32767 || !v->rate_period || v->rate_period>31251 ||
            !v->exponential_period || v->exponential_period>30 ||
            v->noise_pipeline>2 || v->state_pipeline>2 || v->envelope_pipeline>2 ||
            v->exponential_pipeline>2 || v->hold_zero>1 || v->rate_reset>1)return 0;

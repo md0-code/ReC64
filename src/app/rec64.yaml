@@ -1,6 +1,7 @@
 # Copy to rec64.yaml beside the program, or select with --config FILE.
 machine:
   model: c64-pal
+  options: {sid_engine: resid}
 video:
   look: crt
   filter: nearest

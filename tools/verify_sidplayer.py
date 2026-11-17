@@ -29,7 +29,7 @@ def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--workspace', type=Path, default=ROOT)
     parser.add_argument('--binary', type=Path)
-    parser.add_argument('--startup-only', action='store_true', help='saved SID startup and model-restart controls only')
+    parser.add_argument('--startup-only', action='store_true', help='session SID load and model-restart controls only')
     args = parser.parse_args(); root = args.workspace.resolve()
     binary = (args.binary or root/'work/build-x64/rec64.exe').resolve()
     work = root/'work/p8/sid-acceptance'; work.mkdir(parents=True, exist_ok=True)
@@ -37,10 +37,10 @@ def main() -> None:
         target=root/'work/p8/release';target.mkdir(parents=True,exist_ok=True)
         config=target/'startup.yaml'
         config.write_text(json.dumps({'machine':{'model':'c64c-ntsc'},'media':{'sid':{'image':(root/'work/p8/Commando.sid').as_posix(),'write_protect':True}},'ui':{'setup_page':'machine'}}))
-        commands=['frames 200','expect COMMANDO','key Right','frames 200','expect SUB-TUNE 2 / 19',
+        commands=['drop '+(root/'work/p8/Commando.sid').as_posix(),'frames 200','expect COMMANDO','key Right','frames 200','expect SUB-TUNE 2 / 19',
                   'key Space','expect PAUSED','key F12','key Return','key F12','frames 1',
                   'expect SUB-TUNE 2 / 19','expect PAUSED','key Space','frames 200','expect PLAYING',
-                  'key F9','expect REC64 STATUS','key Shift+F9','expect ON-SCREEN KEYBOARD OPEN',
+                  'key F9','expect D8:','key Shift+F9','expect ON-SCREEN KEYBOARD OPEN',
                   'key Right','key Pad A','frames 3','release Pad A',
                   'shot '+(target/'player-overlays.png').as_posix(),'key Shift+F9','key Escape',
                   'frames 200','expect READY.','quit']
@@ -51,9 +51,9 @@ def main() -> None:
         replies=[json.loads(line) for line in run.stdout.splitlines()]
         assert len(replies)==len(commands),(len(replies),run.stderr)
         assert all(reply['ok'] for reply in replies),[(cmd,reply) for cmd,reply in zip(commands,replies) if not reply['ok']]
-        (target/'result.json').write_text(json.dumps({'status':'passed','checks':['saved SID startup from empty cwd',
+        (target/'result.json').write_text(json.dumps({'status':'passed','checks':['SID session load from empty cwd',
             'subsong and pause across model restart','live player overlays','controller accept/release','close to BASIC']},indent=2)+'\n')
-        print('SID startup, model restart and packaged overlay controls passed')
+        print('SID session load, model restart and packaged overlay controls passed')
         return
     pins = json.loads((root/'docs/sources.lock.json').read_text())['sid_test_tunes']
     for name in ('Commando.sid', 'Arkanoid.sid'):

@@ -55,7 +55,7 @@ target_include_directories(rc_resid SYSTEM PUBLIC third_party/resid ${RC_RESID_G
 target_compile_definitions(rc_resid PRIVATE VERSION="1.0-pre2" _USE_MATH_DEFINES _CRT_SECURE_NO_WARNINGS)
 add_library(rc_core STATIC core/config.c core/yamledit.c core/romdb.c core/state.c
     core/media.c core/font8x8.c core/palette.c core/keymap.c core/stick.c core/machine.c core/stub_machine.c core/machines/c64.c core/machines/c64_media.c hw/bus.c hw/sched.c hw/mos6510.c
-    hw/traps.c hw/mouse1351.c hw/cia6526.c hw/pla.c hw/c64kbd.c hw/sid_resid.cpp hw/vic2.c hw/via6522.c
+    hw/traps.c hw/mouse1351.c hw/cia6526.c hw/pla.c hw/c64kbd.c hw/sid_resid.cpp hw/sid_own.c hw/vic2.c hw/via6522.c
     core/media/image.c core/media/d64.c core/media/t64.c core/media/tap.c core/media/prg.c core/media/gcr.c
     core/media/tapedeck.c hw/datasette.c hw/c1541.c hw/iec.c hw/fastload.c hw/drivesnd.c
     core/media/crt.c hw/cart.c hw/cart_freezer.c hw/am29f040.c hw/easyflash.c
@@ -68,16 +68,12 @@ if(NOT WIN32)
 endif()
 rc_set_warnings(rc_core)
 
-# The original SID candidate is evaluated separately. Production audio keeps
-# the qualified backend; these targets cannot add candidate code to rec64.
-add_library(rc_sid_own_candidate STATIC EXCLUDE_FROM_ALL hw/sid_own.c)
-target_include_directories(rc_sid_own_candidate PUBLIC hw core)
-rc_set_warnings(rc_sid_own_candidate)
+# Strict qualification stays independent of the opt-in experimental backend.
 add_executable(test_sid_own EXCLUDE_FROM_ALL tests/test_sid_own.c)
-target_link_libraries(test_sid_own PRIVATE rc_sid_own_candidate rc_core)
+target_link_libraries(test_sid_own PRIVATE rc_core)
 rc_set_warnings(test_sid_own)
 add_executable(sid_compare EXCLUDE_FROM_ALL tests/sid_compare.cpp)
-target_link_libraries(sid_compare PRIVATE rc_sid_own_candidate rc_core)
+target_link_libraries(sid_compare PRIVATE rc_core)
 rc_set_warnings(sid_compare)
 
 include(FetchContent)
