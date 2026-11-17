@@ -470,3 +470,32 @@ retain visibility, selection and latched modifiers, release transient
 fingers and accept, and bind the restored keyboard only after the snapshot
 machine is accepted. The 320 by 96 indexed overlay preserves the running
 guest and can reserve a lower margin for the status panel.
+
+## Experimental own SID
+
+`hw/sid_own.*` is an original, standalone candidate driven once per SID clock.
+It implements 24-bit phase accumulators, triangle/saw/pulse/noise selection,
+pulse and HMOS waveform latches, the 23-bit noise register, TEST, sync and ring
+modulation, ADSR rate and exponential counters, delayed counter events, sustain
+comparison, hold-at-zero and rate-change delay. HMOS register writes enter a
+one-cycle latch. Read registers expose OSC3, ENV3 and board-supplied POT values;
+other reads expose the retained data bus. Nominal charge retention timings are
+model parameters, not a claim of identical leakage on every physical chip.
+
+The 8580 candidate uses the documented state-variable integrator circuit and
+resonance resistor ratios. Its cutoff conductance is linear, using the MOS
+nominal 12 kHz range and the die's code-zero half-LSB path. Audio uses a fixed
+centered waveform-times-envelope scale (one PCM unit per 64 product units at
+maximum volume); it has not been gain-fitted to oracle output. The motherboard
+10 kohm/1 nF lowpass and 10 uF/1 kohm AC coupling run at the chip clock. The
+comparison interface can bypass that external stage. Rational weighted-area
+resampling splits each guest cycle at output sample boundaries, with no clock
+drift. This resampler is not a high-order bandlimited reconstruction filter.
+
+The candidate has no dependency on reSID, SDL, an operating system or another
+chip. Save/load stores all counter latches, pending writes, analog integrators,
+fractional resampling position and queued PCM explicitly, with transactional
+validation on load. `test_sid_own` checks exact continuation with a pending HMOS
+write and active filter history. Its fidelity and selectable-engine status are
+controlled by the phase-10 comparison gate; snapshot equality alone is not
+proof of SID hardware fidelity.
