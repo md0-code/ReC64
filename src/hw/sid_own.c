@@ -295,7 +295,7 @@ static void analog_6581(rc_sid_own *s) {
     double volume_gain=0;
     for(unsigned b=0;b<4;++b)if(mode&(1u<<b))volume_gain+=74.592/volume_resistor[b];
     double mixed=bound_voltage(bypass*(330.05/233.67)+filtered*(330.05/251.54));
-    /* A fixed 10 V usable supply span corresponds to the signed PCM span.
+    /* A fixed 10 V reference corresponds to PCM magnitude 32768.
      * DC changes with the volume ladder and survives when AC coupling is off. */
     s->cycle_output=bound_voltage(mixed*volume_gain)*3276.8;
 }

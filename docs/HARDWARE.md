@@ -489,8 +489,7 @@ other reads expose the retained data bus. Chip RESET clears writable registers
 and envelope dividers while retaining phase, envelope level and analog charge;
 it releases the noise shift latch. Init alone establishes a deterministic nominal
 cold-start state. Neither operation asserts a measured power-up bit pattern.
-Nominal charge retention timings are
-model parameters, not a claim of identical leakage on every physical chip.
+Nominal charge retention timings are model parameters, not a claim of identical leakage on every physical chip.
 
 The 8580 candidate uses the documented state-variable integrator circuit and
 resonance resistor ratios. Its cutoff conductance is linear, using the MOS
@@ -502,10 +501,51 @@ comparison interface can bypass that external stage. Rational weighted-area
 resampling splits each guest cycle at output sample boundaries, with no clock
 drift. This resampler is not a high-order bandlimited reconstruction filter.
 
+The 6581 path solves its resistor ladders by nodal elimination. Waveform and
+multiplying-envelope ladders use the published R/2.02R geometry estimate; the
+cutoff ladder uses R/1.879R with its twelfth MSB tied high. These values are the
+hardware analyst's estimates, including the stated uncertainty of the cutoff
+ratio. Integrator currents follow the first-order MOS channel equation, with
+pinch-off and signal-dependent gate voltage through the documented dividers.
+The two 470 pF capacitors, approximately 1 Mohm leakage paths, resonance
+conductances and switched volume resistances come from the published 6581R2
+circuit drawing. Four integration substeps run per guest cycle. The finite
+inverter/output rails bound large signals. DAC offset and volume conductance
+changes produce DC steps before motherboard AC coupling.
+
+Combined waveforms use a dynamic nodal network of the selected waveform
+transistors and their shared bitlines. Triangle and saw selection couples
+adjacent lines from the same XOR drivers; pulse/noise join those lines through
+their own selector switches. The DAC buffer threshold turns solved voltages
+back into twelve bits. The selected noise lines can discharge their LFSR
+storage bits. On 6581, loading the unbuffered saw MSB can pull the phase MSB
+low; the 8580's independent latch prevents this feedback. No sampled waveform
+or fitted emulator table is used.
+
+Parameters not established by the available hardware documents are explicit
+nominal assumptions. They were chosen before this candidate's comparison and
+are not estimates fitted to the reference engine:
+
+| Assumption | Candidate value |
+|---|---|
+| 6581 MOS threshold and effective channel beta | 1 V; 20 microampere/V squared |
+| 6581 inverter operating center and usable output displacement | 5 V; -4 to +6 V |
+| Voice buffer DC displacement from the envelope's +5 V reference | +1 V |
+| 6581 output PCM normalization | 3276.8 units per volt; 10 V maps to magnitude 32768 |
+| Selector low/high driver conductance ratio | 2:1 |
+| Shared triangle/saw neighbor conductance; other adjacent coupling | 1.0; 0.08, relative to a high driver |
+| Per-cycle bitline charge coefficient; digital threshold | 0.25; half the 5 V rail |
+| Narrower 8580 upper triangle selector conductance | 0.8 relative to other selector switches |
+
+These circuit-based approximations do not establish chip-specific analog or
+combined-waveform equality. Admission remains governed by the unchanged
+comparison contract in [SID-COMPARISON.md](SID-COMPARISON.md).
+
 The candidate has no dependency on reSID, SDL, an operating system or another
 chip. Save/load stores all counter latches, pending writes, analog integrators,
-fractional resampling position and queued PCM explicitly, with transactional
-validation on load. `test_sid_own` checks exact continuation with a pending HMOS
-write and active filter history. Its fidelity and selectable-engine status are
+fractional resampling position, per-bit selector charge, DAC coefficients and
+queued PCM explicitly (candidate payload version 2), with transactional
+validation on load. `test_sid_own` checks both chip models for exact continuation
+with active combined waveforms, nonlinear filter history and a pending HMOS write. Its fidelity and selectable-engine status are
 controlled by the phase-10 comparison gate; snapshot equality alone is not
 proof of SID hardware fidelity.
