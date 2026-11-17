@@ -70,7 +70,8 @@ def events_text(log: dict, hz: int) -> str:
 def qualify(result: dict, log: dict) -> dict:
     expected_checks = {"phase24", "noise23", "envelope8", "osc3_per_voice8",
                        "env3_per_voice8", "guest_reads", "save_load"}
-    if (result.get("schema") != 1 or result.get("setup") != "canonical-public-state-v1" or result.get("completed") is not True
+    if (result.get("schema") != 1 or result.get("setup") != "canonical-public-state-v2"
+            or result.get("observer_audio_invariant") is not True or result.get("completed") is not True
             or result.get("cycles") != log["cycles"]
             or set(result.get("digital", {})) != expected_checks):
         raise ValueError("incomplete native report")
