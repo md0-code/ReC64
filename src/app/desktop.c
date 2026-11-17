@@ -253,11 +253,11 @@ static int flush_media(desktop *d,char *error,size_t cap){
 }
 static int mount_sid(desktop *d,rc_media *image,char *error,size_t cap){
     rc_sidfile file;if(!rc_sidfile_parse(&file,image->data,image->size,error,cap)||!flush_media(d,error,cap))return 0;
-    rc_config config=*d->config;unsigned model=rc_machine_model(d->machine);
-    const unsigned ntsc=file.clock==RC_SID_PAL?0:file.clock==RC_SID_NTSC?1:model>=2;
-    const unsigned modern=file.model==RC_SID_MODEL_6581?0:file.model==RC_SID_MODEL_8580?1:model&1u;
+    rc_config config=*d->config;
+    /* A file that names no single clock or chip plays on a PAL C64 with a 6581, whatever the tune before it chose. */
+    const unsigned ntsc=file.clock==RC_SID_NTSC,modern=file.model==RC_SID_MODEL_8580;
     const char *models[]={"c64-pal","c64c-pal","c64-ntsc","c64c-ntsc"};snprintf(config.model,sizeof config.model,"%s",models[ntsc*2u+modern]);
-    if(file.model==RC_SID_MODEL_6581||file.model==RC_SID_MODEL_8580)rc_config_set_option(&config,"sid",modern?"8580":"6581");
+    rc_config_set_option(&config,"sid",modern?"8580":"6581");
     rc_config_media *setting=rc_config_media_slot(&config,"sid");if(setting)snprintf(setting->image,sizeof setting->image,"%s",image->path);
     setting=rc_config_media_slot(&config,"cartridge");if(setting)setting->image[0]=0;
     rc_machine *next=rc_machine_create(&config,d->roms,error,cap);if(!next)return 0;

@@ -38,7 +38,8 @@ Single-SID PSID v1-v4 and RSID v2-v4 files open through Load or drag and
 drop. The player shows title, author, release, sub-tune and elapsed guest
 time. Left/Right chooses a sub-tune, Space pauses/resumes, and Escape stops
 playback and returns to BASIC. File clock and SID-chip hints choose PAL or
-NTSC and the C64/C64C model. Loading a tune disconnects the cartridge;
+NTSC and the C64/C64C model; a file without them plays on a PAL C64 with a
+6581. Loading a tune disconnects the cartridge;
 disk and tape images remain attached. Multi-SID files and MUS data requiring
 an external player are refused.
 

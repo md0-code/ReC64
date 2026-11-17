@@ -60,7 +60,7 @@ disconnecting the last controller enables it again.
 SID files open in the music player with title, author, release, elapsed time
 and sub-tune selection. Left/Right changes tune, Space pauses, and Escape
 stops playback and returns to the file list. Clock and SID chip follow the
-file's hints. The SID is ReC64's own; see [its limitations](docs/LIMITATIONS.md).
+file's hints (PAL and 6581 without them). The SID is ReC64's own; see [its limitations](docs/LIMITATIONS.md).
 
 F9 toggles live drive, tape and joystick status. Shift+F9 opens the C64
 on-screen keyboard for mouse, multi-touch or controller input; controller

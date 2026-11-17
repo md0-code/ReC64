@@ -472,7 +472,8 @@ A debugger peek reads the SID without changing its bus or state.
 The HVSC PSID v1-v4 and RSID v2-v4 reader keeps the original payload separate
 from its header and optional little-endian load prefix. It checks the 64 KiB
 load boundary, song range, RSID reserved fields and init address, and driver
-relocation pages. Clock and chip hints select the corresponding C64 model.
+relocation pages. Clock and chip hints select the corresponding C64 model; a file naming no
+single clock or chip gets a PAL C64 with a 6581.
 Multi-SID files and Compute! MUS files requiring an external player are refused.
 
 PSID runs an original small 6510 program in a free, permitted RAM page. The
