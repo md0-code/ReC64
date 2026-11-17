@@ -14,8 +14,11 @@ int rc_gcr_data_read(const uint8_t encoded[325],uint8_t data[256]);
  * Bit duration is expressed in 16 MHz master-clock ticks, with no rounding. */
 unsigned rc_gcr_zone(unsigned track);
 unsigned rc_gcr_bit_ticks(unsigned zone);
-typedef struct rc_gcr_track {rc_media *image;uint32_t bits,position;uint8_t zone;} rc_gcr_track;
+typedef struct rc_gcr_track {rc_media *image,*speeds;uint32_t bits,position;uint8_t zone;} rc_gcr_track;
 int rc_gcr_track_open(rc_gcr_track *t,const uint8_t *data,size_t bytes,uint32_t bits,unsigned zone);
+int rc_gcr_track_speeds(rc_gcr_track *t,const uint8_t *packed);
+unsigned rc_gcr_track_zone(const rc_gcr_track *t);
+void rc_gcr_track_write_zone(rc_gcr_track *t,unsigned zone);
 void rc_gcr_track_close(rc_gcr_track *t);
 int rc_gcr_track_read(rc_gcr_track *t);
 int rc_gcr_track_write(rc_gcr_track *t,int bit);

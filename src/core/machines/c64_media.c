@@ -125,7 +125,7 @@ int16_t rc_c64_tape_audio(rc_c64 *c){if(!c->tape_audio_count)return 0;const int1
 void rc_c64_media_release(rc_c64 *c){rc_c64_sid_eject(c);rc_c1541_close(&c->drive);rc_datasette_eject(&c->tape);rc_media_close(c->synthetic);c->synthetic=NULL;free(c->program);c->program=NULL;for(unsigned i=0;i<5;++i){if(c->media_owned[i])rc_media_close(c->media[i]);c->media[i]=NULL;c->media_owned[i]=0;}c->source=255;}
 int rc_c64_insert(void *self,unsigned slot,rc_media *image,char *error,size_t cap){
     rc_c64 *c=self;if(slot>=5||!image)return rc_image_error(error,cap,"Invalid media slot");
-    const char *formats[]={"tap,t64","prg,p00","d64","crt","sid"};if(!rc_media_extension_in(image->path,formats[slot]))return rc_image_error(error,cap,"Wrong image type for this slot");
+    const char *formats[]={"tap,t64","prg,p00","d64,g64","crt","sid"};if(!rc_media_extension_in(image->path,formats[slot]))return rc_image_error(error,cap,"Wrong image type for this slot");
     rc_media *old=c->media[slot];const uint8_t owned=c->media_owned[slot];c->media[slot]=image;c->media_owned[slot]=0;
     int ok=1;if(slot==2){ok=rc_c1541_mount(&c->drive,image,error,cap);if(ok)ok=select_entry(c,slot,UINT32_MAX,error,cap);}
     else if(slot==3){ok=rc_c64_cart_insert(c,image,error,cap);if(ok)c->selected[3]=UINT32_MAX;}

@@ -36,7 +36,7 @@ rc_set_warnings(lorenz_suite)
 add_library(rc_core STATIC core/config.c core/yamledit.c core/romdb.c core/state.c
     core/media.c core/font8x8.c core/palette.c core/keymap.c core/stick.c core/machine.c core/stub_machine.c core/machines/c64.c core/machines/c64_media.c hw/bus.c hw/sched.c hw/mos6510.c
     hw/traps.c hw/mouse1351.c hw/cia6526.c hw/pla.c hw/c64kbd.c hw/sid.c hw/sid_own.c hw/vic2.c hw/via6522.c
-    core/media/image.c core/media/d64.c core/media/t64.c core/media/tap.c core/media/prg.c core/media/gcr.c
+    core/media/image.c core/media/d64.c core/media/g64.c core/media/t64.c core/media/tap.c core/media/prg.c core/media/gcr.c
     core/media/tapedeck.c hw/datasette.c hw/c1541.c hw/iec.c hw/fastload.c hw/drivesnd.c
     core/media/crt.c hw/cart.c hw/cart_freezer.c hw/am29f040.c hw/easyflash.c
     hw/reu.c hw/georam.c core/machines/c64_expansion.c
@@ -176,6 +176,11 @@ target_link_libraries(test_drive PRIVATE rc_core)
 target_compile_definitions(test_drive PRIVATE RC_ROM_DIR="${CMAKE_CURRENT_SOURCE_DIR}/../roms" RC_WORK="${RC_WORK}")
 rc_set_warnings(test_drive)
 add_test(NAME drive COMMAND test_drive)
+add_executable(test_g64 tests/test_g64.c)
+target_link_libraries(test_g64 PRIVATE rc_core)
+target_compile_definitions(test_g64 PRIVATE RC_ROM_DIR="${CMAKE_CURRENT_SOURCE_DIR}/../roms" RC_WORK="${RC_WORK}")
+rc_set_warnings(test_g64)
+add_test(NAME g64 COMMAND test_g64)
 add_executable(test_fastload tests/test_fastload.c)
 target_link_libraries(test_fastload PRIVATE rc_core)
 rc_set_warnings(test_fastload)

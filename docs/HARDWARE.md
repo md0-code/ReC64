@@ -250,10 +250,11 @@ fetch mask keeps tape-prompt handling available when fast hooks are off.
 The board presses PLAY at the known KERNAL prompt, rather than on motor
 changes during reset, so an idle auto-load cannot consume the tape first.
 
-## 1541 board and IEC
+## 1541 / 1541-II board and IEC
 
-The drive runs its unmodified 16 KiB DOS on the cycle-stepped NMOS 6502,
-with 2 KiB RAM and two independent MOS 6522 VIAs. Its board decodes memory
+The 1541 uses DOS 325302-01/901229-05; the 1541-II uses 251968-03.
+Both run the unmodified 16 KiB firmware on the cycle-stepped NMOS 6502,
+with 2 KiB RAM and two independent MOS 6522 VIAs. The board decodes memory
 and wires both VIA interrupts to IRQ. The serial VIA receives inverted
 DATA, CLK and ATN, and its PB4 attention acknowledgement combines with ATN
 through the schematic's XOR gate. Bus endpoints only pull lines low; the
@@ -261,14 +262,16 @@ resolved levels are the AND of their released outputs. Device jumpers select
 8 through 11. The drive sees the physical reset line.
 
 The mechanism stores circular GCR tracks with a nominal 200 ms rotation.
-The 16 MHz clock divided by 13, 14, 15 or 16 gives the four recording zones.
+The 16 MHz master clock yields bit cells of 52, 56, 60 or 64 ticks for the
+four recording zones.
 Serial read bits feed the shift register; ten consecutive ones reset byte
 framing and assert active-low SYNC. Byte-ready pulses reach VIA CA1 and,
 when CA2 enables them, the CPU's logical SO input. The ROM decodes the GCR
 and executes disk jobs itself. CB2 switches reading and writing; Port A
 supplies the next serial write byte. Motor, LED, phase changes and head
 bumps come from the actual VIA outputs. A head step preserves angular
-position across tracks.
+position across tracks. RESET retains mechanical phase; head-stop recovery
+re-engages the coils at the track's phase parity before moving inward.
 
 D64 sectors are converted to header and data blocks with their checksums,
 sync and gaps. Extended-image error codes change the corresponding physical
@@ -277,6 +280,16 @@ Completed writes are decoded back into the mounted, borrowed image before
 the host flushes it. State includes both processors' interface state, drive
 RAM, bus levels, mechanism phase, raw tracks and an unfinished write. No
 firmware byte or custom-loader instruction is replaced.
+
+G64 v0 mounts raw tracks independently at all 84 half-track positions, with
+variable track lengths and constant or packed per-byte recording speeds.
+Its recorded transitions run separately from the VIA-selected read clock;
+transitions recentre the data separator before bits enter the shift register.
+Rotation continues across absent half-tracks. Writes retain raw GCR bytes,
+update recording speeds and can add an unrecorded half-track. Shared track
+or speed blocks are copied when modified. Snapshots retain the raw tracks,
+speed maps, rotational position and separator phase, including pending writes.
+Version 1 drive and track snapshots still load.
 
 Drive sounds are generated at 48 kHz from the pinned 1541 recordings without
 storing a sample. Each sound is noise through the resonances measured for it,

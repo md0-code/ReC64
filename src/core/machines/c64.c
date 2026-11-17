@@ -7,23 +7,25 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-static const char *const ROMS[]={"kernal","basic","chargen","dos1541",NULL};
+static const char *const ROMS[]={"kernal","basic","chargen",NULL};
 static const rc_model_desc MODELS[]={
     {"c64-pal","C64 PAL",ROMS,NULL},{"c64c-pal","C64C PAL",ROMS,NULL},
     {"c64-ntsc","C64 NTSC",ROMS,NULL},{"c64c-ntsc","C64C NTSC",ROMS,NULL}};
 static const char *const SID_MODELS[]={"6581","8580",NULL};
 static const char *const DRIVE_DEVICES[]={"8","9","10","11",NULL};
+static const char *const DRIVE_MODELS[]={"1541","1541-ii",NULL};
 static const char *const REU_SIZES[]={"off","128k","256k","512k","1m","2m","4m","8m","16m",NULL};
 static const char *const GEO_SIZES[]={"off","512k","1m","2m","4m",NULL};
 static const rc_option_desc OPTIONS[]={
     {.key="sid",.values=SID_MODELS,.models=RC_MODELS_ALL,.flags=RC_OPTION_RESET},
     {.key="drive_device",.values=DRIVE_DEVICES,.models=RC_MODELS_ALL,.flags=RC_OPTION_RESET},
     {.key="reu",.values=REU_SIZES,.models=RC_MODELS_ALL,.flags=RC_OPTION_RESET},
-    {.key="georam",.values=GEO_SIZES,.models=RC_MODELS_ALL,.flags=RC_OPTION_RESET}};
+    {.key="georam",.values=GEO_SIZES,.models=RC_MODELS_ALL,.flags=RC_OPTION_RESET},
+    {.key="drive_model",.values=DRIVE_MODELS,.models=RC_MODELS_ALL,.flags=RC_OPTION_RESET}};
 static const rc_media_desc MEDIA[]={
     {.key="tape",.kind=RC_MEDIA_TAPE,.extensions="tap,t64",.models=RC_MODELS_ALL},
     {.key="program",.kind=RC_MEDIA_PROGRAM,.extensions="prg,p00",.models=RC_MODELS_ALL},
-    {.key="disk",.kind=RC_MEDIA_FLOPPY,.extensions="d64",.models=RC_MODELS_ALL},
+    {.key="disk",.kind=RC_MEDIA_FLOPPY,.extensions="d64,g64",.models=RC_MODELS_ALL},
     {.key="cartridge",.kind=RC_MEDIA_CART,.extensions="crt",.models=RC_MODELS_ALL},
     {.key="sid",.kind=RC_MEDIA_SID,.extensions="sid",.models=RC_MODELS_ALL}};
 /* Matrix order: CIA1 PA bit selects the row; PB bit selects the column. */
@@ -208,8 +210,9 @@ void *rc_c64_create(const rc_machine_setup *setup,char *error,size_t capacity){
     rc_c64kbd_init(&c->keyboard,&c->host);rc_pla_init(&c->pla,&c->host);
     const unsigned sid=setup->options[0];
     if(!rc_sid_init(&c->sid,&c->host,sid,c->hz,48000)){if(capacity)snprintf(error,capacity,"Cannot initialise SID");free(c);return NULL;}
-    const rc_rom_file *drive_rom=rc_rom_index_find(setup->roms,rc_romdb_find("dos1541"));
-    if(!drive_rom||drive_rom->size!=16384){if(capacity)snprintf(error,capacity,"Missing 1541 DOS ROM");rc_sid_release(&c->sid);free(c);return NULL;}
+    const char *drive_key=setup->options[4]?"dos1541ii":"dos1541";
+    const rc_rom_file *drive_rom=rc_rom_index_find(setup->roms,rc_romdb_find(drive_key));
+    if(!drive_rom||drive_rom->size!=16384){if(capacity)snprintf(error,capacity,"Missing %s DOS ROM",setup->options[4]?"1541-II":"1541");rc_sid_release(&c->sid);free(c);return NULL;}
     rc_c1541_init(&c->drive,drive_rom->data,8u+setup->options[1]);rc_sha256(drive_rom->data,drive_rom->size,c->rom_hashes+96);rc_iec_init(&c->iec);
     rc_fastload_init(&c->fastload,c->hz);
     rc_drivesnd_init(&c->drive_sound);

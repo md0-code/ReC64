@@ -7,17 +7,19 @@
 #include "via6522.h"
 #include "iec.h"
 #include "../core/media/d64.h"
+#include "../core/media/g64.h"
 #include "../core/media/gcr.h"
 typedef struct rc_c1541_status {unsigned device,halftrack,motor,led,writing;uint64_t steps,bumps,cycles;} rc_c1541_status;
 typedef struct rc_c1541 {
     rc_mos6510 cpu;rc_via6522 via[2];
     uint8_t ram[2048],rom[16384];
-    rc_media *image;rc_media *owned_image;rc_d64 disk;
-    rc_gcr_track track[43];
+    rc_media *image;rc_media *owned_image;rc_d64 disk;rc_g64 g64;
+    /* Physical half-track indices 2..85: 1.0..42.5. */
+    rc_gcr_track track[86];
     uint64_t cycles,steps,bumps;
-    uint32_t bit_ticks;uint8_t bit_count,read_shift,write_shift,read_latch,ones;
-    uint8_t halftrack,phase,motor,led,writing,byte_ready,iec_in,iec_out,device,enabled;
-    uint8_t dirty_track[43];
+    uint32_t bit_ticks,separator_ticks;uint8_t bit_count,read_shift,write_shift,read_latch,ones,separator_bit;
+    uint8_t halftrack,phase,motor,led,writing,byte_ready,iec_in,iec_out,device,enabled,rotation_track;
+    uint8_t dirty_track[86];
 } rc_c1541;
 void rc_c1541_init(rc_c1541 *d,const uint8_t rom[16384],unsigned device);
 void rc_c1541_close(rc_c1541 *d);

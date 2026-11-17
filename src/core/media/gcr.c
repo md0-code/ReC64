@@ -45,7 +45,15 @@ int rc_gcr_track_open(rc_gcr_track *t,const uint8_t *data,size_t bytes,uint32_t 
     rc_media *image=rc_media_from("",data,bytes);if(!image)return 0;
     memset(t,0,sizeof *t);t->image=image;t->bits=bits;t->zone=(uint8_t)zone;return 1;
 }
-void rc_gcr_track_close(rc_gcr_track *t){rc_media_close(t->image);memset(t,0,sizeof *t);}
+int rc_gcr_track_speeds(rc_gcr_track *t,const uint8_t *packed){
+    const size_t count=(t->image->size+3u)/4u;rc_media *speeds=rc_media_from("",packed,count);if(!speeds)return 0;
+    rc_media_close(t->speeds);t->speeds=speeds;return 1;
+}
+unsigned rc_gcr_track_zone(const rc_gcr_track *t){return t->speeds?(t->speeds->data[t->position/32]>>(6u-2u*((t->position/8)&3u)))&3u:t->zone;}
+void rc_gcr_track_write_zone(rc_gcr_track *t,unsigned zone){
+    if(t->speeds){const unsigned at=t->position/32,shift=6u-2u*((t->position/8)&3u);t->speeds->data[at]=(uint8_t)((t->speeds->data[at]&~(3u<<shift))|(zone<<shift));}
+}
+void rc_gcr_track_close(rc_gcr_track *t){rc_media_close(t->image);rc_media_close(t->speeds);memset(t,0,sizeof *t);}
 static void advance(rc_gcr_track *t){if(++t->position==t->bits)t->position=0;}
 int rc_gcr_track_read(rc_gcr_track *t) {
     if(!t->image||!t->bits)return -1;
@@ -57,12 +65,16 @@ int rc_gcr_track_write(rc_gcr_track *t,int bit) {
     *data=(uint8_t)((*data&~mask)|(bit?mask:0));t->image->dirty=1;advance(t);return 1;
 }
 void rc_gcr_track_save(const rc_gcr_track *t,rc_state_writer *w) {
-    rc_sw_u32(w,1);rc_sw_u32(w,t->bits);rc_sw_u32(w,t->position);rc_sw_u8(w,t->zone);rc_image_save(t->image,w);
+    rc_sw_u32(w,2);rc_sw_u32(w,t->bits);rc_sw_u32(w,t->position);rc_sw_u8(w,t->zone);rc_image_save(t->image,w);
+    rc_sw_u8(w,t->speeds!=NULL);if(t->speeds)rc_image_save(t->speeds,w);
 }
 int rc_gcr_track_load(rc_gcr_track *t,rc_state_reader *r) {
-    if(r->end-r->at<13||rc_sr_u32(r)!=1)return 0;
+    if(r->end-r->at<13)return 0;const uint32_t version=rc_sr_u32(r);if(version<1||version>2)return 0;
     const uint32_t bits=rc_sr_u32(r),position=rc_sr_u32(r);const uint8_t zone=rc_sr_u8(r);
     rc_media *image=rc_image_load(r);if(!image)return 0;
     if(!bits||position>=bits||zone>3||image->size!=(bits+7ull)/8){rc_media_close(image);return 0;}
-    rc_gcr_track_close(t);t->image=image;t->bits=bits;t->position=position;t->zone=zone;return 1;
+    rc_media *speeds=NULL;if(version==2){const unsigned present=rc_sr_u8(r);if(present>1){rc_media_close(image);return 0;}
+        if(present){speeds=rc_image_load(r);if(!speeds||speeds->size!=(image->size+3u)/4u){rc_media_close(image);rc_media_close(speeds);return 0;}}}
+    if(!rc_sr_ok(r)){rc_media_close(image);rc_media_close(speeds);return 0;}
+    rc_gcr_track_close(t);t->image=image;t->speeds=speeds;t->bits=bits;t->position=position;t->zone=zone;return 1;
 }

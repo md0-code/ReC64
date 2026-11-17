@@ -200,15 +200,19 @@ Escape/N cancels that replacement. Escape closes either browser.
 
 Ctrl+F1 opens Load and Ctrl+F2 opens Save, including from setup. Dropped
 PRG/P00 files load and run; dropped D64/T64/TAP files open their contents.
+G64 images mount directly for loading through the emulated drive; Space in
+the file list inserts one without auto-loading. Raw data, half-tracks and
+per-byte recording speeds are retained when writing to a G64 image.
 With auto-load enabled, choosing Load runs the machine's LOAD/RUN commands through real keyboard
 input after a cold boot. Space inserts without auto-loading. Opening a
 browser pauses the guest; closing returns to the previous setup or machine
 screen. Manual keyboard input, focus loss and reset cancel auto-typing.
 
 The control OSD has tape Play, Stop, Rewind, Record and Eject actions.
-The Media settings page selects device 8–11, disk/tape fast loading,
+The Media settings page selects the drive model (1541 or 1541-II), device 8–11, disk/tape fast loading,
 sounds and auto-load. Alt+F toggles drive fast loading, Alt+S drive sounds, and Alt+T
-tape sound. `machine.options.drive_device` stores the device number.
+tape sound. `machine.options.drive_device` stores the device number;
+`machine.options.drive_model` accepts `1541` (the default) or `1541-ii`.
 Saving to TAP creates and mounts a recording target: use BASIC SAVE to
 record the program. Saving a blank D64 creates and inserts that image.
 Modified media are flushed before replacement, ejection, restart and exit.
@@ -218,7 +222,7 @@ A model restart retains mounted images and selected entries.
 save_traps and accelerate settings for `media.program` as well. An explicit
 program setting overrides that one default; storing an image path alone
 preserves inheritance. `media.disk` has independent fast, sound, autoload
-and full_speed settings. D64 loading and saving always use the true 1541;
+and full_speed settings. D64 and G64 loading and saving always use the selected emulated drive;
 KERNAL traps and skipped loader instructions never apply to disks.
 Automatic full speed runs while the configured media is active, with every
 guest cycle still executed. Manual F10 full speed continues to mute sound.

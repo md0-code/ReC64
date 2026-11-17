@@ -5,7 +5,7 @@
 #include "../core/media.h"
 #define RC_BROWSER_NAME 256
 enum {RC_BROWSER_NONE,RC_BROWSER_CLOSE,RC_BROWSER_LOAD,RC_BROWSER_INSERT,RC_BROWSER_SAVE_PRG,RC_BROWSER_SAVE_TAP,RC_BROWSER_SAVE_D64};
-enum {RC_BROWSER_PRG,RC_BROWSER_P00,RC_BROWSER_D64,RC_BROWSER_T64,RC_BROWSER_TAP,RC_BROWSER_CRT,RC_BROWSER_SID,RC_BROWSER_STATE,RC_BROWSER_UNKNOWN};
+enum {RC_BROWSER_PRG,RC_BROWSER_P00,RC_BROWSER_D64,RC_BROWSER_T64,RC_BROWSER_TAP,RC_BROWSER_CRT,RC_BROWSER_SID,RC_BROWSER_STATE,RC_BROWSER_G64,RC_BROWSER_UNKNOWN};
 typedef struct rc_browser_content {uint8_t name[16];uint16_t address;uint32_t length,index;uint8_t type;} rc_browser_content;
 typedef int (*rc_browser_tape_list_fn)(void *ctx,const rc_media *image,rc_browser_content *entries,size_t capacity,size_t *count,char *error,size_t cap);
 typedef struct rc_browser_result {char path[RC_MEDIA_PATH];uint32_t entry;unsigned action;int overwrite;} rc_browser_result;

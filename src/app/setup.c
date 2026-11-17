@@ -9,7 +9,7 @@ void rc_setup_init(rc_setup *s,rc_config *c){memset(s,0,sizeof *s);s->config=c;s
     for(unsigned i=0;i<8;++i)if(!strcmp(c->setup_page,IDS[i]))s->page=i;
     if(s->page==RC_SETUP_STATES)s->row=(unsigned)c->state_slot-1u;
 }
-static unsigned rows(const rc_setup *s){return s->page==RC_SETUP_MACHINE?5u:s->page==RC_SETUP_DISPLAY?7u:s->page==RC_SETUP_SOUND?2u:s->page==RC_SETUP_CONTROLLERS?6u:s->page==RC_SETUP_MEDIA?7u:s->page==RC_SETUP_CARTRIDGE?6u:s->page==RC_SETUP_STATES?12u:0;}
+static unsigned rows(const rc_setup *s){return s->page==RC_SETUP_MACHINE?5u:s->page==RC_SETUP_DISPLAY?7u:s->page==RC_SETUP_SOUND?2u:s->page==RC_SETUP_CONTROLLERS?6u:s->page==RC_SETUP_MEDIA?8u:s->page==RC_SETUP_CARTRIDGE?6u:s->page==RC_SETUP_STATES?12u:0;}
 static unsigned cycle(unsigned value,unsigned count,int direction){return (value+count+(direction<0?count-1u:1u))%count;}
 unsigned rc_setup_key(rc_setup *s,const char *key){
     if(!strcmp(key,"ESCAPE")||!strcmp(key,"F12")){s->active=0;return RC_SETUP_CLOSE;}
@@ -51,9 +51,10 @@ unsigned rc_setup_key(rc_setup *s,const char *key){
     }
     if(s->page==RC_SETUP_MEDIA){
         if(!s->media_available)return 0;
-        if(s->row==0){const char *current=rc_config_option_value(c,"drive_device");unsigned v=current?(unsigned)(current[0]=='1'?current[1]-'0'+2:current[0]-'8'):0;const char *values[]={"8","9","10","11"};rc_config_set_option(c,"drive_device",values[cycle(v,4,direction)]);return RC_SETUP_RESTART;}
-        const char *kind=s->row<4?"disk":"tape";rc_config_media effective;rc_config_media_settings(c,kind,&effective);rc_config_media *media=rc_config_media_slot(c,kind);if(!media)return 0;
-        const unsigned field=s->row<4?s->row-1:s->row-4;
+        if(s->row==0){const char *current=rc_config_option_value(c,"drive_model");const unsigned v=current&&!strcmp(current,"1541-ii");rc_config_set_option(c,"drive_model",v?"1541":"1541-ii");return RC_SETUP_RESTART;}
+        if(s->row==1){const char *current=rc_config_option_value(c,"drive_device");unsigned v=current?(unsigned)(current[0]=='1'?current[1]-'0'+2:current[0]-'8'):0;const char *values[]={"8","9","10","11"};rc_config_set_option(c,"drive_device",values[cycle(v,4,direction)]);return RC_SETUP_RESTART;}
+        const char *kind=s->row<5?"disk":"tape";rc_config_media effective;rc_config_media_settings(c,kind,&effective);rc_config_media *media=rc_config_media_slot(c,kind);if(!media)return 0;
+        const unsigned field=s->row<5?s->row-2:s->row-5;
         if(field==0){media->fast=!effective.fast;media->explicit_flags|=RC_MEDIA_SETTING_FAST;}
         else if(field==1){media->sound=!effective.sound;media->explicit_flags|=RC_MEDIA_SETTING_SOUND;}
         else {media->autoload=!effective.autoload;media->explicit_flags|=RC_MEDIA_SETTING_AUTOLOAD;}
@@ -75,7 +76,7 @@ unsigned rc_setup_key(rc_setup *s,const char *key){
 }
 static void row(rc_setup *s,unsigned index,const char *label,const char *value,int enabled){char line[37];snprintf(line,sizeof line," %-16.16s %15.15s ",label,value);const int selected=enabled&&s->row==index;
     rc_tui_put(&s->tui,6+index*2,2,line,(uint8_t)(enabled?(selected?6:14):12),(uint8_t)(selected?14:6));}
-static void media_row(rc_setup *s,unsigned index,const char *label,const char *value,int enabled){char line[37];snprintf(line,sizeof line," %-16.16s %15.15s ",label,value);const int selected=enabled&&s->row==index;rc_tui_put(&s->tui,5+index+(index>=4?2u:0u),2,line,(uint8_t)(enabled?(selected?6:14):12),(uint8_t)(selected?14:6));}
+static void media_row(rc_setup *s,unsigned index,const char *label,const char *value,int enabled){char line[37];snprintf(line,sizeof line," %-16.16s %15.15s ",label,value);const int selected=enabled&&s->row==index;rc_tui_put(&s->tui,5+index+(index>=5?2u:0u),2,line,(uint8_t)(enabled?(selected?6:14):12),(uint8_t)(selected?14:6));}
 void rc_setup_draw(rc_setup *s,const uint32_t palette[16],rc_frame *f){
     rc_tui_clear(&s->tui);char title[40];snprintf(title,sizeof title,"%s %u/8",PAGES[s->page],s->page+1);rc_tui_bar(&s->tui,0,title);
     rc_tui_box(&s->tui,3,1,18,38);
@@ -88,10 +89,10 @@ void rc_setup_draw(rc_setup *s,const uint32_t palette[16],rc_frame *f){
         row(s,3,"FULL SCREEN",c->fullscreen?"ON":"OFF",1);row(s,4,"SCALE",c->scale?"INTEGER":"FIT",1);row(s,5,"PIXEL SHAPE",c->aspect?"SQUARE":"ORIGINAL",1);row(s,6,"VSYNC",c->vsync?"ON":"OFF",1);break;
     case RC_SETUP_SOUND:{char volume[16];snprintf(volume,sizeof volume,"%d%%",c->volume);row(s,0,"SOUND",c->sound?"ON":"OFF",1);row(s,1,"VOLUME",volume,1);break;}
     case RC_SETUP_MEDIA:{rc_config_media disk,tape;rc_config_media_settings(c,"disk",&disk);rc_config_media_settings(c,"tape",&tape);const char *device=rc_config_option_value(c,"drive_device");
-        rc_tui_put(&s->tui,4,3,"DRIVE",1,6);rc_tui_put(&s->tui,10,3,"TAPE",1,6);
-        media_row(s,0,"DEVICE",device?device:"8",s->media_available);media_row(s,1,"FAST LOAD",disk.fast?"ON":"OFF",s->media_available);
-        media_row(s,2,"SOUNDS",disk.sound?"ON":"OFF",s->media_available);media_row(s,3,"AUTO-LOAD",disk.autoload?"ON":"OFF",s->media_available);
-        media_row(s,4,"FAST LOAD",tape.fast?"ON":"OFF",s->media_available);media_row(s,5,"SOUND",tape.sound?"ON":"OFF",s->media_available);media_row(s,6,"AUTO-LOAD",tape.autoload?"ON":"OFF",s->media_available);break;}
+        const char *drive=rc_config_option_value(c,"drive_model");rc_tui_put(&s->tui,4,3,"DRIVE",1,6);rc_tui_put(&s->tui,11,3,"TAPE",1,6);
+        media_row(s,0,"MODEL",drive&&!strcmp(drive,"1541-ii")?"1541-II":"1541",s->media_available);media_row(s,1,"DEVICE",device?device:"8",s->media_available);media_row(s,2,"FAST LOAD",disk.fast?"ON":"OFF",s->media_available);
+        media_row(s,3,"SOUNDS",disk.sound?"ON":"OFF",s->media_available);media_row(s,4,"AUTO-LOAD",disk.autoload?"ON":"OFF",s->media_available);
+        media_row(s,5,"FAST LOAD",tape.fast?"ON":"OFF",s->media_available);media_row(s,6,"SOUND",tape.sound?"ON":"OFF",s->media_available);media_row(s,7,"AUTO-LOAD",tape.autoload?"ON":"OFF",s->media_available);break;}
 
     case RC_SETUP_CONTROLLERS:{const char *types[]={"JOYSTICK","1351 MOUSE","PADDLES","NONE"};char source[32];
         row(s,0,"PORT 1",types[c->sticks[0].type],1);rc_config_stick_device_name(&c->sticks[0],source,sizeof source);row(s,1,"INPUT 1",c->sticks[0].type==RC_CONTROL_MOUSE1351?"MOUSE":source,c->sticks[0].type!=RC_CONTROL_MOUSE1351&&c->sticks[0].type!=RC_CONTROL_NONE);

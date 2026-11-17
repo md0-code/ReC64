@@ -11,7 +11,7 @@ static unsigned petscii(unsigned c);
 static int same(const char *a,const char *b){for(;*a&&*b;++a,++b)if(toupper((unsigned char)*a)!=toupper((unsigned char)*b))return 0;return *a==*b;}
 static int compare_name(const char *a,const char *b){for(;*a&&*b;++a,++b){const int d=toupper((unsigned char)*a)-toupper((unsigned char)*b);if(d)return d;}return (unsigned char)*a-(unsigned char)*b;}
 static int compare(const void *a,const void *b){const rc_browser_item *x=a,*y=b;if(x->folder!=y->folder)return x->folder?-1:1;return compare_name(x->name,y->name);}
-static unsigned format(const char *name){static const char *const extensions[]={"prg","p00","d64","t64","tap","crt","sid","rcs"};for(unsigned i=0;i<8;++i)if(rc_media_extension_in(name,extensions[i]))return i;return RC_BROWSER_UNKNOWN;}
+static unsigned format(const char *name){static const char *const extensions[]={"prg","p00","d64","t64","tap","crt","sid","rcs","g64"};for(unsigned i=0;i<9;++i)if(rc_media_extension_in(name,extensions[i]))return i;return RC_BROWSER_UNKNOWN;}
 static void clear_items(rc_browser *b){free(b->items);b->items=NULL;b->count=b->selected=b->top=b->capacity=0;b->search[0]=0;}
 static int append_item(rc_browser *b,const rc_browser_item *item){
     if(b->count==b->capacity){const size_t capacity=b->capacity?b->capacity*2:32;if(capacity<b->capacity||capacity>SIZE_MAX/sizeof *b->items){b->listing_failed=1;return 0;}
@@ -20,7 +20,7 @@ static int append_item(rc_browser *b,const rc_browser_item *item){
 }
 static int join(char *out,size_t cap,const char *folder,const char *name){const size_t n=strlen(folder);const int length=snprintf(out,cap,"%s%s%s",folder,n&&folder[n-1]!='/'&&folder[n-1]!='\\'?"/":"",name);return length>=0&&(size_t)length<cap;}
 static int parent(const char *folder,char *out,size_t cap){char path[RC_MEDIA_PATH];if(!rc_host_full_path(folder,path,sizeof path))return 0;size_t n=strlen(path);while(n>1&&(path[n-1]=='/'||path[n-1]=='\\'))path[--n]=0;char *slash=strrchr(path,'/'),*back=strrchr(path,'\\');if(back&&(!slash||back>slash))slash=back;if(!slash)return 0;slash[1]=0;if(rc_host_same_folder(path,folder))return 0;return snprintf(out,cap,"%s",path)>0;}
-static int list_entry(void *ctx,const char *name,int folder,uint64_t size){rc_browser *b=ctx;const unsigned kind=folder?RC_BROWSER_UNKNOWN:format(name);if(!folder&&kind==RC_BROWSER_UNKNOWN)return 1;rc_browser_item item={0};if(strlen(name)>=sizeof item.name)return 1;snprintf(item.name,sizeof item.name,"%s",name);item.folder=(unsigned)folder;item.format=kind;item.bytes=size;item.disabled=!folder&&kind>=RC_BROWSER_CRT&&!(kind==RC_BROWSER_STATE&&b->states_enabled)&&!(kind==RC_BROWSER_CRT&&b->cartridges_enabled)&&!(kind==RC_BROWSER_SID&&b->sid_enabled);return append_item(b,&item);}
+static int list_entry(void *ctx,const char *name,int folder,uint64_t size){rc_browser *b=ctx;const unsigned kind=folder?RC_BROWSER_UNKNOWN:format(name);if(!folder&&kind==RC_BROWSER_UNKNOWN)return 1;rc_browser_item item={0};if(strlen(name)>=sizeof item.name)return 1;snprintf(item.name,sizeof item.name,"%s",name);item.folder=(unsigned)folder;item.format=kind;item.bytes=size;item.disabled=!folder&&kind>=RC_BROWSER_CRT&&kind!=RC_BROWSER_G64&&!(kind==RC_BROWSER_STATE&&b->states_enabled)&&!(kind==RC_BROWSER_CRT&&b->cartridges_enabled)&&!(kind==RC_BROWSER_SID&&b->sid_enabled);return append_item(b,&item);}
 static int refresh(rc_browser *b,char *error,size_t cap){clear_items(b);b->contents=0;b->image[0]=0;b->confirm=0;b->listing_failed=0;b->message[0]=0;
     if(b->roots){if(!rc_host_list_roots(list_entry,b)){snprintf(error,cap,"Cannot list filesystem roots");return 0;}}
     else {char up[RC_MEDIA_PATH];if(parent(b->path,up,sizeof up)){rc_browser_item item={0};snprintf(item.name,sizeof item.name,"..");item.folder=1;if(!append_item(b,&item)){snprintf(error,cap,"Out of memory");return 0;}}
@@ -54,7 +54,7 @@ static unsigned result(rc_browser *b,unsigned action,const char *path,uint32_t e
 unsigned rc_browser_file(rc_browser *b,const char *path,char *error,size_t cap){
     if(cap)error[0]=0;
     char absolute[RC_MEDIA_PATH];if(!rc_host_full_path(path,absolute,sizeof absolute)){snprintf(error,cap,"Path is too long");return RC_BROWSER_NONE;}
-    const unsigned kind=format(absolute);if((kind==RC_BROWSER_STATE&&b->states_enabled)||(kind==RC_BROWSER_CRT&&b->cartridges_enabled)||(kind==RC_BROWSER_SID&&b->sid_enabled))return result(b,RC_BROWSER_LOAD,absolute,UINT32_MAX,0);if(kind>=RC_BROWSER_CRT){snprintf(error,cap,kind==RC_BROWSER_UNKNOWN?"Unsupported file type":"Format is not available yet");return RC_BROWSER_NONE;}
+    const unsigned kind=format(absolute);if(kind==RC_BROWSER_G64||(kind==RC_BROWSER_STATE&&b->states_enabled)||(kind==RC_BROWSER_CRT&&b->cartridges_enabled)||(kind==RC_BROWSER_SID&&b->sid_enabled))return result(b,RC_BROWSER_LOAD,absolute,UINT32_MAX,0);if(kind>=RC_BROWSER_CRT){snprintf(error,cap,kind==RC_BROWSER_UNKNOWN?"Unsupported file type":"Format is not available yet");return RC_BROWSER_NONE;}
     if(kind<=RC_BROWSER_P00)return result(b,RC_BROWSER_LOAD,absolute,UINT32_MAX,0);
     rc_media *image=rc_media_open(absolute,1,error,cap);if(!image)return RC_BROWSER_NONE;
     rc_browser_content *entries=NULL;size_t count=0;int ok=0;
@@ -107,7 +107,7 @@ unsigned rc_browser_key(rc_browser *b,const char *name){
             snprintf(b->path,sizeof b->path,"%s",path);if(!refresh(b,error,sizeof error))rc_browser_error(b,error);return RC_BROWSER_NONE;}
         if(b->save){snprintf(b->filename,sizeof b->filename,"%s",item->name);set_save_type(b,b->save_type);b->focus=2;return RC_BROWSER_NONE;}
         if(!join(path,sizeof path,b->path,item->name)){rc_browser_error(b,"Path is too long");return RC_BROWSER_NONE;}
-        if(same(key,"SPACE")&&item->format>=RC_BROWSER_D64&&item->format<=RC_BROWSER_TAP)return result(b,RC_BROWSER_INSERT,path,UINT32_MAX,0);
+        if(same(key,"SPACE")&&((item->format>=RC_BROWSER_D64&&item->format<=RC_BROWSER_TAP)||item->format==RC_BROWSER_G64))return result(b,RC_BROWSER_INSERT,path,UINT32_MAX,0);
         const unsigned action=rc_browser_file(b,path,error,sizeof error);if(error[0])rc_browser_error(b,error);return action;
     }
     reveal(b);return RC_BROWSER_NONE;
