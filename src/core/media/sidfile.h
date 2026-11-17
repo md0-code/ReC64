@@ -15,7 +15,7 @@ typedef struct rc_sidfile {
 } rc_sidfile;
 typedef struct rc_sid_driver {
     uint8_t bytes[256];
-    uint16_t address,entry,irq,indirect_irq,nmi,idle;
+    uint16_t address,entry,initialized,irq,indirect_irq,nmi,idle;
     unsigned length;
 } rc_sid_driver;
 /* Failure leaves *out unchanged. Song numbers in the header are one-based. */

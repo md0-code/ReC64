@@ -481,8 +481,10 @@ song accumulator is zero-based, each init/play call applies the specified
 6510 bank value, and the selected speed bit enables raster or CIA1 timer-A
 interrupts. CIA1 timer A runs at the documented 60 Hz startup latch for the
 chosen clock. A zero play address leaves playback to the tune's installed
-interrupt vector. The firmware and loaded payload are never patched. Every
-tune starts with the SID at full volume, as many leave that to their game.
+interrupt vector. The firmware and loaded payload are never patched. The
+SID stays at reset volume while init runs. On return, the player supplies
+full volume only if init has not written the volume register, preserving
+intentional silence and avoiding a premature 6581 output transient.
 
 RSID waits for the unchanged firmware to reach READY, loads physical RAM,
 and calls init on the real CPU stack. A returning init resumes the firmware's

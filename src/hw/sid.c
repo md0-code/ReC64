@@ -11,7 +11,7 @@ static void save_dev(const void *p,rc_state_writer *w){rc_sid_save(p,w);}
 static int load_dev(void *p,rc_state_reader *r){return rc_sid_load(p,r);}
 static const rc_dev_ops OPS={.read=read_dev,.write=write_dev,.reset=reset_dev,.save=save_dev,.load=load_dev};
 int rc_sid_init(rc_sid *s,const rc_hw_host *host,unsigned model,uint32_t hz,uint32_t rate){
-    s->dev=(rc_dev){&OPS,host,"SID"};s->engine=NULL;
+    s->dev=(rc_dev){&OPS,host,"SID"};s->engine=NULL;s->volume_written=0;
     if(model>RC_SID_8580)return 0;
     rc_sid_own *e=calloc(1,sizeof *e);
     if(!e||!rc_sid_own_init(e,model,hz,rate)){free(e);return 0;}
@@ -20,23 +20,24 @@ int rc_sid_init(rc_sid *s,const rc_hw_host *host,unsigned model,uint32_t hz,uint
 void rc_sid_release(rc_sid *s){free(s->engine);s->engine=NULL;}
 void rc_sid_reset(rc_sid *s){
     rc_sid_own *e=s->engine;if(!e)return;
-    rc_sid_own_reset(e);e->audio_head=e->audio_count=0;e->failed=0;
+    rc_sid_own_reset(e);e->audio_head=e->audio_count=0;e->failed=0;s->volume_written=0;
 }
 void rc_sid_power(rc_sid *s){
     rc_sid_own *e=s->engine;if(!e)return;
     const unsigned model=e->model;const uint32_t hz=e->clock_hz,rate=e->sample_rate;
-    rc_sid_own_init(e,model,hz,rate);
+    rc_sid_own_init(e,model,hz,rate);s->volume_written=0;
 }
 uint8_t rc_sid_read(rc_sid *s,unsigned reg){return s->engine?rc_sid_own_read(s->engine,reg):255;}
 uint8_t rc_sid_pot_read(rc_sid *s,unsigned reg,uint8_t value){return s->engine?rc_sid_own_pot_read(s->engine,reg,value):255;}
 uint8_t rc_sid_peek(rc_sid *s,unsigned reg){return s->engine?rc_sid_own_peek(s->engine,reg):255;}
-void rc_sid_write(rc_sid *s,unsigned reg,uint8_t v){if(s->engine)rc_sid_own_write(s->engine,reg,v);}
+void rc_sid_write(rc_sid *s,unsigned reg,uint8_t v){if(s->engine){if((reg&31u)==24)s->volume_written=1;rc_sid_own_write(s->engine,reg,v);}}
+int rc_sid_volume_written(const rc_sid *s){return s->volume_written;}
 int rc_sid_clock(rc_sid *s,uint32_t cycles){return s->engine&&rc_sid_own_clock(s->engine,cycles);}
 size_t rc_sid_audio_pull(rc_sid *s,int16_t *mono,size_t frames){return s->engine?rc_sid_own_audio_pull(s->engine,mono,frames):0;}
 int rc_sid_ok(const rc_sid *s){const rc_sid_own *e=s->engine;return e&&!e->failed;}
 void rc_sid_save(const rc_sid *s,rc_state_writer *w){
     const rc_sid_own *e=s->engine;if(!e||e->failed){w->failed=1;return;}
-    rc_sw_u32(w,2);rc_sw_u32(w,e->model);rc_sw_u32(w,e->clock_hz);rc_sw_u32(w,e->sample_rate);rc_sid_own_save(e,w);
+    rc_sw_u32(w,3);rc_sw_u32(w,e->model);rc_sw_u32(w,e->clock_hz);rc_sw_u32(w,e->sample_rate);rc_sw_u8(w,s->volume_written);rc_sid_own_save(e,w);
 }
 /* Payload 1 is a snapshot of the releases that ran the reSID library: a
  * journal of bus accesses and clock runs. Its register writes are replayed
@@ -61,5 +62,8 @@ int rc_sid_load(rc_sid *s,rc_state_reader *r){
     rc_sid_own *e=s->engine;if(!e||r->end-r->at<16)return 0;
     const uint32_t payload=rc_sr_u32(r),model=rc_sr_u32(r),hz=rc_sr_u32(r),rate=rc_sr_u32(r);
     if(model!=e->model||hz!=e->clock_hz||rate!=e->sample_rate)return 0;
-    return payload==2?rc_sid_own_load(e,r):payload==1&&load_journal(e,r);
+    /* Older snapshots already supplied the player's volume before init. */
+    const uint8_t written=payload==3?rc_sr_u8(r):1;if(written>1)return 0;
+    const int ok=(payload==2||payload==3)?rc_sid_own_load(e,r):payload==1&&load_journal(e,r);
+    if(ok)s->volume_written=written;return ok;
 }

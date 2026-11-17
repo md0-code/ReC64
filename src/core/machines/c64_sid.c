@@ -37,8 +37,7 @@ static void launch(rc_c64 *c){
     environment(c,f,s->song);
     /* Physical RAM loading must also reach RAM beneath I/O and ROM. */
     memcpy(c->bus.ram+f->load,f->payload,f->length);
-    /* Many tunes never set the volume themselves: their game did. Players hand them a SID at full volume. */
-    rc_sid_reset(&c->sid);io(c,0xd418,0x0f);
+    rc_sid_reset(&c->sid);
     s->elapsed_cycles=0;s->phase=SID_RUNNING;
     if(!f->rsid){
         rc_sid_driver d;char error[128];
@@ -53,6 +52,7 @@ static void launch(rc_c64 *c){
         if(!payload_at(f,0x0314,2))word(c->bus.ram,0x0314,d.indirect_irq);
         c->cpu.pc=d.entry;c->cpu.p=RC_P_U|RC_P_I;c->cpu.s=0xff;c->cpu.a=c->cpu.x=c->cpu.y=0;
         c->cpu.irq_pending=c->cpu.irq_poll=c->cpu.interrupt=c->cpu.resetting=0;rc_mos6510_start(&c->cpu);
+        s->return_pc=d.initialized;s->return_s=0xff;s->phase=SID_INIT;
     }else if(f->basic){
         const unsigned end=f->load+f->length;
         word(c->bus.ram,0x2b,f->load);word(c->bus.ram,0x2d,end);word(c->bus.ram,0x2f,end);word(c->bus.ram,0x31,end);
@@ -88,6 +88,11 @@ void rc_c64_sid_tick(rc_c64 *c){
     }else{
         ++s->elapsed_cycles;
         if(s->phase==SID_INIT&&c->cpu.pins.sync&&c->cpu.pins.address==s->return_pc&&c->cpu.s==s->return_s){
+            /* A pre-init full-volume write makes the 6581's idle DC audible,
+             * including while a tune unpacks itself. Supply a game's missing
+             * volume only on return; an explicit zero belongs to the tune. */
+            if(!rc_sid_volume_written(&c->sid))io(c,0xd418,0x0f);
+            if(!s->file.rsid){s->phase=SID_RUNNING;return;}
             c->cpu.a=s->return_a;c->cpu.x=s->return_x;c->cpu.y=s->return_y;c->cpu.p=s->return_p;s->phase=SID_RUNNING;
             /* A tune that returns with the KERNAL banked out cannot go back to the firmware's input loop: it
              * idles at the foot of the stack page instead, where its interrupts find it. */
@@ -104,7 +109,7 @@ int rc_c64_sid_control(rc_c64 *c,unsigned command,uint32_t value){
     return 0;
 }
 void rc_c64_sid_save(const rc_c64 *c,rc_state_writer *w){
-    const rc_sid_session *s=&c->sid_session;rc_sw_begin(w,"SIDP",0);rc_sw_u32(w,1);rc_sw_u8(w,s->active);
+    const rc_sid_session *s=&c->sid_session;rc_sw_begin(w,"SIDP",0);rc_sw_u32(w,2);rc_sw_u8(w,s->active);
     if(s->active){rc_sw_u8(w,s->phase);rc_sw_u8(w,s->song);rc_sw_u8(w,s->paused);rc_sw_u64(w,s->elapsed_cycles);rc_sw_u64(w,s->boot_cycles);
         rc_sw_u16(w,s->return_pc);rc_sw_u8(w,s->return_s);rc_sw_u8(w,s->return_a);rc_sw_u8(w,s->return_x);rc_sw_u8(w,s->return_y);rc_sw_u8(w,s->return_p);}
     rc_sw_end(w);
@@ -112,11 +117,11 @@ void rc_c64_sid_save(const rc_c64 *c,rc_state_writer *w){
 int rc_c64_sid_load(rc_c64 *c,rc_state_reader *r){
     rc_sid_session s={0};
     if(!rc_sr_chunk(r,"SIDP",0)){rc_c64_sid_eject(c);return c->media[4]==NULL;}
-    if(rc_sr_u32(r)!=1)return 0;s.active=rc_sr_u8(r);if(s.active>1)return 0;
+    const uint32_t version=rc_sr_u32(r);if(version<1||version>2)return 0;s.active=rc_sr_u8(r);if(s.active>1)return 0;
     if(s.active){char error[128];if(!c->media[4]||!rc_sidfile_parse(&s.file,c->media[4]->data,c->media[4]->size,error,sizeof error))return 0;
         s.phase=rc_sr_u8(r);s.song=rc_sr_u8(r);s.paused=rc_sr_u8(r);s.elapsed_cycles=rc_sr_u64(r);s.boot_cycles=rc_sr_u64(r);
         s.return_pc=rc_sr_u16(r);s.return_s=rc_sr_u8(r);s.return_a=rc_sr_u8(r);s.return_x=rc_sr_u8(r);s.return_y=rc_sr_u8(r);s.return_p=rc_sr_u8(r);
-        if(s.phase<SID_BOOT||s.phase>SID_RUNNING||s.song>=s.file.songs||s.paused>1||(!s.file.rsid&&s.phase==SID_INIT))return 0;
+        if(s.phase<SID_BOOT||s.phase>SID_RUNNING||s.song>=s.file.songs||s.paused>1||(!s.file.rsid&&s.phase==SID_INIT&&version==1))return 0;
     }else if(c->media[4])return 0;
     if(!rc_sr_ok(r))return 0;c->sid_session=s;return 1;
 }

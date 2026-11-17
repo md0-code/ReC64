@@ -4,7 +4,7 @@
 #include "hw.h"
 #include "../core/state.h"
 enum {RC_SID_6581,RC_SID_8580};
-typedef struct rc_sid {rc_dev dev;void *engine;} rc_sid;
+typedef struct rc_sid {rc_dev dev;void *engine;uint8_t volume_written;} rc_sid;
 int rc_sid_init(rc_sid *s,const rc_hw_host *host,unsigned model,uint32_t clock_hz,uint32_t sample_rate);
 void rc_sid_power(rc_sid *s);
 void rc_sid_release(rc_sid *s);
@@ -14,6 +14,8 @@ uint8_t rc_sid_read(rc_sid *s,unsigned reg);
 uint8_t rc_sid_pot_read(rc_sid *s,unsigned reg,uint8_t value);
 uint8_t rc_sid_peek(rc_sid *s,unsigned reg);
 void rc_sid_write(rc_sid *s,unsigned reg,uint8_t value);
+/* Whether a volume write (including zero) has occurred since RESET. */
+int rc_sid_volume_written(const rc_sid *s);
 int rc_sid_clock(rc_sid *s,uint32_t cycles);
 size_t rc_sid_audio_pull(rc_sid *s,int16_t *mono,size_t frames);
 int rc_sid_ok(const rc_sid *s);

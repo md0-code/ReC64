@@ -61,6 +61,7 @@ int rc_sidfile_driver(const rc_sidfile *s,unsigned song,rc_sid_driver *out,char 
     rc_sid_driver d={0};d.address=d.entry=(uint16_t)(page<<8);
     emit(&d,0x78);emit(&d,0xd8); /* SEI / CLD */
     bank(&d,rc_sidfile_bank(s->init));imm(&d,0xa9,song);imm(&d,0xa2,0);imm(&d,0xa0,0);absop(&d,0x20,s->init);
+    d.initialized=(uint16_t)here(&d);
     /* Idle with the original KERNAL vector visible; the per-call bank can
      * expose a playback routine anywhere without replacing payload vectors. */
     if(s->play)bank(&d,overlaps(s->load,s->length,0x0314,2)?0x35:0x37);

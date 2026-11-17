@@ -20,6 +20,15 @@ static size_t fixture(uint8_t *d,int mode){
     const uint8_t irq[]={0xee,0x00,0xd4,0xad,0x0d,0xdc,0xa9,1,0x8d,0x19,0xd0,0x68,0xa8,0x68,0xaa,0x68,0x40};memcpy(d+offset+0x50,irq,sizeof irq);
     return offset+0x50+sizeof irq;
 }
+static size_t startup_fixture(uint8_t *d){
+    const size_t size=fixture(d,0);
+    /* Song 1 explicitly mutes; song 2 leaves volume to the player. Both
+     * spend about 1/6 second initializing, as a packed tune can do. */
+    const uint8_t init[]={0xaa,0xd0,5,0xa9,0,0x8d,0x18,0xd4,
+        0xa2,0,0xa0,128,0xca,0xd0,0xfd,0x88,0xd0,0xfa,
+        0xa9,0x18,0x8d,0x01,0xd4,0xa9,0xf0,0x8d,0x06,0xd4,0xa9,0x21,0x8d,0x04,0xd4,0x60};
+    memcpy(d+126,init,sizeof init);return size;
+}
 static int save(rc_machine *m,rc_state_writer *w){rc_sw_init(w);rc_machine_save(m,w);return rc_sw_finish(w);}
 int main(int argc,char **argv){
     char error[256]="";uint8_t data[4096];size_t size=fixture(data,0);rc_sidfile file;
@@ -42,5 +51,19 @@ int main(int argc,char **argv){
         uint64_t time=rc_machine_time(m);CHECK(rc_machine_control(m,4,RC_MEDIA_PAUSE,1)==2&&rc_machine_run(m,10000)==RC_RUN_OK&&rc_machine_time(m)==time);
         CHECK(rc_machine_control(m,4,RC_MEDIA_PAUSE,0)==1&&rc_machine_control(m,4,RC_MEDIA_SONG,1)==2);CHECK(rc_machine_eject(m,4));rc_media_close(media);
     }
-    rc_machine_destroy(m);rc_rom_index_free(&roms);puts("SID parser, IRQ playback, player and exact state OK");return 0;
+    size=startup_fixture(data);rc_media *media=rc_media_from("startup-check.sid",data,size);CHECK(media&&rc_machine_insert(m,4,media,error,sizeof error));
+    for(unsigned song=0;song<2;++song){
+        CHECK(rc_machine_control(m,4,RC_MEDIA_SONG,song)==(int)song+1);
+        rc_machine_status status;do{CHECK(rc_machine_run(m,256)==RC_RUN_OK);rc_machine_get_status(m,&status);}while(!status.sid_cycles);
+        int16_t audio[4096];size_t got;while(rc_machine_audio_pull(m,audio,2048)){}
+        CHECK(rc_machine_run(m,4096)==RC_RUN_OK);got=rc_machine_audio_pull(m,audio,2048);CHECK(got);
+        for(size_t i=0;i<got*2;++i)CHECK(audio[i]==0); /* no full-volume idle transient during init */
+        rc_state_writer before,expected,actual;CHECK(save(m,&before));CHECK(rc_machine_run(m,200000)==RC_RUN_OK&&save(m,&expected));rc_state_reader r;
+        CHECK(rc_sr_open(&r,before.data,before.size,error,sizeof error)&&rc_machine_load(m,&r,error,sizeof error));
+        CHECK(rc_machine_run(m,200000)==RC_RUN_OK&&save(m,&actual));CHECK(expected.size==actual.size&&!memcmp(expected.data,actual.data,actual.size));
+        int audible=0;while((got=rc_machine_audio_pull(m,audio,2048))>0)for(size_t i=0;i<got*2;++i)if(audio[i]>64||audio[i]<-64)audible=1;
+        CHECK(audible==(song==1));rc_sw_free(&before);rc_sw_free(&expected);rc_sw_free(&actual);
+    }
+    CHECK(rc_machine_eject(m,4));rc_media_close(media);
+    rc_machine_destroy(m);rc_rom_index_free(&roms);puts("SID parser, IRQ playback, quiet initialization, volume fallback and exact state OK");return 0;
 }
