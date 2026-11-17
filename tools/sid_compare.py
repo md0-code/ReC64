@@ -6,6 +6,7 @@ import hashlib
 import json
 from pathlib import Path
 import subprocess
+import sys
 
 ROOT = Path(__file__).resolve().parents[1]
 FIXTURE = ROOT / "src/tests/sid_register_logs.json"
@@ -116,7 +117,10 @@ def main() -> int:
     report = {"schema": 1, "contract": 1, "fixture_sha256": FIXTURE_SHA256,
               "contract_sha256": sha256(ROOT / "docs/SID-COMPARISON.md"),
               "binary_sha256": hashlib.sha256(binary.read_bytes()).hexdigest(),
-              "limits": LIMITS, "clock_hz": data["clock_hz"], "results": []}
+              "limits": LIMITS, "clock_hz": data["clock_hz"], "completed": False,
+              "qualified": False, "results": []}
+    report_path = output / "report.json"
+    report_path.write_text(json.dumps(report, indent=2) + "\n", encoding="utf-8")
     for log in data["logs"]:
         events = output / f'{log["id"]}.txt'
         events.write_text(events_text(log, data["clock_hz"]), encoding="ascii")
@@ -131,12 +135,13 @@ def main() -> int:
             result["events_sha256"] = sha256(events)
             result["gates"] = qualify(result, log)
             report["results"].append(result)
+            report_path.write_text(json.dumps(report, indent=2) + "\n", encoding="utf-8")
             print(f'{model} {log["id"]}: digital={result["gates"]["observable_digital"]} '
                   f'waveform12={result["waveform12"]["status"]} audio={result["gates"]["audio"]}', flush=True)
     report["completed"] = True
     report["qualified"] = all(row["gates"]["qualified"] for row in report["results"])
-    (output / "report.json").write_text(json.dumps(report, indent=2) + "\n", encoding="utf-8")
-    print(f'Comparison complete; candidate {"qualified" if report["qualified"] else "excluded"}. Report: {output / "report.json"}')
+    report_path.write_text(json.dumps(report, indent=2) + "\n", encoding="utf-8")
+    print(f'Comparison complete; candidate {"qualified" if report["qualified"] else "excluded"}. Report: {report_path}')
     return 0 if report["qualified"] else 1
 
 
@@ -144,4 +149,5 @@ if __name__ == "__main__":
     try:
         raise SystemExit(main())
     except (ValueError, OSError, subprocess.SubprocessError) as error:
-        raise SystemExit(f"SID comparison error: {error}") from error
+        print(f"SID comparison error: {error}", file=sys.stderr)
+        raise SystemExit(2) from error
