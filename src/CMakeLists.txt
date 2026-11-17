@@ -67,6 +67,19 @@ if(NOT WIN32)
     target_link_libraries(rc_core PUBLIC m)
 endif()
 rc_set_warnings(rc_core)
+
+# The original SID candidate is evaluated separately. Production audio keeps
+# the qualified backend; these targets cannot add candidate code to rec64.
+add_library(rc_sid_own_candidate STATIC EXCLUDE_FROM_ALL hw/sid_own.c)
+target_include_directories(rc_sid_own_candidate PUBLIC hw core)
+rc_set_warnings(rc_sid_own_candidate)
+add_executable(test_sid_own EXCLUDE_FROM_ALL tests/test_sid_own.c)
+target_link_libraries(test_sid_own PRIVATE rc_sid_own_candidate rc_core)
+rc_set_warnings(test_sid_own)
+add_executable(sid_compare EXCLUDE_FROM_ALL tests/sid_compare.cpp)
+target_link_libraries(sid_compare PRIVATE rc_sid_own_candidate rc_core)
+rc_set_warnings(sid_compare)
+
 include(FetchContent)
 set(SDL_SHARED OFF CACHE BOOL "" FORCE)
 set(SDL_STATIC ON CACHE BOOL "" FORCE)

@@ -40,6 +40,8 @@ param(
     # Link the C runtime statically (/MT), so the binary needs no Visual C++
     # redistributable.
     [switch]$StaticRuntime,
+    # Optional focused targets (for example the separate SID comparison).
+    [string[]]$Target = @(),
     # Tests run side by side (ctest -j): default the physical cores - 1.
     [int]$Jobs = 0
 )
@@ -110,6 +112,10 @@ $devArch = if ($Arch -eq "x64") { "amd64" } else { "arm64" }
 $crossFlags = if ($Arch -eq "arm64") { "-DCMAKE_SYSTEM_NAME=Windows -DCMAKE_SYSTEM_PROCESSOR=ARM64" } else { "" }
 $src = $PSScriptRoot
 $test = -not $NoTest -and $Arch -eq "x64"
+foreach ($targetName in $Target) {
+    if ($targetName -notmatch '^[A-Za-z0-9_][A-Za-z0-9_.+-]*$') { throw "Invalid build target: $targetName" }
+}
+$targetFlags = if ($Target.Count) { ' --target ' + ($Target -join ' ') } else { '' }
 
 if ($Jobs -le 0) {
     $cores = (Get-CimInstance Win32_Processor | Measure-Object NumberOfCores -Sum).Sum
@@ -121,7 +127,7 @@ $script = @"
 set "PATH=$($vs.InstallerDir);%PATH%"
 call "$devcmd" -arch=$devArch -host_arch=amd64 -vcvars_ver=$toolset -no_logo || exit /b 1
 cmake -S "$src" -B "$BuildDir" -G Ninja -DCMAKE_BUILD_TYPE=$Config $runtimeFlag $crossFlags || exit /b 1
-cmake --build "$BuildDir" || exit /b 1
+cmake --build "$BuildDir"$targetFlags || exit /b 1
 "@
 if ($test) {
     $script += @"

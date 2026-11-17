@@ -21,7 +21,7 @@ foreach ($arch in @('x64', 'arm64')) {
         Copy-Item -LiteralPath "$repo/src/app/rec64.yaml" -Destination "$target/rec64.yaml"
     }
     Copy-Item -Path "$repo/palettes/*.vpl" -Destination "$target/palettes" -Force
-    foreach ($name in @('CONFIGURATION.md', 'THIRD_PARTY.md', 'LICENSE', 'sources.lock.json')) {
+    foreach ($name in @('CONFIGURATION.md', 'THIRD_PARTY.md', 'LIMITATIONS.md', 'SID-COMPARISON.md', 'LICENSE', 'sources.lock.json')) {
         Copy-Item -LiteralPath "$repo/docs/$name" -Destination "$target/docs/$name" -Force
     }
     Copy-Item -LiteralPath "$repo/docs/TESTING-BUILD.md" -Destination "$target/README.md" -Force
