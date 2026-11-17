@@ -744,14 +744,14 @@ int rc_desktop_run(rc_machine **owner,rc_config *c,const rc_rom_index *roms,cons
         if(!o->hidden){rc_pad_key pad;if((d.setup.active||d.browser.active||d.transport||d.osk.visible||d.slot_picker)&&rc_pads_repeat(&d.pads,SDL_GetTicks(),&pad))controller_key(&d,pad,1);input_poll(&d);}
         m=d.machine;
         if(d.pace_dirty){rc_pace_init(&pace,SDL_GetPerformanceFrequency(),rc_machine_clock(m),100);rc_pace_reset(&pace,SDL_GetPerformanceCounter(),rc_machine_time(m));d.pace_dirty=0;}
-        uint64_t ticks=rc_machine_frame_period(m);int present=1,input_frame=1;
+        uint64_t ticks=rc_machine_frame_period(m);int present=1,input_frame=1,racing=0;
         if(h) {
             const int action=rc_harness_step(h);
             if(action==RC_HARNESS_QUIT) { status=rc_harness_status(h);if(status) snprintf(error,cap,"%s",rc_harness_error(h));break; }
             if(action==RC_HARNESS_IDLE) { rc_host_sleep_us(1000);continue; }
         } else if(!o->hidden&&(d.setup.active||d.browser.active||d.slot_picker||d.paused)) {rc_host_sleep_us(16000);d.pace_dirty=1;}
         else if(!o->hidden) {
-            const int free_running=d.full||automatic_speed(&d);
+            const int free_running=d.full||automatic_speed(&d);racing=free_running;
             const rc_pace_step step=rc_pace_next(&pace,free_running,SDL_GetPerformanceCounter(),rc_machine_time(m),ticks);
             if(step.action==RC_PACE_WAIT) { rc_host_sleep_us(500);continue; }
             present=step.action==RC_PACE_PRESENT;ticks=present?0:step.ticks;
@@ -768,7 +768,7 @@ int rc_desktop_run(rc_machine **owner,rc_config *c,const rc_rom_index *roms,cons
         if(!d.setup.active&&!d.browser.active&&!d.slot_picker&&!d.paused&&rc_machine_run(m,ticks)!=RC_RUN_OK) { snprintf(error,cap,"%s",rc_machine_error(m));goto done; }
         if(present)++d.frames;if(input_frame&&!d.setup.active&&!d.browser.active&&!d.slot_picker&&!d.paused)rc_keymap_frame(&d.keymap);
         if(d.wav.file) rc_wav_pump(&d.wav,m);
-        else rc_host_audio_pump(&d.audio,m,(unsigned)c->volume,o->hidden||d.full||!c->sound||d.setup.active||d.browser.active||d.slot_picker||d.paused);
+        else rc_host_audio_pump(&d.audio,m,(unsigned)c->volume,o->hidden||d.full||!c->sound||d.setup.active||d.browser.active||d.slot_picker||d.paused,racing);
         if(d.video&&present) {
             rc_frame f;if(!picture(&d,&f,error,cap)) goto done;
             rc_video_set_geometry(d.video,(int)f.width,(int)f.height,(int)f.aspect_w,(int)f.aspect_h);

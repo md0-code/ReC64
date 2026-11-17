@@ -30,7 +30,7 @@ static int queue_silence(rc_host_audio *a, size_t frames) {
     return 1;
 }
 
-int rc_host_audio_pump(rc_host_audio *a, rc_machine *m, unsigned volume, int discard) {
+int rc_host_audio_pump(rc_host_audio *a, rc_machine *m, unsigned volume, int discard, int racing) {
     const uint32_t rate = rc_machine_audio_rate(m);
     int16_t samples[CHUNK * 2];
     if (!rate) return 1;
@@ -59,14 +59,19 @@ int rc_host_audio_pump(rc_host_audio *a, rc_machine *m, unsigned volume, int dis
     int16_t out[OUT_FRAMES * 2];
     size_t frames;
     while ((frames = rc_machine_audio_pull(m, samples, CHUNK)) > 0) {
+        const size_t pulled = frames;
+        /* A machine ahead of the clock makes more sound than the device plays: only what tops the queue up to its
+         * target is kept, so the queue is no longer than usual when the machine falls back to the clock. */
+        if (racing) frames = rc_audiosync_wanted(&a->sync, queued, frames);
         /* The device stopped consuming (a long stall): input is dropped rather than queued without end. */
-        if ((double)queued <= a->sync.target * RC_AUDIOSYNC_OVERFLOW) {
+        else if ((double)queued > a->sync.target * RC_AUDIOSYNC_OVERFLOW) frames = 0;
+        if (frames) {
             if (rc_audiosync_capacity(&a->sync, frames) > OUT_FRAMES) return 0;
             const size_t n = rc_audiosync_convert(&a->sync, samples, frames, out, gain);
             if (n && SDL_QueueAudio(a->device, out, (Uint32)(n * 4))) return 0;
             queued += n;
         }
-        if (frames < CHUNK) break;
+        if (pulled < CHUNK) break;
     }
     return 1;
 }

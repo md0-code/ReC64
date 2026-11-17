@@ -37,7 +37,8 @@ static void launch(rc_c64 *c){
     environment(c,f,s->song);
     /* Physical RAM loading must also reach RAM beneath I/O and ROM. */
     memcpy(c->bus.ram+f->load,f->payload,f->length);
-    rc_sid_reset(&c->sid);
+    /* Many tunes never set the volume themselves: their game did. Players hand them a SID at full volume. */
+    rc_sid_reset(&c->sid);io(c,0xd418,0x0f);
     s->elapsed_cycles=0;s->phase=SID_RUNNING;
     if(!f->rsid){
         rc_sid_driver d;char error[128];
@@ -88,6 +89,10 @@ void rc_c64_sid_tick(rc_c64 *c){
         ++s->elapsed_cycles;
         if(s->phase==SID_INIT&&c->cpu.pins.sync&&c->cpu.pins.address==s->return_pc&&c->cpu.s==s->return_s){
             c->cpu.a=s->return_a;c->cpu.x=s->return_x;c->cpu.y=s->return_y;c->cpu.p=s->return_p;s->phase=SID_RUNNING;
+            /* A tune that returns with the KERNAL banked out cannot go back to the firmware's input loop: it
+             * idles at the foot of the stack page instead, where its interrupts find it. */
+            int kernal=1;for(unsigned i=0;i<3;++i)if(rc_bus_read(&c->bus,(uint16_t)(s->return_pc+i),0)!=c->bus.kernal[(s->return_pc+i)&8191u])kernal=0;
+            if(!kernal){c->bus.ram[0x0100]=0x4c;c->bus.ram[0x0101]=0x00;c->bus.ram[0x0102]=0x01;c->cpu.pc=0x0100;rc_mos6510_start(&c->cpu);}
         }
     }
 }

@@ -242,7 +242,8 @@ SHA-256; modified media are flushed when saving. Loading checks integrity,
 model, ROMs, machine options and media before replacing the running machine.
 Missing or changed media and incompatible snapshots are refused. Display,
 sound, manual speed and host input preferences remain current. Returning
-from full speed reanchors pacing immediately.
+from full speed reanchors pacing immediately; sound played during automatic
+full speed never lengthens the output queue.
 
 The headless `drop FILE` command takes the same path as a native drop;
 `insert SLOT FILE` mounts only, for explicit LOAD or tape-control commands.

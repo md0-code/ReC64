@@ -23,8 +23,10 @@ typedef struct rc_host_audio {
 int rc_host_audio_open(rc_host_audio *audio);
 /* Moves the machine's samples to the device at `volume` percent (0 mutes);
  * with `discard` (the machine runs faster than real time, or is not
- * running) they are taken and dropped. 0 on an SDL failure. */
-int rc_host_audio_pump(rc_host_audio *audio, rc_machine *machine, unsigned volume, int discard);
+ * running) they are taken and dropped; with `racing` (the machine runs ahead
+ * of the clock with its sound on) only what keeps the queue at its usual
+ * length is played. 0 on an SDL failure. */
+int rc_host_audio_pump(rc_host_audio *audio, rc_machine *machine, unsigned volume, int discard, int racing);
 void rc_host_audio_close(rc_host_audio *audio);
 
 /* The machine's sound recorded to a WAV file instead (16-bit stereo PCM at

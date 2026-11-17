@@ -481,11 +481,13 @@ song accumulator is zero-based, each init/play call applies the specified
 6510 bank value, and the selected speed bit enables raster or CIA1 timer-A
 interrupts. CIA1 timer A runs at the documented 60 Hz startup latch for the
 chosen clock. A zero play address leaves playback to the tune's installed
-interrupt vector. The firmware and loaded payload are never patched.
+interrupt vector. The firmware and loaded payload are never patched. Every
+tune starts with the SID at full volume, as many leave that to their game.
 
 RSID waits for the unchanged firmware to reach READY, loads physical RAM,
 and calls init on the real CPU stack. A returning init resumes the firmware's
-input loop; a non-returning init continues its own code. RSID BASIC sets the
+input loop, or idles at $0100 when it left the KERNAL banked out; a
+non-returning init continues its own code. RSID BASIC sets the
 BASIC text/end pointers and zero-based song byte at $030C, then types RUN
 through the original keyboard buffer. Interrupt timing remains guest code
 and actual hardware. Pause stops guest cycles; the displayed elapsed time is
