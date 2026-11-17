@@ -25,5 +25,9 @@ int main(void) {
     CHECK(!memcmp(&s,&restored,sizeof s));
     int loud=0;for(size_t i=0;i<count;++i)if(actual[i])loud=1;CHECK(loud);
     rc_sw_free(&w);
+    uint32_t retained_phase=s.voice[0].phase;uint8_t retained_envelope=s.voice[0].envelope;
+    rc_sid_own_reset(&s);
+    CHECK(s.voice[0].phase==retained_phase && s.voice[0].envelope==retained_envelope);
+    CHECK(s.voice[0].frequency==0 && s.voice[0].control==0 && s.voice[0].rate_counter==0);
     puts("own SID native audio and exact pending-write/filter/resampler state OK");return 0;
 }

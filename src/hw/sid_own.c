@@ -68,7 +68,9 @@ static void envelope_clock(rc_sid_own_voice *v) {
         v->rate_counter=0;
         if(v->envelope_state==RC_SID_OWN_ATTACK) {
             v->exponential_counter=0;
-            v->envelope_pipeline=1;
+            /* LFSR15 reset is latched before release_reset reaches the DAC
+             * counter. The two sid_clk1 latches are visible on page8. */
+            v->envelope_pipeline=2;
         } else v->exponential_pipeline=1;
     }
     /* The physical LFSR has 32767 states, not 32768. Changing the rate never
@@ -77,9 +79,11 @@ static void envelope_clock(rc_sid_own_voice *v) {
     if(v->rate_counter==v->rate_period)v->rate_reset=1;
 }
 static uint16_t noise_output(uint32_t n) {
-    /* Asger Alstrup's REU measurements, numbering from the feedback input. */
-    return (uint16_t)(((n>>11)&0x800)|((n>>10)&0x400)|((n>>7)&0x200)|
-        ((n>>5)&0x100)|((n>>4)&0x80)|((n>>1)&0x40)|((n<<1)&0x20)|((n<<2)&0x10));
+    /* Physical output taps in the published die's Wave Selector / Noise
+     * Generator. These precede the two shift latches; the older REU analysis
+     * numbers its equivalent sequence two bits further along the register. */
+    return (uint16_t)(((n>>9)&0x800)|((n>>8)&0x400)|((n>>5)&0x200)|
+        ((n>>3)&0x100)|((n>>2)&0x80)|((n<<1)&0x40)|((n<<3)&0x20)|((n<<4)&0x10));
 }
 static void noise_shift(rc_sid_own_voice *v,int test) {
     uint32_t input=((v->lfsr>>22)|(uint32_t)test)^(v->lfsr>>17);
@@ -110,7 +114,7 @@ static void waveform_clock(rc_sid_own *s,unsigned i) {
         if((wave&8) && (wave&7)) {
             /* Bidirectional selector transistors can discharge noise bits.
              * Exact analog bit interaction is handled by the later P10c model. */
-            static const unsigned taps[8]={2,4,7,11,13,16,20,22};
+            static const unsigned taps[8]={0,2,5,9,11,14,18,20};
             for(unsigned b=0;b<8;++b)
                 if(!(value&(1u<<(b+4))))v->lfsr&=~(1u<<taps[b]);
         }
@@ -172,10 +176,11 @@ static void analog_clock(rc_sid_own *s) {
         if(route&(1u<<i))input+=voice;
         else if(i!=2 || !(mode&128))bypass+=voice;
     }
-    /* State-variable integrator pair, evaluated at the SID's own clock. */
-    s->filter_low+=s->filter_coefficient*s->filter_band;
-    s->filter_band+=s->filter_coefficient*s->filter_high;
-    s->filter_high=input-s->filter_low-s->filter_damping*s->filter_band;
+    /* Inverting HP summer and two inverting integrators. The BP feedback
+     * amplifier adds one more inversion, making its summer term positive. */
+    s->filter_low-=s->filter_coefficient*s->filter_band;
+    s->filter_band-=s->filter_coefficient*s->filter_high;
+    s->filter_high=s->filter_damping*s->filter_band-s->filter_low-input;
     if(mode&16)filtered+=s->filter_low;
     if(mode&32)filtered+=s->filter_band;
     if(mode&64)filtered+=s->filter_high;
@@ -193,19 +198,38 @@ int rc_sid_own_init(rc_sid_own *s,unsigned model,uint32_t clock_hz,uint32_t samp
         sample_rate<8000 || sample_rate>192000 || sample_rate>=clock_hz)return 0;
     memset(s,0,sizeof *s);
     s->model=(uint8_t)model;s->clock_hz=clock_hz;s->sample_rate=sample_rate;
-    rc_sid_own_reset(s);
-    return 1;
-}
-void rc_sid_own_reset(rc_sid_own *s) {
-    unsigned model=s->model;uint32_t clock_hz=s->clock_hz,sample_rate=s->sample_rate;
-    memset(s,0,sizeof *s);
-    s->model=(uint8_t)model;s->clock_hz=clock_hz;s->sample_rate=sample_rate;
+    /* Reproducible cold-start convention; the silicon power-on state of the
+     * oscillator/envelope storage nodes is not specified by the data sheet. */
     s->pot[0]=s->pot[1]=255;s->external_filter=1;
     for(unsigned i=0;i<3;++i) {
         rc_sid_own_voice *v=&s->voice[i];
         v->lfsr=0x7ffff8;v->pulse_latch=0xfff;
         v->envelope_state=v->pending_state=RC_SID_OWN_RELEASE;
         v->exponential_period=1;v->hold_zero=1;envelope_rate(v);
+    }
+    filter_setup(s);
+    return 1;
+}
+void rc_sid_own_reset(rc_sid_own *s) {
+    /* RESET is not power-on: the die has no RESET net to the oscillator
+     * accumulator or envelope DAC counter. Analog capacitors also retain charge.
+     * The API applies the reset-pin effect without advancing guest time. */
+    memset(s->registers,0,sizeof s->registers);
+    s->bus_value=0;s->bus_cycles=0;s->write_pending=0;s->write_reg=0;s->write_value=0;
+    for(unsigned i=0;i<3;++i) {
+        rc_sid_own_voice *v=&s->voice[i];
+        v->frequency=0;v->pulse_width=0;v->control=0;
+        v->attack_decay=0;v->sustain_release=0;
+        v->envelope_state=v->pending_state=RC_SID_OWN_RELEASE;
+        v->rate_counter=0;v->exponential_counter=0;v->exponential_period=1;
+        v->envelope_pipeline=0;v->exponential_pipeline=0;v->state_pipeline=0;
+        v->rate_reset=0;v->hold_zero=(uint8_t)(v->envelope==0);
+        v->noise_pipeline=0;v->test_cycles=0;v->msb_rising=0;
+        v->pulse_latch=0xfff;v->floating_cycles=s->clock_hz/5;
+        /* Reset, like TEST, opens noise shift phase 1. Releasing the reset
+         * pin closes phase 2 with the forced-high XOR feedback input. */
+        noise_shift(v,1);
+        envelope_rate(v);
     }
     filter_setup(s);
 }
@@ -384,4 +408,3 @@ int rc_sid_own_load(rc_sid_own *s,rc_state_reader *r) {
        next.filter_damping<=0 || next.filter_damping>4)return 0;
     *s=next;return 1;
 }
-
