@@ -479,7 +479,11 @@ pulse and HMOS waveform latches, the 23-bit noise register, TEST, sync and ring
 modulation, ADSR rate and exponential counters, delayed counter events, sustain
 comparison, hold-at-zero and rate-change delay. HMOS register writes enter a
 one-cycle latch. Read registers expose OSC3, ENV3 and board-supplied POT values;
-other reads expose the retained data bus. Nominal charge retention timings are
+other reads expose the retained data bus. Chip RESET clears writable registers
+and envelope dividers while retaining phase, envelope level and analog charge;
+it releases the noise shift latch. Init alone establishes a deterministic nominal
+cold-start state. Neither operation asserts a measured power-up bit pattern.
+Nominal charge retention timings are
 model parameters, not a claim of identical leakage on every physical chip.
 
 The 8580 candidate uses the documented state-variable integrator circuit and
