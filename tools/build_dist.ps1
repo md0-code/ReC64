@@ -57,7 +57,7 @@ foreach ($arch in @('x64', 'arm64')) {
         -not (Get-ChildItem -LiteralPath $paletteFolder -Force | Select-Object -First 1)) {
         Remove-Item -LiteralPath $paletteFolder
     }
-    foreach ($name in @('CONFIGURATION.md', 'THIRD_PARTY.md', 'LIMITATIONS.md', 'HARDWARE.md', 'C64-ROM-AUDIT.md', 'C64-ROM-AUDIT.json', 'LICENSE', 'sources.lock.json')) {
+    foreach ($name in @('CONFIGURATION.md', 'THIRD_PARTY.md', 'LIMITATIONS.md', 'HARDWARE.md', 'C64-ROM-AUDIT.html', 'C64-ROM-AUDIT.md', 'C64-ROM-AUDIT.json', 'LICENSE', 'sources.lock.json')) {
         Copy-Item -LiteralPath "$repo/docs/$name" -Destination "$target/docs/$name" -Force
     }
     Copy-Item -LiteralPath "$repo/docs/TESTING-BUILD.md" -Destination "$target/README.md" -Force

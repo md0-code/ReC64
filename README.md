@@ -34,6 +34,7 @@ host layout.
 SID selection offers 6581 (the default) or 8580.
 See [ROM compatibility](docs/C64-ROM-AUDIT.md) for supported firmware,
 cartridge families and their purposes compared with VICE.
+For a searchable comparison, open `docs/C64-ROM-AUDIT.html` in a browser.
 
 Ctrl+F1 opens Load for PRG/P00 files and D64/T64/TAP contents; dropped files
 use the same browser. Ctrl+F2 saves a PRG, creates a TAP recording target,
