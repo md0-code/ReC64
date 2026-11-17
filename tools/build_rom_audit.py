@@ -1,5 +1,6 @@
 """Build the offline browser comparison from the canonical ROM audit data."""
 from pathlib import Path
+import json
 
 ROOT = Path(__file__).resolve().parents[1]
 HTML = r'''<!doctype html>
@@ -74,7 +75,7 @@ footer a { margin-right: 15px; }
     <div class="finding"><strong>Five exact firmware matches</strong><p>All five ReC64 system and drive images match VICE byte for byte. Alternate KERNALs and JiffyDOS currently have no ReC64 loading route.</p></div>
     <div><div class="metric">3 <span>/ 10</span></div><div class="metric-label">Bundled C64 system images recognized by ReC64</div></div>
     <div><div class="metric">2 <span>/ 15</span></div><div class="metric-label">C64 drive firmware roles supported by ReC64</div></div>
-    <div><div class="metric">18 <span>/ 87</span></div><div class="metric-label">VICE cartridge families supported by ReC64</div></div>
+    <div><div class="metric">__CART_COUNT__ <span>/ 87</span></div><div class="metric-label">VICE cartridge families supported by ReC64</div></div>
   </section>
   <section aria-label="ROM catalogue">
     <div class="filters">
@@ -139,10 +140,11 @@ render();
 
 def main() -> None:
     data = (ROOT / 'docs/C64-ROM-AUDIT.json').read_text(encoding='utf8')
+    count = str(json.loads(data)['metrics']['rec64_crt_families'])
     # Keep data inert even if a future description contains HTML-like text.
     data = data.replace('&', r'\u0026').replace('<', r'\u003c').replace('>', r'\u003e')
     target = ROOT / 'docs/C64-ROM-AUDIT.html'
-    target.write_text(HTML.replace('__AUDIT_DATA__', data), encoding='utf8', newline='\n')
+    target.write_text(HTML.replace('__AUDIT_DATA__', data).replace('__CART_COUNT__', count), encoding='utf8', newline='\n')
     print(target)
 
 
