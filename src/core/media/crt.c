@@ -22,7 +22,7 @@ int rc_crt_attach(rc_crt *c,rc_media *m,char *error,size_t cap){
     if(!count&&be16(p+22)!=RC_CRT_EASYFLASH)return rc_image_error(error,cap,"CRT has no CHIP packets");
     rc_crt next;rc_crt_init(&next);next.chips=calloc(count?count:1,sizeof *next.chips);
     if(!next.chips)return rc_image_error(error,cap,"Out of memory");
-    next.image=m;next.count=count;next.version=be16(p+20);next.hardware=be16(p+22);next.exrom=p[24];next.game=p[25];memcpy(next.name,p+32,32);
+    next.image=m;next.count=count;next.version=be16(p+20);next.hardware=be16(p+22);next.exrom=p[24];next.game=p[25];next.revision=p[26];memcpy(next.name,p+32,32);
     for(at=header,count=0;at<m->size;at+=be32(p+at+4),++count){rc_crt_chip *ch=&next.chips[count];ch->type=be16(p+at+8);ch->bank=be16(p+at+10);ch->address=be16(p+at+12);ch->size=be16(p+at+14);ch->offset=at+16;
         /* RAM CHIP packets without data describe hardware, not file storage. */
         if(ch->type==1&&be32(p+at+4)==16)ch->offset=SIZE_MAX;

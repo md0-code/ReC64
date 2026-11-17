@@ -3,7 +3,7 @@
 #include <string.h>
 void rc_cart_init(rc_cart *c){memset(c,0,sizeof *c);c->ba=1;}
 void rc_cart_close(rc_cart *c){rc_crt_close(&c->crt);rc_cart_init(c);}
-int rc_cart_supported(unsigned h){switch(h){case RC_CRT_NORMAL:case RC_CRT_EPYX:case RC_CRT_SIMONS_BASIC:case RC_CRT_OCEAN:case RC_CRT_FUN_PLAY:case RC_CRT_SUPER_GAMES:case RC_CRT_SYSTEM3:case RC_CRT_DINAMIC:case RC_CRT_ZAXXON:case RC_CRT_MAGIC_DESK:return 1;default:return 0;}}
+int rc_cart_supported(unsigned h){switch(h){case RC_CRT_NORMAL:case RC_CRT_EPYX:case RC_CRT_SIMONS_BASIC:case RC_CRT_OCEAN:case RC_CRT_FUN_PLAY:case RC_CRT_SUPER_GAMES:case RC_CRT_SYSTEM3:case RC_CRT_DINAMIC:case RC_CRT_ZAXXON:case RC_CRT_MAGIC_DESK:case RC_CRT_RGCD:return 1;default:return 0;}}
 int rc_cart_attach(rc_cart *c,rc_media *m,char *error,size_t cap){
     if(!rc_crt_attach(&c->crt,m,error,cap))return 0;c->ops=NULL;c->ctx=NULL;rc_cart_reset(c);return 1;
 }
@@ -20,6 +20,7 @@ rc_cart_lines rc_cart_get_lines(const rc_cart *c){
     case RC_CRT_FUN_PLAY:p.game=c->control==0x86;p.exrom=p.game;break;
     case RC_CRT_SUPER_GAMES:p.game=(c->control>>2)&1u;p.exrom=p.game;break;
     case RC_CRT_MAGIC_DESK:p.game=1;p.exrom=c->control>>7;break;
+    case RC_CRT_RGCD:p.game=1;p.exrom=c->locked;break;
     case RC_CRT_ZAXXON:p.game=0;p.exrom=0;break;
     case RC_CRT_SYSTEM3:case RC_CRT_DINAMIC:p.game=1;p.exrom=0;break;
     default:break;
@@ -29,6 +30,7 @@ static const rc_crt_chip *read_chip(const rc_cart *c,uint16_t a,unsigned sel,uns
     if(c->crt.hardware==RC_CRT_EPYX&&(sel&RC_CART_IO2)){*address=0x9f00u+(a&255u);return rc_crt_find(&c->crt,0,*address);}
     if(!c->crt.image||!(sel&(RC_CART_ROML|RC_CART_ROMH))||!rc_cart_supported(c->crt.hardware))return NULL;
     unsigned bank=c->bank;*address=(sel&RC_CART_ROMH?0xa000u:0x8000u)+(a&0x1fffu);
+    if(c->crt.hardware==RC_CRT_RGCD&&c->crt.revision==1){unsigned last=0;for(size_t i=0;i<c->crt.count;++i)if(c->crt.chips[i].bank>last)last=c->crt.chips[i].bank;bank=(7u-bank)&last;}
     if(c->crt.hardware==RC_CRT_NORMAL){bank=0;*address=a;}
     if(c->crt.hardware==RC_CRT_ZAXXON){if(sel&RC_CART_ROML){bank=0;*address=0x8000u+(a&0xfffu);}}
     if(c->crt.hardware==RC_CRT_OCEAN){
@@ -70,6 +72,7 @@ void rc_cart_write(rc_cart *c,uint16_t a,unsigned sel,uint8_t v){
     case RC_CRT_SIMONS_BASIC:if((sel&RC_CART_IO1)&&a==0xde00)c->control=0;break;
     case RC_CRT_OCEAN:if(sel&RC_CART_IO1){c->bank=v&63u;c->control=v;}break;
     case RC_CRT_MAGIC_DESK:if(sel&RC_CART_IO1){c->bank=v&127u;c->control=v;}break;
+    case RC_CRT_RGCD:if((sel&RC_CART_IO1)&&!c->locked){c->bank=v&7u;c->control=v&15u;c->locked=(v>>3)&1u;}break;
     /* Fun Play CRT bank numbers store the literal latch bit pattern. */
     case RC_CRT_FUN_PLAY:if(sel&RC_CART_IO1){c->bank=v&0x39u;c->control=v;}break;
     case RC_CRT_SUPER_GAMES:if((sel&RC_CART_IO2)&&!c->locked){c->bank=v&3u;c->control=v&15u;c->locked=(v>>3)&1u;}break;

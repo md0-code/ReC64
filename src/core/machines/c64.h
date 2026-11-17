@@ -11,6 +11,7 @@
 #include "../../hw/cart.h"
 #include "../../hw/cart_freezer.h"
 #include "../../hw/easyflash.h"
+#include "../../hw/gmod2.h"
 #include "../../hw/reu.h"
 #include "../../hw/georam.h"
 #include "c64_sid.h"
@@ -23,7 +24,7 @@ typedef struct rc_c64 {
     uint8_t shown[RC_VIC_MAX_PIXELS];uint64_t shown_frames;
     rc_c1541 drive;rc_iec iec;rc_fastload fastload;rc_drivesnd drive_sound;uint64_t drive_phase;
     rc_datasette tape;rc_traps traps;rc_cpu_hooks hooks;uint8_t fetch_watch[8192];
-    rc_cart cart;rc_freezer freezer;rc_easyflash easyflash;rc_reu reu;rc_georam georam;uint32_t freeze_cycles;
+    rc_cart cart;rc_freezer freezer;rc_easyflash easyflash;rc_gmod2 gmod2;rc_media *cart_eeprom;rc_reu reu;rc_georam georam;uint32_t freeze_cycles;
     rc_sid_session sid_session;
     rc_media *media[5],*synthetic;uint8_t media_owned[5],source,physical;
     uint32_t selected[5],tape_bits[5],program_size;uint16_t program_address;

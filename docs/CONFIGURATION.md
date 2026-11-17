@@ -21,12 +21,20 @@ memory and startup insertion, and provides the cartridge Freeze action.
 Supported cartridges are Normal 8K/16K, Ultimax, Ocean, Magic Desk, Fun Play,
 Super Games, Dinamic, Zaxxon, System 3, Simons' BASIC, EasyFlash, Action
 Replay 4-6, Retro Replay, Final Cartridge I/II and III, Epyx Fastload,
-KCS Power Cartridge and Super Snapshot 5. Attaching or ejecting a
+KCS Power Cartridge, Super Snapshot 5, RGCD and GMod2. Attaching or ejecting a
 cartridge resets the machine. Right Alt pressed and released alone triggers
 the physical freeze button; using AltGr with another key does not freeze.
 The page's Freeze row performs the same action. EasyFlash retains completed
 flash writes in the attached CRT, including banks omitted from a sparse
 image; write protection inhibits programming.
+GMod2 retains completed flash writes in its CRT too. Its 2 KiB EEPROM is
+loaded from and saved to the cartridge filename with `.eeprom` appended
+(for example, `game.crt.eeprom`). A missing file starts erased and is created
+only after the contents change. The EEPROM file stores 1024 words, high byte
+first. It is saved when media are flushed, including on eject, restart and
+normal exit; its folder must be writable. Snapshots include the EEPROM and
+any unfinished serial command or write. RGCD's disable latch clears on reset;
+CRT revision 1 selects the reverse-bank Hucky variant.
 The **Start inserted** row remembers the attached cartridge for the next
 launch (`media.cartridge.startup: true`). It defaults to off. Ejecting the
 cartridge clears the saved image; switching the option off restores

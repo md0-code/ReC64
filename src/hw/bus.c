@@ -20,8 +20,9 @@ void rc_bus_keyboard(rc_bus *b) {
         for(unsigned p=0;p<2;++p)rc_cia6526_port_input(b->cia[chip],p,pins[p]);}
 }
 uint8_t rc_bus_read(rc_bus *b,uint16_t a,int effects) {
+    const uint8_t game=b->game,exrom=b->exrom;
     if(b->expansion.observe)b->expansion.observe(b->expansion.ctx,a,0,effects,0);
-    if(a<2&&!b->dma)return rc_mos6510_port_read(b->cpu,a);
+    if(a<2&&!b->dma){const uint8_t value=rc_mos6510_port_read(b->cpu,a);if(!effects){b->game=game;b->exrom=exrom;}return value;}
     const uint8_t selected=decode(b,a,1,effects);uint8_t data=b->vic_data;
     const int driven=(selected&(RC_PLA_BASIC|RC_PLA_KERNAL|RC_PLA_CHAROM|RC_PLA_CASRAM))||((selected&RC_PLA_I_O)&&a<0xde00);
     if(selected&RC_PLA_BASIC)data=b->basic[a&8191u];
@@ -44,7 +45,7 @@ uint8_t rc_bus_read(rc_bus *b,uint16_t a,int effects) {
         }
     } else if(selected&RC_PLA_CASRAM)data=b->ram[a];
     if(b->expansion.read)data=b->expansion.read(b->expansion.ctx,a,selected,data,driven,effects,0);
-    if(effects)b->data=data;return data;
+    if(effects)b->data=data;else {b->game=game;b->exrom=exrom;}return data;
 }
 void rc_bus_write(rc_bus *b,uint16_t a,uint8_t data) {
     if(b->expansion.observe)b->expansion.observe(b->expansion.ctx,a,1,1,0);

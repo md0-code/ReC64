@@ -38,7 +38,7 @@ add_library(rc_core STATIC core/config.c core/yamledit.c core/romdb.c core/state
     hw/traps.c hw/mouse1351.c hw/cia6526.c hw/pla.c hw/c64kbd.c hw/sid.c hw/sid_own.c hw/vic2.c hw/via6522.c
     core/media/image.c core/media/d64.c core/media/g64.c core/media/t64.c core/media/tap.c core/media/prg.c core/media/gcr.c
     core/media/tapedeck.c hw/datasette.c hw/c1541.c hw/iec.c hw/fastload.c hw/drivesnd.c
-    core/media/crt.c hw/cart.c hw/cart_freezer.c hw/am29f040.c hw/easyflash.c
+    core/media/crt.c hw/cart.c hw/cart_freezer.c hw/am29f040.c hw/easyflash.c hw/m93c86.c hw/gmod2.c
     hw/reu.c hw/georam.c core/machines/c64_expansion.c
     core/media/sidfile.c core/machines/c64_sid.c core/machines/c64_layout.c)
 target_include_directories(rc_core PUBLIC core hw PRIVATE ${CMAKE_CURRENT_BINARY_DIR}/generated)
@@ -95,6 +95,11 @@ target_compile_definitions(test_sidplayer PRIVATE RC_ROM_DIR="${CMAKE_CURRENT_SO
 target_include_directories(test_sidplayer PRIVATE ${CMAKE_CURRENT_BINARY_DIR}/generated)
 rc_set_warnings(test_sidplayer)
 add_test(NAME sidplayer COMMAND test_sidplayer)
+add_executable(test_modern_carts tests/test_modern_carts.c)
+target_link_libraries(test_modern_carts PRIVATE rc_core)
+target_compile_definitions(test_modern_carts PRIVATE RC_ROM_DIR="${CMAKE_CURRENT_SOURCE_DIR}/../roms" RC_WORK="${RC_WORK}")
+rc_set_warnings(test_modern_carts)
+add_test(NAME modern_carts COMMAND test_modern_carts)
 foreach(part cart freezer easyflash expansions)
     add_executable(test_${part} tests/test_${part}.c)
     target_link_libraries(test_${part} PRIVATE rc_core)

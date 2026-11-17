@@ -54,6 +54,8 @@ Load CRT cartridges through Ctrl+F1, drag and drop, or the Cartridge page.
 The Cartridge settings page selects REU or GeoRAM memory. Right Alt pressed and released
 alone activates supported freezer cartridges. EasyFlash writes are saved
 to the attached CRT image unless it is write protected.
+RGCD and GMod2 cartridges are supported. GMod2 saves its flash changes to the
+CRT and its game progress to a neighbouring `<cartridge>.crt.eeprom` file.
 Turn on **Start inserted** on the Cartridge page to keep the attached
 cartridge inserted when ReC64 next starts.
 

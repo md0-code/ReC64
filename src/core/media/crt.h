@@ -7,7 +7,8 @@ enum { RC_CRT_NORMAL=0, RC_CRT_ACTION_REPLAY=1, RC_CRT_KCS=2, RC_CRT_FINAL_III=3
     RC_CRT_SIMONS_BASIC=4, RC_CRT_OCEAN=5, RC_CRT_FUN_PLAY=7,
     RC_CRT_SUPER_GAMES=8, RC_CRT_EPYX=10, RC_CRT_FINAL_I=13, RC_CRT_SYSTEM3=15, RC_CRT_DINAMIC=17,
     RC_CRT_ZAXXON=18, RC_CRT_MAGIC_DESK=19, RC_CRT_RETRO_REPLAY=36,
-    RC_CRT_SUPER_SNAPSHOT5=20, RC_CRT_ACTION_REPLAY4=30, RC_CRT_EASYFLASH=32 };
+    RC_CRT_SUPER_SNAPSHOT5=20, RC_CRT_ACTION_REPLAY4=30, RC_CRT_EASYFLASH=32,
+    RC_CRT_RGCD=57, RC_CRT_GMOD2=60 };
 typedef struct rc_crt_chip {
     uint16_t type,bank,address,size;
     size_t offset; /* first data byte in image; not the CHIP header */
@@ -17,7 +18,7 @@ typedef struct rc_crt {
     rc_crt_chip *chips;
     size_t count;
     uint16_t version,hardware;
-    uint8_t game,exrom,owned;
+    uint8_t game,exrom,owned,revision;
     char name[33];
 } rc_crt;
 void rc_crt_init(rc_crt *c);

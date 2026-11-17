@@ -371,6 +371,11 @@ Snapshots retain the image bytes, dirty flag, bank, control, lock and BA;
 restoring a borrowed image retains its media pointer and write protection.
 External flash/freezer mappers bind callbacks to this same port.
 
+RGCD (CRT 57) has eight 8 KiB ROM banks at 8000-9FFF. I/O1 writes latch
+bank bits 0-2; bit 3 disconnects EXROM and locks the latch until reset.
+Revision 1 selects Hucky's reversed bank order and 8/16/32/64 KiB EPROM
+variants. The CRT header's revision byte is retained when loading states.
+
 Epyx Fastload maps its 8 KiB ROM at 8000-9FFF and its final page at DF00-DFFF.
 CPU ROML or I/O1 reads discharge the enable capacitor; after 512 inactive
 CPU clocks EXROM is released. The remaining capacitor clocks are saved.
@@ -477,6 +482,35 @@ Read-only media inhibit flash writes while retaining banking and RAM writes.
 Snapshots retain both flash arrays, command phases, polling bits, pending
 timers, selected sectors, RAM, bank, control and jumper. The image's original
 firmware, including EAPI, changes only through guest flash operations.
+
+## GMod2
+
+GMod2 (CRT 60) uses a 512 KiB Am29F040 array and an M93C86 EEPROM wired
+as 1024 16-bit words. DE00 bits 0-5 select the 8 KiB ROM bank; bit 6 is
+EXROM and EEPROM chip select, bit 5 is the EEPROM clock, bit 4 its input,
+and the serial output drives only data bit 7 during a read or status poll.
+Reset restores bank zero without erasing nonvolatile memory.
+
+With DE00 bits 6-7 set, writes at 8000-FFFF use Ultimax decode and do not
+reach underlying C64 RAM. Only E000-FFFF writes reach the flash chip.
+Read cycles retain their normal map, including debugger peeks, without
+changing the mapper's saved physical write-cycle pins. CPU and DMA writes
+follow the same hardware decode. The shared AMD command engine supplies
+programming, erase, identification and busy status. Completed changes update
+or append the corresponding CRT CHIP packets.
+
+The EEPROM accepts start/opcode/address/data on rising clock edges. READ
+has one dummy zero followed by a continuous, wrapping, most-significant-bit
+first word stream. WEN/WDS control WRITE, ERASE, WRAL and ERAL; incomplete
+or overlong programming commands are discarded at chip-select release.
+Programming begins on that falling edge and completes after a deterministic
+5 ms guest-clock interval, the datasheet's maximum, with ready/busy polling.
+Snapshots retain the entire serial transaction, write-enable state, pending
+write, both nonvolatile memories and flash command/timing state.
+
+The board owns the optional 2048-byte `<CRT path>.eeprom` file. It is
+opened without changing it, starts erased when absent, and is saved through
+the normal media-flush path when its contents differ. No game ROM is patched.
 
 ## SID files and player
 
