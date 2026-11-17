@@ -17,3 +17,28 @@ the comparison reports that requirement as unverified, never as passed.
 The comparison implementation and original register logs remain available
 for further work. An unqualified candidate does not alter release audio,
 saved SID states, or SID-player compatibility.
+
+## P10 result
+
+The completed comparison of the digital, nonlinear-filter and coupled-waveform
+candidate uses contract 1 and fixture SHA-256
+`64dc216cd5d7b80d0bd2fd9c20f70be9e4233432446acac1b4bfe08602ed3c8c`.
+No thresholds, gains or time alignment were adjusted to obtain these results.
+
+| Required check | 6581 | 8580 |
+|---|---:|---:|
+| Logs with every observable digital comparison exact | 3 / 5 | 1 / 5 |
+| Exact snapshot continuation | 5 / 5 | 5 / 5 |
+| Audio windows within both fixed limits | 0 / 40 | 1 / 40 |
+| Complete twelve-bit waveform equality | Unverified | Unverified |
+
+The worst filter-mode relative RMS errors were 2.119 for 6581 and 1.350 for
+8580, against limits of 0.25 and 0.10. Envelope/retrigger and combined-waveform
+differences also remain. These independent failures exclude the candidate even
+apart from the unavailable twelve-bit observation. Model assumptions and their
+hardware sources are recorded in [HARDWARE.md](HARDWARE.md).
+
+The release retains reSID and includes the SID-query correction found during
+this work: debugger peeks no longer alter the live SID bus. Native PSID and
+RSID checks on both chip models preserve machine state and exact PCM snapshot
+continuation when these queries are inserted.
