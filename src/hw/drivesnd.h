@@ -7,11 +7,11 @@
 
 #define RC_DRIVESND_RATE 48000u
 #define RC_DRIVESND_VOICES 8u
-#define RC_DRIVESND_SECTIONS 16u    /* resonance sections of the richest sound */
-#define RC_DRIVESND_BANK 17u        /* band filter sections */
-/* One noise source: its resonances and its band filters. */
+#define RC_DRIVESND_MODES 24u       /* resonances of the richest sound */
+#define RC_DRIVESND_NOISE 20u       /* order of the motor's noise filter */
+/* One struck sound: its resonances, each a turning and decaying pair. */
 typedef struct rc_drivesnd_voice {
-    double color[RC_DRIVESND_SECTIONS][2], band[RC_DRIVESND_BANK][2];
+    double mode[RC_DRIVESND_MODES][2];
     uint32_t age;
     uint8_t kind;
 } rc_drivesnd_voice;
@@ -19,9 +19,10 @@ typedef struct rc_drivesnd {
     rc_dev dev;
     uint64_t steps, bumps;
     uint32_t random, age;
-    double gain[8], coast, previous, current;
-    rc_drivesnd_voice motor_voice, voice[RC_DRIVESND_VOICES];
-    uint8_t motor, mode, next_voice, half;
+    /* Motor: loudness and speed against the running drive, the speed it coasts down from, the place in its loop. */
+    double level, speed, coast, turn, hiss[RC_DRIVESND_NOISE];
+    rc_drivesnd_voice voice[RC_DRIVESND_VOICES];
+    uint8_t motor, mode, next_voice;
 } rc_drivesnd;
 
 void rc_drivesnd_init(rc_drivesnd *s);

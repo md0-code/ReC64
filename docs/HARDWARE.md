@@ -292,13 +292,14 @@ speed maps, rotational position and separator phase, including pending writes.
 Version 1 drive and track snapshots still load.
 
 Drive sounds are generated at 48 kHz from the pinned 1541 recordings without
-storing a sample. Each sound is noise through the resonances measured for it,
-split into eight bands whose levels follow the measured course of the
-recording: motor spin-up, running and coast-down share one set of resonances,
-the two head steps and the head-stop bump have their own. Synthesis runs at
-24 kHz, the bandwidth of the recordings, and is interpolated. The board feeds
-actual motor levels and monotonically counted mechanical events. Sound state
-advances while muted and is saved exactly; a tune in the SID player mutes it.
+storing a sample. A head step or a hit on the head stop is a set of measured
+resonances struck once, each turning and decaying at its own rate; the two
+head steps alternate. The running motor is one measured loop, kept as its 120
+strongest lines, plus noise through the spectrum of what the lines leave.
+Spin-up and coast-down read the same loop at the motor's speed and follow the
+measured level. The board feeds actual motor levels and monotonically counted
+mechanical events. Sound state advances while muted and is saved exactly; a
+tune in the SID player mutes it.
 The recordings, their hashes and the measurement method are in
 `sources.lock.json`.
 

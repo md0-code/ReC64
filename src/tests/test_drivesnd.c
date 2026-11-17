@@ -15,7 +15,7 @@ int main(void){
     uint64_t hum=energy(&s,4800);CHECK(hum>4800u*100u*100u&&hum<4800ull*2000u*2000u);
     rc_drivesnd_reset(&s);rc_drivesnd_status(&s,0,1,0);uint64_t step=energy(&s,6000);CHECK(step>0&&energy(&s,64)==0);
     rc_drivesnd_status(&s,0,1,0);CHECK(energy(&s,64)==0);
-    rc_drivesnd_status(&s,0,1,1);uint64_t bump=energy(&s,6000);CHECK(bump>step&&energy(&s,64)==0);
+    rc_drivesnd_status(&s,0,1,1);uint64_t bump=energy(&s,7000);CHECK(bump>step&&energy(&s,64)==0);
     rc_drivesnd_status(&s,0,0,0);CHECK(energy(&s,64)==0);
     /* Snapshot during overlapping steps/bump and motor attack. */
     rc_drivesnd_status(&s,1,3,1);energy(&s,517);rc_drivesnd_status(&s,1,4,2);energy(&s,137);
