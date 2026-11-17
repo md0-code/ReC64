@@ -6,18 +6,20 @@ static void wr(rc_sid_own *s,unsigned r,uint8_t v){rc_sid_own_write(s,r,v);rc_si
 int main(void) {
     rc_sid_own s,restored;rc_state_writer w;rc_state_reader r;char error[128];
     int16_t expected[512],actual[512];
-    CHECK(rc_sid_own_init(&s,RC_SID_OWN_8580,985248,48000));
+    for(unsigned model=0;model<2;++model) {
+    CHECK(rc_sid_own_init(&s,model,985248,48000));
     wr(&s,0,0x34);wr(&s,1,0x12);wr(&s,5,0);wr(&s,6,0xf0);wr(&s,4,0x21);
     wr(&s,21,7);wr(&s,22,100);wr(&s,23,0x51);wr(&s,24,0x1f);
     CHECK(rc_sid_own_clock(&s,4000));
     CHECK(s.voice[0].envelope==255 && s.voice[0].waveform>0);
     CHECK(rc_sid_own_audio_pull(&s,actual,512)>100);
     /* Snapshot deliberately lands with an HMOS write pending and filter energy. */
-    rc_sid_own_write(&s,4,0x80);
+    wr(&s,4,0x71);CHECK(rc_sid_own_clock(&s,100));
+    rc_sid_own_write(&s,4,0xb1);
     rc_sw_init(&w);rc_sw_header(&w,"test","sid-own",NULL,0);
     rc_sw_begin(&w,"SIDO",0);rc_sid_own_save(&s,&w);rc_sw_end(&w);CHECK(rc_sw_finish(&w));
     CHECK(rc_sid_own_clock(&s,4096));size_t count=rc_sid_own_audio_pull(&s,expected,512);
-    CHECK(rc_sid_own_init(&restored,RC_SID_OWN_8580,985248,48000));
+    CHECK(rc_sid_own_init(&restored,model,985248,48000));
     CHECK(rc_sr_open(&r,w.data,w.size,error,sizeof error) && rc_sr_chunk(&r,"SIDO",0));
     CHECK(rc_sid_own_load(&restored,&r) && rc_sid_own_clock(&restored,4096));
     CHECK(rc_sid_own_audio_pull(&restored,actual,512)==count);
@@ -29,5 +31,6 @@ int main(void) {
     rc_sid_own_reset(&s);
     CHECK(s.voice[0].phase==retained_phase && s.voice[0].envelope==retained_envelope);
     CHECK(s.voice[0].frequency==0 && s.voice[0].control==0 && s.voice[0].rate_counter==0);
-    puts("own SID native audio and exact pending-write/filter/resampler state OK");return 0;
+    }
+    puts("own SID both-model nonlinear/combined audio and exact state OK");return 0;
 }
