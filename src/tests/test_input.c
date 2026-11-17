@@ -40,7 +40,12 @@ int main(void){
     unsigned options[RC_CONFIG_OPTIONS]={0};rc_machine_setup setup={.family=&rc_c64_family,.model=0,.options=options,.roms=&roms};rc_c64 *board=rc_c64_create(&setup,error,sizeof error);CHECK(board);
     rc_mouse1351_move(&board->bus.mouse[0],7,-9,3);board->bus.control_type[0]=RC_CONTROL_MOUSE1351;
     rc_cia6526_write(&board->cia[0],2,255);rc_cia6526_write(&board->cia[0],0,64);
-    for(unsigned i=0;i<512;++i)rc_bus_pot_tick(&board->bus);CHECK(board->bus.pot_value[0]==14&&board->bus.pot_value[1]==18);
+    /* The counts go out one at a time: one conversion later a single count shows, then all of them. */
+    for(unsigned i=0;i<512;++i)rc_bus_pot_tick(&board->bus);CHECK(board->bus.pot_value[0]==2&&board->bus.pot_value[1]==2);
+    for(unsigned i=0;i<512*16;++i)rc_bus_pot_tick(&board->bus);CHECK(board->bus.pot_value[0]==14&&board->bus.pot_value[1]==18);
+    /* A hand faster than a driver can follow is slowed, never read as motion the other way. */
+    rc_mouse1351_move(&board->bus.mouse[0],500,0,3);unsigned previous=board->bus.mouse[0].x;
+    for(unsigned span=0;span<4;++span){for(unsigned i=0;i<39u*512u;++i)rc_bus_pot_tick(&board->bus);const unsigned moved=(board->bus.mouse[0].x-previous)&63u;CHECK(moved&&moved<=31);previous=board->bus.mouse[0].x;if(span==1)CHECK(!board->bus.mouse[0].pending[0]);if(span==1||span==2)rc_mouse1351_move(&board->bus.mouse[0],20,0,3);}CHECK(!board->bus.mouse[0].pending[0]);
     board->bus.control_type[1]=RC_CONTROL_PADDLES;board->bus.paddle[1][0]=33;board->bus.paddle[1][1]=201;rc_cia6526_write(&board->cia[0],0,128);
     for(unsigned i=0;i<512;++i)rc_bus_pot_tick(&board->bus);CHECK(rc_bus_read(&board->bus,0xd419,1)==33&&rc_bus_read(&board->bus,0xd41a,1)==201);CHECK(rc_sid_read(&board->sid,0)==201);
     for(unsigned i=0;i<219;++i)rc_bus_pot_tick(&board->bus);

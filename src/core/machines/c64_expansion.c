@@ -6,16 +6,19 @@ static unsigned selected(uint16_t a,unsigned pla,int vic){
     unsigned s=(pla&RC_PLA_ROML?RC_CART_ROML:0)|(pla&RC_PLA_ROMH?RC_CART_ROMH:0);
     if(!vic&&(pla&RC_PLA_I_O)){if((a&0xff00u)==0xde00u)s|=RC_CART_IO1;if((a&0xff00u)==0xdf00u)s|=RC_CART_IO2;}return s;
 }
+/* Nothing in the port: its lines rest, and every interrupt source reports its own changes. */
+static int empty(const rc_c64 *c){return !c->cart.crt.image&&!c->cart.ops&&!c->cart.capacitor&&!c->reu.size&&!c->georam.size&&!c->freeze_cycles;}
 void rc_c64_expansion_lines(rc_c64 *c){
     const rc_cart_lines p=rc_cart_get_lines(&c->cart);c->bus.game=p.game;c->bus.exrom=p.exrom;
     rc_mos6510_input(&c->cpu,RC_CPU_IRQ,c->vic.irq||c->cia[0].irq||!p.irq||rc_reu_irq(&c->reu));
     rc_mos6510_input(&c->cpu,RC_CPU_NMI,c->restore||c->cia[1].irq||!p.nmi);
 }
 static void observe(void *ctx,uint16_t a,int write,int effects,int vic){
-    rc_c64 *c=ctx;if(!c->bus.dma)rc_cart_observe(&c->cart,a,write,effects,vic);rc_c64_expansion_lines(c);
+    rc_c64 *c=ctx;if(empty(c))return;if(!c->bus.dma)rc_cart_observe(&c->cart,a,write,effects,vic);rc_c64_expansion_lines(c);
 }
 static uint8_t read_bus(void *ctx,uint16_t a,unsigned pla,uint8_t data,int driven,int effects,int vic){
-    rc_c64 *c=ctx;const unsigned s=selected(a,pla,vic);uint8_t mask=rc_cart_drive_mask(&c->cart,a,s,vic);
+    rc_c64 *c=ctx;if(empty(c))return driven?data:c->bus.vic_data;
+    const unsigned s=selected(a,pla,vic);uint8_t mask=rc_cart_drive_mask(&c->cart,a,s,vic);
     const uint8_t value=rc_cart_read(&c->cart,a,s,c->bus.vic_data,effects,vic);
     if(mask){data=(uint8_t)((driven?data:255)&(value|~mask));driven=1;}
     if(!vic&&(s&RC_CART_IO2)&&!c->bus.dma){mask=rc_reu_drive_mask(&c->reu,a);const uint8_t v=rc_reu_read(&c->reu,a,c->bus.vic_data,effects);if(mask){data=(uint8_t)((driven?data:255)&(v|~mask));driven=1;}}
@@ -23,7 +26,7 @@ static uint8_t read_bus(void *ctx,uint16_t a,unsigned pla,uint8_t data,int drive
     if(effects)rc_c64_expansion_lines(c);return driven?data:c->bus.vic_data;
 }
 static void write_bus(void *ctx,uint16_t a,unsigned pla,uint8_t v){
-    rc_c64 *c=ctx;const unsigned s=selected(a,pla,0);rc_cart_write(&c->cart,a,s,v);
+    rc_c64 *c=ctx;if(empty(c))return;const unsigned s=selected(a,pla,0);rc_cart_write(&c->cart,a,s,v);
     if((s&RC_CART_IO2)&&!c->bus.dma)rc_reu_write(&c->reu,a,v);
     if(s&(RC_CART_IO1|RC_CART_IO2))rc_georam_write(&c->georam,a,v);
     if(!c->bus.dma)rc_reu_observe_write(&c->reu,a);rc_c64_expansion_lines(c);
@@ -39,6 +42,7 @@ int rc_c64_expansion_init(rc_c64 *c,const rc_machine_setup *setup,char *error,si
 void rc_c64_expansion_release(rc_c64 *c){rc_easyflash_close(&c->easyflash);rc_cart_close(&c->cart);rc_reu_free(&c->reu);rc_georam_free(&c->georam);}
 void rc_c64_expansion_reset(rc_c64 *c){c->freeze_cycles=0;rc_cart_reset(&c->cart);rc_reu_reset(&c->reu);rc_georam_reset(&c->georam);rc_c64_expansion_lines(c);}
 void rc_c64_expansion_tick(rc_c64 *c){
+    if(empty(c)){c->cart.ba=(uint8_t)(c->vic.ba!=0);return;}
     if(c->freeze_cycles&&!--c->freeze_cycles)rc_cart_freeze(&c->cart,0);
     rc_cart_tick(&c->cart,1,c->vic.ba);rc_c64_expansion_lines(c);
 }

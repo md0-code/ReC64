@@ -30,6 +30,7 @@ typedef struct rc_machine_impl {
     rc_run_status (*run)(void *self, uint64_t ticks);
     uint64_t (*time)(const void *self);
     uint64_t (*frame_period)(const void *self);
+    uint64_t (*frames)(const void *self);                       /* NULL: one per frame period of guest time */
     int (*frame)(void *self, rc_frame *frame);
     size_t (*text)(void *self, char *out, size_t capacity);     /* NULL: cannot say */
     uint32_t (*audio_rate)(const void *self);

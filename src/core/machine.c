@@ -237,6 +237,11 @@ uint32_t rc_machine_clock(const rc_machine *m) { return m->impl->clock(m->self);
 rc_run_status rc_machine_run(rc_machine *m, uint64_t ticks) { return m->impl->run(m->self, ticks); }
 uint64_t rc_machine_time(const rc_machine *m) { return m->impl->time(m->self); }
 uint64_t rc_machine_frame_period(const rc_machine *m) { return m->impl->frame_period(m->self); }
+uint64_t rc_machine_frames(const rc_machine *m) {
+    if (m->impl->frames) return m->impl->frames(m->self);
+    const uint64_t period = m->impl->frame_period(m->self);
+    return period ? m->impl->time(m->self) / period : 0;
+}
 int rc_machine_frame(rc_machine *m, rc_frame *frame) { return m->impl->frame(m->self, frame); }
 void rc_machine_border(rc_machine *m,unsigned border){if(m->impl->border)m->impl->border(m->self,border);}
 size_t rc_machine_text(rc_machine *m, char *out, size_t capacity) {

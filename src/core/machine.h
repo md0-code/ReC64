@@ -198,6 +198,8 @@ rc_run_status rc_machine_run(rc_machine *m, uint64_t ticks);
 uint64_t rc_machine_time(const rc_machine *m);
 /* The video frame's period in ticks: the shell presents one frame per period. */
 uint64_t rc_machine_frame_period(const rc_machine *m);
+/* The frames the video has finished so far: the `serial` rc_machine_frame would give, at no cost. */
+uint64_t rc_machine_frames(const rc_machine *m);
 
 /* --- the picture ---------------------------------------------------------------- */
 

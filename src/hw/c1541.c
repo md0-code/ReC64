@@ -47,6 +47,8 @@ static void mechanism_lines(rc_c1541 *d){
 void rc_c1541_device(rc_c1541 *d,unsigned device){if(device>=8&&device<=11)d->device=(uint8_t)device;serial_lines(d);}
 void rc_c1541_iec_input(rc_c1541 *d,unsigned lines){
     const unsigned reset=(d->iec_in&RC_IEC_RESET)&&!(lines&RC_IEC_RESET);
+    /* Unchanged lines change nothing: the port side is resolved after every VIA access and tick. */
+    if(!reset&&d->iec_in==(uint8_t)(lines&RC_IEC_ALL))return;
     d->iec_in=(uint8_t)(lines&RC_IEC_ALL);if(reset)rc_c1541_reset(d);serial_lines(d);
 }
 unsigned rc_c1541_iec_output(const rc_c1541 *d){return d->enabled?d->iec_out:RC_IEC_ALL;}

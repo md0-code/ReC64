@@ -20,6 +20,7 @@ typedef struct rc_cia6526 {
     uint8_t cnt,sp,flag,cnt_edge,tod_pin,pc;
     uint8_t sdr,shift,serial_bits,serial_active,serial_pending,cnt_out,sp_out;
     uint8_t tod[4],alarm[4],tod_latch[4],tod_latched,tod_stopped,tod_divider,alarm_match;
+    uint8_t announced,pins[2];          /* the port levels last sent to the host; never saved */
 } rc_cia6526;
 void rc_cia6526_init(rc_cia6526 *c,const rc_hw_host *host,unsigned model);
 void rc_cia6526_reset(rc_cia6526 *c);

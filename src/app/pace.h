@@ -61,6 +61,10 @@ void rc_pace_hold(rc_pace *p, uint64_t now, uint64_t guest);
  * `guest` whose frame period is `period` ticks of guest time; `free_running` is
  * unthrottled. */
 rc_pace_step rc_pace_next(rc_pace *p, int free_running, uint64_t now, uint64_t guest, uint64_t period);
+/* The picture just asked for is not shown: it is asked for again `ms` milliseconds from `now`, and the
+ * schedule of pictures follows from there. The shell uses it when the machine has not finished a new frame
+ * yet, so that pictures are asked for clear of the moment the machine finishes one. */
+void rc_pace_defer(rc_pace *p, uint64_t now, unsigned ms);
 /* The guest time wall time has earned by `now`, as rc_pace_next counts it. */
 uint64_t rc_pace_due(const rc_pace *p, uint64_t now);
 

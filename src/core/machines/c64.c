@@ -124,6 +124,7 @@ static uint32_t clock_hz(const void *self){return ((const rc_c64 *)self)->hz;}
 static uint64_t time_now(const void *self){return ((const rc_c64 *)self)->sched.now;}
 static uint64_t period(const void *self){const rc_c64 *c=self;return rc_vic2_cycles_per_line(&c->vic)*rc_vic2_height(&c->vic);}
 static void border(void *self,unsigned mode){if(mode<=RC_BORDER_NONE)((rc_c64 *)self)->border=(uint8_t)mode;}
+static uint64_t frames(const void *self){return ((const rc_c64 *)self)->vic.frames;}
 static int frame(void *self,rc_frame *f){
     rc_c64 *c=self;const unsigned full_h=c->model>=2?247u:272u,raw=rc_vic2_width(&c->vic),raw_h=rc_vic2_height(&c->vic);
     const unsigned w=c->border==RC_BORDER_NONE?320u:c->border==RC_BORDER_MINIMAL?352u:384u;
@@ -185,7 +186,7 @@ static int load(void *self,rc_state_reader *r){
     rc_c64_iec_lines(c);interrupts(c);latch_picture(c);return 1;
 }
 static const rc_machine_impl IMPL={.destroy=destroy,.description=description,.error=error_text,.reset=reset,.nmi=nmi,
-    .clock=clock_hz,.run=rc_c64_run,.time=time_now,.frame_period=period,.frame=frame,.text=text,
+    .clock=clock_hz,.run=rc_c64_run,.time=time_now,.frame_period=period,.frames=frames,.frame=frame,.text=text,
     .audio_rate=audio_rate,.audio_pull=audio_pull,.key=key,.joystick=joystick,.activity=rc_c64_activity,.insert=rc_c64_insert,.media=rc_c64_media,.eject=rc_c64_eject,.control=rc_c64_control,.tape_options=rc_c64_tape_options,.tape_deck=rc_c64_tape_deck,.autoload=rc_c64_autoload,
     .save=save,.load=load,.rom_hashes=hashes,.set_trace=trace,.peek=peek,.poke=poke,.border=border,.pointer=pointer,.status=status};
 const rc_family rc_c64_family={.id="c64",.name="Commodore 64",.models=MODELS,.model_count=4,

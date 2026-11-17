@@ -1,7 +1,7 @@
 /* C64 PLA logic equations: Marko Makela/Mark Smith, verified 82S100 fuse
  * map; also published by Thomas Giesel in The C64 PLA Dissected. */
 #include "pla.h"
-uint8_t rc_pla_decode(uint16_t inputs) {
+static uint8_t equations(uint16_t inputs) {
     const int _CAS=(inputs&(1u<<0))!=0;
     const int _LORAM=(inputs&(1u<<1))!=0;
     const int _HIRAM=(inputs&(1u<<2))!=0;
@@ -73,6 +73,12 @@ uint8_t rc_pla_decode(uint16_t inputs) {
              || A15 && A14 && !A13 && !A12 && _EXROM && !_GAME 
              || _CAS )) selected|=RC_PLA_CASRAM;
     return selected;
+}
+/* The equations are evaluated once for each of the 65536 input words. */
+uint8_t rc_pla_decode(uint16_t inputs) {
+    static uint8_t table[65536];static int ready;
+    if(!ready){for(unsigned i=0;i<65536;++i)table[i]=equations((uint16_t)i);ready=1;}
+    return table[inputs];
 }
 void rc_pla_save(const rc_pla *p,rc_state_writer *w){rc_sw_u32(w,1);rc_sw_u16(w,p->inputs);}
 int rc_pla_load(rc_pla *p,rc_state_reader *r){if(r->end-r->at<6||rc_sr_u32(r)!=1)return 0;p->inputs=rc_sr_u16(r);return rc_sr_ok(r);}

@@ -88,8 +88,11 @@ int rc_bus_load(rc_bus *b,rc_state_reader *r){
  * calibrated conversion times; two enabled resistances charge in parallel. */
 void rc_bus_pot_tick(rc_bus *b){
     const unsigned phase=b->pot_phase;
-    if(!phase)b->pot_charge[0]=b->pot_charge[1]=255;
-    if(phase>=256){const uint8_t select=rc_cia6526_port_output(b->cia[0],0);
+    if(!phase){b->pot_charge[0]=b->pot_charge[1]=255;rc_mouse1351_tick(&b->mouse[0],512);rc_mouse1351_tick(&b->mouse[1],512);}
+    /* Only a mouse or paddles end a conversion early, and each axis latches once. */
+    const int analog=b->control_type[0]==RC_CONTROL_MOUSE1351||b->control_type[0]==RC_CONTROL_PADDLES||
+        b->control_type[1]==RC_CONTROL_MOUSE1351||b->control_type[1]==RC_CONTROL_PADDLES;
+    if(phase>=256&&analog&&(b->pot_charge[0]==255||b->pot_charge[1]==255)){const uint8_t select=rc_cia6526_port_output(b->cia[0],0);
         for(unsigned axis=0;axis<2;++axis){unsigned threshold=256,resistance=256;
             for(unsigned p=0;p<2;++p)if(select&(64u<<p)){
                 const unsigned type=b->control_type[p];

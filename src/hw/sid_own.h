@@ -46,6 +46,7 @@ typedef struct rc_sid_own {
     /* Derived from the model, the rates and the registers; never saved. */
     double filter_coefficient, filter_damping, volume_gain, cutoff_gate, cutoff_scale;
     double cutoff_weight[11];
+    double external_lp, external_hp, mixer_scale[8];
     float waveform_level[4096], envelope_level[256];
     float kernel[RC_SID_OWN_KERNEL+2];
     float cutoff_curve[RC_SID_OWN_CURVE+2];

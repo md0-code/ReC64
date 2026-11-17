@@ -26,6 +26,7 @@ int rc_via6522_control_output(const rc_via6522 *v,int pin) {
     return -1;
 }
 static void outputs(rc_via6522 *v) {
+    if(!v->dev.host||!v->dev.host->line)return;   /* nobody listens: the board reads the ports itself */
     for(unsigned p=0;p<2;++p){const uint8_t data=rc_via6522_port_output(v,p);
         for(unsigned i=0;i<8;++i)line(v,(p?RC_VIA_PB0:RC_VIA_PA0)+(int)i,data>>i&1u);}
     line(v,RC_VIA_CA2_OUT,rc_via6522_control_output(v,RC_VIA_CA2));

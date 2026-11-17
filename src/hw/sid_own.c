@@ -151,6 +151,10 @@ static void derived_setup(rc_sid_own *s) {
         s->combined[4][code]=selector_solve(&q[3],code,natural,1,1,1);
         s->combined[5][code]=selector_solve(&q[3],code,inverted,1,1,1);
     }
+    s->external_lp=1.0/(1.0+0.00001*s->clock_hz);
+    s->external_hp=1.0/(1.0+0.01*s->clock_hz);
+    for(unsigned inputs=0;inputs<8;++inputs)
+        s->mixer_scale[inputs]=p->mixer_gain>0?(1.0+4.0/p->mixer_gain)/(1.0+(inputs+1.0)/p->mixer_gain):1.0;
     /* Kaiser-windowed sinc over the stream at a quarter of the chip clock:
      * 16 zero crossings either side where the history holds them. */
     double ratio=s->clock_hz/(4.0*s->sample_rate),span=16.0*ratio;
@@ -392,21 +396,22 @@ static void analog_clock(rc_sid_own *s) {
     s->filter_low-=low_rate*(s->filter_band+p->loss_low*s->filter_low);
     s->filter_band-=band_rate*(s->filter_high+p->loss_band*s->filter_band);
     s->filter_high=s->filter_damping*s->filter_band-p->summer_low*s->filter_low-p->summer_input*input;
+    /* An undriven filter decays into subnormal numbers, which cost the host dearly and carry no sound. */
+    if(fabs(s->filter_low)<1e-30)s->filter_low=0;
+    if(fabs(s->filter_band)<1e-30)s->filter_band=0;
     if(mode&16){mix+=s->filter_low;++inputs;}
     if(mode&32){mix+=s->filter_band;++inputs;}
     if(mode&64){mix+=s->filter_high;++inputs;}
     /* A summing inverter of gain A divides by 1+(n+1)/A for n equal inputs;
      * levels are referred to the three-voice case. */
-    if(p->mixer_gain>0)mix*=(1.0+4.0/p->mixer_gain)/(1.0+(inputs+1.0)/p->mixer_gain);
+    mix*=s->mixer_scale[inputs];
     double mixed=p->output_offset+s->volume_gain*mix;
     /* The NMOS output stage bottoms out well below its idle level. */
     if(mixed<p->output_knee)mixed=p->output_knee-p->output_reach*tanh((p->output_knee-mixed)/p->output_reach);
     /* Board 250469: 10 kohm / 1000 pF LP and 10 uF / 1 kohm AC coupling.
      * Backward Euler is stable at every supported machine/sample frequency. */
-    double lp=1.0/(1.0+0.00001*s->clock_hz);
-    double hp=1.0/(1.0+0.01*s->clock_hz);
-    s->external_low+=lp*(mixed-s->external_low);
-    s->external_high+=hp*(s->external_low-s->external_high);
+    s->external_low+=s->external_lp*(mixed-s->external_low);
+    s->external_high+=s->external_hp*(s->external_low-s->external_high);
     s->cycle_output=s->external_filter?s->external_low-s->external_high:mixed;
 }
 static void audio_push(rc_sid_own *s,double sample) {

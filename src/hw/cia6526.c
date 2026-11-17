@@ -12,7 +12,14 @@ uint8_t rc_cia6526_port_output(const rc_cia6526 *c,unsigned port) {
     }
     return v;
 }
-static void outputs(rc_cia6526 *c){for(unsigned p=0;p<2;++p){const uint8_t v=rc_cia6526_port_output(c,p);for(unsigned i=0;i<8;++i)line(c,(p?RC_CIA_PB0:RC_CIA_PA0)+(int)i,(v>>i)&1u);}}
+/* Port pins are sent to the host when they change; a reset or a loaded state sends them all. */
+static void outputs(rc_cia6526 *c){
+    for(unsigned p=0;p<2;++p){
+        const uint8_t v=rc_cia6526_port_output(c,p);uint8_t changed=c->announced?(uint8_t)(v^c->pins[p]):255;c->pins[p]=v;
+        for(unsigned i=0;changed;++i,changed>>=1)if(changed&1u)line(c,(p?RC_CIA_PB0:RC_CIA_PA0)+(int)i,(v>>i)&1u);
+    }
+    c->announced=1;
+}
 static int timer_tick(rc_cia_timer *t,int source) {
     t->pulse=0;
     t->count_pipe=(uint8_t)(((t->count_pipe<<1)|((t->control&1u)&&source))&7u);
@@ -38,7 +45,9 @@ void rc_cia6526_tick(rc_cia6526 *c) {
     const int b=timer_tick(&c->timer[1],mode==0?1:mode==1?c->cnt_edge:mode==2?a:a&&c->cnt);
     if(a){request(c,1);if(c->timer[0].control&64u)serial_clock(c);}
     if(b)request(c,2);
-    c->cnt_edge=0;outputs(c);
+    c->cnt_edge=0;
+    /* Only a timer shown on PB6 or PB7 changes a port pin without a register write. */
+    if((c->timer[0].control|c->timer[1].control)&2u)outputs(c);
 }
 static void alarm(rc_cia6526 *c){const int match=!memcmp(c->tod,c->alarm,4);if(match&&!c->alarm_match)request(c,4);c->alarm_match=(uint8_t)match;}
 static uint8_t bcd_increment(uint8_t v){return (uint8_t)((v&15u)==9?(v+7u):(v+1u));}
@@ -110,7 +119,7 @@ int rc_cia6526_load(rc_cia6526 *c,rc_state_reader *r) {
     rc_sr_bytes(r,c->tod,4);rc_sr_bytes(r,c->alarm,4);rc_sr_bytes(r,c->tod_latch,4);
     B(tod_latched);B(tod_stopped);B(tod_divider);B(alarm_match);
 #undef B
-    if(c->model>RC_CIA_8521||c->serial_bits>8||c->tod_divider>6)return 0;outputs(c);line(c,RC_CIA_IRQ,c->irq);return rc_sr_ok(r);
+    if(c->model>RC_CIA_8521||c->serial_bits>8||c->tod_divider>6)return 0;c->announced=0;outputs(c);line(c,RC_CIA_IRQ,c->irq);return rc_sr_ok(r);
 }
 static uint8_t dev_read(void *d,unsigned sp,uint32_t off){(void)sp;return rc_cia6526_read(d,off);}
 static void dev_write(void *d,unsigned sp,uint32_t off,uint8_t v){(void)sp;rc_cia6526_write(d,off,v);}

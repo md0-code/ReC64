@@ -3,7 +3,7 @@
  * are the sprite coordinates, before the shared eight-dot output delay. */
 #include "vic2.h"
 #include <string.h>
-static int ntsc(const rc_vic2 *v){return v->model>=RC_VIC_6567;}
+static inline int ntsc(const rc_vic2 *v){return v->model>=RC_VIC_6567;}
 unsigned rc_vic2_cycles_per_line(const rc_vic2 *v){return ntsc(v)?65:63;}
 unsigned rc_vic2_width(const rc_vic2 *v){return rc_vic2_cycles_per_line(v)*8;}
 unsigned rc_vic2_height(const rc_vic2 *v){return ntsc(v)?263:312;}
@@ -11,7 +11,7 @@ static void line(rc_vic2 *v,int pin,int level){if(v->dev.host&&v->dev.host->line
 static void irq(rc_vic2 *v){const uint8_t level=(v->reg[25]&v->reg[26]&15u)!=0;if(v->irq!=level){v->irq=level;line(v,RC_VIC_IRQ,level);}}
 static void interrupt(rc_vic2 *v,unsigned bit){v->reg[25]|=(uint8_t)bit;irq(v);}
 static void raster_compare(rc_vic2 *v){const uint8_t match=v->raster_read==v->compare;if(match&&!v->raster_match)interrupt(v,1);v->raster_match=match;}
-static unsigned x_at(const rc_vic2 *v,unsigned phase,unsigned dot){
+static inline unsigned x_at(const rc_vic2 *v,unsigned phase,unsigned dot){
     if(!ntsc(v))return (404u+(v->cycle-1u)*8u+phase*4u+dot)%504u;
     /* The repeated $18c half-cycle coordinates are explicit in Bauer's R8
      * diagram. Other half-cycles follow the nine-bit dot counter. */
@@ -21,7 +21,7 @@ static unsigned x_at(const rc_vic2 *v,unsigned phase,unsigned dot){
 }
 static unsigned pointer_cycle(const rc_vic2 *v,unsigned sprite){return sprite<3?(58u+(ntsc(v)?2u:0u)+2u*sprite):(1u+2u*(sprite-3u));}
 static int sprite_phi2(const rc_vic2 *v,unsigned cycle){for(unsigned s=0;s<8;++s)if((v->sprite_dma>>s)&1u){const unsigned p=pointer_cycle(v,s);if(cycle==p||cycle==p+1)return 1;}return 0;}
-static void vertical_compare(rc_vic2 *v){const unsigned top=v->reg[17]&8u?51:55,bottom=v->reg[17]&8u?251:247;if(v->raster==bottom)v->vertical_border=1;if(v->raster==top&&(v->reg[17]&16u))v->vertical_border=0;}
+static inline void vertical_compare(rc_vic2 *v){const unsigned top=v->reg[17]&8u?51:55,bottom=v->reg[17]&8u?251:247;if(v->raster==bottom)v->vertical_border=1;if(v->raster==top&&(v->reg[17]&16u))v->vertical_border=0;}
 void rc_vic2_begin(rc_vic2 *v){
     if(v->begun||v->phase)return;v->begun=1;
     if(v->cycle==1){v->c_dma=0;if(v->raster==0){v->vcbase=0;v->refresh=255;v->den=0;v->lp_latched=0;}else {v->raster_read=v->raster;raster_compare(v);}}
@@ -31,7 +31,7 @@ void rc_vic2_begin(rc_vic2 *v){
     if(v->bad)v->display=1;
     if(v->bad&&v->cycle>=12&&v->cycle<=54)v->c_dma=1;
     if(v->cycle==14){v->vc=v->vcbase;v->vmli=0;if(v->bad)v->rc=0;}
-    for(unsigned s=0;s<8;++s)if(!(v->reg[23]&(1u<<s)))v->advance|=(uint8_t)(1u<<s);
+    v->advance|=(uint8_t)~v->reg[23];
     if(v->cycle==16)for(unsigned s=0;s<8;++s){const uint8_t bit=(uint8_t)(1u<<s);if(v->advance&bit){v->mcbase[s]=v->crunch&bit?(uint8_t)((0x2au&(v->mcbase[s]&v->mc[s]))|(0x15u&(v->mcbase[s]|v->mc[s]))):v->mc[s];}if(v->mcbase[s]==63)v->sprite_dma&=(uint8_t)~bit;} 
     if(v->cycle==16)v->crunch=0;
     const unsigned late=ntsc(v)?2u:0u;
@@ -40,7 +40,8 @@ void rc_vic2_begin(rc_vic2 *v){
     if(v->cycle==58){if(v->rc==7){v->vcbase=v->vc;v->display=v->bad;}if(v->display)v->rc=(v->rc+1u)&7u;}
     if(v->cycle==rc_vic2_cycles_per_line(v))vertical_compare(v);
     for(unsigned phase=0;phase<2;++phase){v->bus[phase]=(rc_vic_access){0x3fff,phase?RC_VIC_NONE:RC_VIC_IDLE,0};v->sprite_slot[phase]=255;v->sprite_byte[phase]=0;}
-    for(unsigned s=0;s<8;++s){const unsigned p=pointer_cycle(v,s);if(v->cycle==p){v->bus[0]=(rc_vic_access){(uint16_t)(((v->reg[24]&0xf0u)<<6)|0x3f8u|s),RC_VIC_POINTER,(uint8_t)s};v->sprite_slot[1]=(uint8_t)s;v->sprite_byte[1]=0;}
+    /* Sprite pointers and data are fetched from the end of one line into the start of the next. */
+    if(v->cycle<=10||v->cycle>=58)for(unsigned s=0;s<8;++s){const unsigned p=pointer_cycle(v,s);if(v->cycle==p){v->bus[0]=(rc_vic_access){(uint16_t)(((v->reg[24]&0xf0u)<<6)|0x3f8u|s),RC_VIC_POINTER,(uint8_t)s};v->sprite_slot[1]=(uint8_t)s;v->sprite_byte[1]=0;}
         else if(v->cycle==p+1){v->sprite_slot[0]=v->sprite_slot[1]=(uint8_t)s;v->sprite_byte[0]=1;v->sprite_byte[1]=2;}}
     if(v->cycle>=11&&v->cycle<=15)v->bus[0]=(rc_vic_access){(uint16_t)(0x3f00u|v->refresh),RC_VIC_REFRESH,0};
     if(v->cycle>=16&&v->cycle<=55){uint16_t address=0x3fff;const unsigned i=v->vmli<40?v->vmli:0;
@@ -52,14 +53,14 @@ void rc_vic2_begin(rc_vic2 *v){
     /* On a p-access its pointer is only available at the end of phi1. The
      * first s-access address is updated when that byte has been accepted. */
     int busy=v->c_dma&&v->cycle>=12&&v->cycle<=54;
-    for(unsigned ahead=0;ahead<4;++ahead){const unsigned c=(v->cycle-1u+ahead)%rc_vic2_cycles_per_line(v)+1u;if(sprite_phi2(v,c))busy=1;}
+    if(v->sprite_dma)for(unsigned ahead=0;ahead<4;++ahead){const unsigned c=(v->cycle-1u+ahead)%rc_vic2_cycles_per_line(v)+1u;if(sprite_phi2(v,c))busy=1;}
     const uint8_t ba=(uint8_t)!busy;
     if(ba)v->ba_age=0;else if(v->ba)v->ba_age=0;else if(v->ba_age<255)++v->ba_age;
     if(ba!=v->ba){v->ba=ba;line(v,RC_VIC_BA,ba);}
     const uint8_t aec=(uint8_t)(v->bus[1].kind==RC_VIC_NONE||v->ba_age<3);
     if(aec!=v->aec){v->aec=aec;line(v,RC_VIC_AEC,aec);}
 }
-static uint8_t graphics(rc_vic2 *v,int *foreground){
+static inline uint8_t graphics(rc_vic2 *v,int *foreground){
     const unsigned mcm=(v->reg[22]>>4)&1u,bmm=(v->reg[17]>>5)&1u,ecm=(v->reg[17]>>6)&1u;
     const unsigned pos=v->gpos<8?v->gpos:7;
     const unsigned bit=v->gpos<8?(v->gdata>>(7u-pos))&1u:0;
@@ -75,7 +76,7 @@ static uint8_t graphics(rc_vic2 *v,int *foreground){
     if(ecm&&(bmm||mcm))out=0;
     return out&15u;
 }
-static uint8_t sprite_pixel(rc_vic2 *v,unsigned s,unsigned x){
+static inline uint8_t sprite_pixel(rc_vic2 *v,unsigned s,unsigned x){
     const uint8_t bit=(uint8_t)(1u<<s);const unsigned sx=v->reg[s*2]|((v->reg[16]&bit)?256u:0u);
     if((v->sprite_display&bit)&&!(v->started&bit)&&x==sx){v->started|=bit;v->sprite_shift[s]=v->sprite_data[s];v->sprite_pos[s]=0;v->sprite_sub[s]=0;v->sprite_active[s]=1;}
     if(!v->sprite_active[s]||v->sprite_pos[s]>=24)return 0;
@@ -85,8 +86,8 @@ static uint8_t sprite_pixel(rc_vic2 *v,unsigned s,unsigned x){
     if(!value)return 0;
     return (uint8_t)((multi==1?v->reg[39+s]:value==1?v->reg[37]:value==2?v->reg[39+s]:v->reg[38])+1u);
 }
-static void pixel(rc_vic2 *v,unsigned phase,unsigned dot){
-    const unsigned x=x_at(v,phase,dot),left=v->reg[22]&8u?24:31,right=v->reg[22]&8u?344:335;
+static inline void pixel(rc_vic2 *v,unsigned x,unsigned at){
+    const unsigned left=v->reg[22]&8u?24:31,right=v->reg[22]&8u?344:335;
     if(x==right)v->main_border=1;
     if(x==left){vertical_compare(v);if(!v->vertical_border)v->main_border=0;}
     /* The shifter reloads 4+XSCROLL pixels after the fetch: up to eleven,
@@ -95,12 +96,13 @@ static void pixel(rc_vic2 *v,unsigned phase,unsigned dot){
     if(v->held&&v->held_age>=reload){v->gdata=v->held_data;v->gchar=v->held_char;v->gcolour=v->held_colour;v->gpos=0;v->held=0;}
     else if(!v->held&&v->pending&&v->pending_age>=reload){v->gdata=v->pending_data;v->gchar=v->pending_char;v->gcolour=v->pending_colour;v->gpos=0;v->pending=0;}
     int foreground=0;uint8_t color=graphics(v,&foreground),mask=0,first_color=0,first=0;
-    for(unsigned s=0;s<8;++s){const uint8_t sc=sprite_pixel(v,s,x);if(sc){mask|=(uint8_t)(1u<<s);if(!first_color){first_color=sc;first=(uint8_t)s;}}}
+    /* Only a sprite waiting for its X position or already shifting has anything to do. */
+    uint64_t shifting;memcpy(&shifting,v->sprite_active,8);const unsigned waiting=v->sprite_display&(unsigned)~v->started;
+    if(shifting||waiting)for(unsigned s=0;s<8;++s){if(!v->sprite_active[s]&&!(waiting&(1u<<s)))continue;const uint8_t sc=sprite_pixel(v,s,x);if(sc){mask|=(uint8_t)(1u<<s);if(!first_color){first_color=sc;first=(uint8_t)s;}}}
     if(mask&&(mask&(mask-1u))){if(!v->reg[30])interrupt(v,4);v->reg[30]|=mask;}
     if(mask&&foreground){if(!v->reg[31])interrupt(v,2);v->reg[31]|=mask;}
     if(first_color&&(!foreground||!(v->reg[27]&(1u<<first))))color=first_color-1u;
     if(v->main_border)color=v->reg[32];
-    const unsigned at=v->raster*rc_vic2_width(v)+(v->cycle-1u)*8u+phase*4u+dot;
     v->pixels[at]=v->delay[v->delay_at];v->delay[v->delay_at]=color&15u;v->delay_at=(v->delay_at+1u)&7u;
     if(v->gpos<8)++v->gpos;if(v->pending&&v->pending_age<255)++v->pending_age;if(v->held&&v->held_age<255)++v->held_age;
 }
@@ -113,7 +115,8 @@ void rc_vic2_clock(rc_vic2 *v,unsigned phase,uint8_t data,uint8_t colour){
     else if(b.kind==RC_VIC_GRAPHICS){if(v->pending){v->held=1;v->held_age=v->pending_age;v->held_data=v->pending_data;v->held_char=v->pending_char;v->held_colour=v->pending_colour;}v->pending=1;v->pending_age=0;v->pending_data=data;v->pending_char=v->display?v->matrix[b.index]:0;v->pending_colour=v->display?v->colour[b.index]:0;if(v->display){v->vc=(v->vc+1u)&1023u;++v->vmli;}}
     if(v->sprite_slot[phase]<8){const unsigned s=v->sprite_slot[phase],byte=v->sprite_byte[phase];if(byte==0)v->sprite_data[s]=(uint32_t)data<<16;else if(byte==1)v->sprite_data[s]=(v->sprite_data[s]&0xff00ffu)|(uint32_t)data<<8;else v->sprite_data[s]=(v->sprite_data[s]&0xffff00u)|data;if(v->sprite_dma&(1u<<s))v->mc[s]=(v->mc[s]+1u)&63u;
         if(phase==0&&v->sprite_slot[1]==s&&v->bus[1].kind==RC_VIC_SPRITE)v->bus[1].address=(uint16_t)(v->pointer[s]<<6|v->mc[s]);}
-    for(unsigned i=0;i<4;++i)pixel(v,phase,i);
+    const unsigned wrap=ntsc(v)?512u:504u,at=v->raster*rc_vic2_width(v)+(v->cycle-1u)*8u+phase*4u;unsigned x=x_at(v,phase,0);
+    for(unsigned i=0;i<4;++i){pixel(v,x,at+i);if(++x==wrap)x=0;}
     if(phase==0){v->phase=1;return;}
     if(v->cycle==56u+(ntsc(v)?2u:0u))v->advance^=v->reg[23]&v->sprite_dma;
     ++v->cycles;v->phase=0;v->begun=0;

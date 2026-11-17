@@ -109,7 +109,8 @@ void rc_c64_media_tick(rc_c64 *c){
     rc_c64_iec_lines(c);c->drive_phase+=1000000u;
     while(c->drive_phase>=c->hz){c->drive_phase-=c->hz;rc_c1541_tick(&c->drive);rc_c64_iec_lines(c);}
     rc_fastload_observe(&c->fastload,c->sched.now,c->drive.motor,c->iec.edges);
-    rc_drivesnd_status(&c->drive_sound,c->drive.motor,c->drive.steps,c->drive.bumps);
+    if((c->drive.motor!=0)!=c->drive_sound.motor||c->drive.steps!=c->drive_sound.steps||c->drive.bumps!=c->drive_sound.bumps)
+        rc_drivesnd_status(&c->drive_sound,c->drive.motor,c->drive.steps,c->drive.bumps);
     rc_c64_media_lines(c);rc_datasette_tick(&c->tape,1);c->tape_audio_phase+=48000;
     if(c->tape_audio_phase>=c->hz){c->tape_audio_phase-=c->hz;
         if(c->tape_audio_count==48000){c->tape_audio_head=(c->tape_audio_head+1)%48000;--c->tape_audio_count;}

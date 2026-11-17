@@ -38,7 +38,7 @@ typedef struct desktop {
     rc_browser browser;rc_typist typist;
     rc_setup setup;rc_osd osd;uint32_t palette[16];
     rc_panel panel;rc_sidplayer player;rc_osk osk;int panel_visible;unsigned transport,transport_row;
-    int hidden,paused,quit,restart_pending,pace_dirty;uint64_t frames;rc_config running_config;
+    int hidden,paused,quit,restart_pending,pace_dirty,deferred;uint64_t frames,pictured;rc_config running_config;
     uint32_t *pixels;
     size_t pixel_count;
     char input[1024];
@@ -707,6 +707,11 @@ int rc_desktop_run(rc_machine **owner,rc_config *c,const rc_rom_index *roms,cons
             const rc_pace_step step=rc_pace_next(&pace,free_running,SDL_GetPerformanceCounter(),rc_machine_time(m),ticks);
             if(step.action==RC_PACE_WAIT) { rc_host_sleep_us(500);continue; }
             present=step.action==RC_PACE_PRESENT;ticks=present?0:step.ticks;
+            /* A picture is asked for clear of the moment the machine finishes a frame: one asked for before the next
+             * frame is finished waits for it once, so no frame is shown twice and the next one dropped. */
+            if(present&&!free_running){const uint64_t finished=rc_machine_frames(m);
+                if(finished==d.pictured&&!d.deferred){d.deferred=1;rc_pace_defer(&pace,SDL_GetPerformanceCounter(),2);continue;}
+                d.pictured=finished;d.deferred=0;}
             /* At full speed, skipped pictures still advance keyboard timing. */
             input_frame=free_running?step.action==RC_PACE_RUN:present;
         }

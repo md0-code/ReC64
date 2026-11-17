@@ -3,6 +3,11 @@ file(READ "${CMAKE_CURRENT_SOURCE_DIR}/VERSION" RC_VERSION_TEXT)
 string(STRIP "${RC_VERSION_TEXT}" RC_VERSION_TEXT)
 project(ReC64 VERSION ${RC_VERSION_TEXT} LANGUAGES C)
 set(CMAKE_C_STANDARD 11)
+# The default build keeps its debug information but inlines like a release:
+# the chip models are many small functions called every cycle.
+if(MSVC)
+    string(REPLACE "/Ob1" "/Ob2" CMAKE_C_FLAGS_RELWITHDEBINFO "${CMAKE_C_FLAGS_RELWITHDEBINFO}")
+endif()
 set(CMAKE_C_STANDARD_REQUIRED ON)
 include(cmake/Warnings.cmake)
 configure_file(rc_version.h.in ${CMAKE_CURRENT_BINARY_DIR}/generated/rc_version.h @ONLY)
@@ -183,3 +188,13 @@ add_executable(test_states tests/test_states.c)
 target_link_libraries(test_states PRIVATE rc_shell)
 rc_set_warnings(test_states)
 add_test(NAME states COMMAND test_states)
+
+# Whole-program optimization for our own targets: the board calls its chips
+# across source files every cycle.
+include(CheckIPOSupported)
+check_ipo_supported(RESULT RC_IPO LANGUAGES C)
+if(RC_IPO)
+    get_property(RC_TARGETS DIRECTORY PROPERTY BUILDSYSTEM_TARGETS)
+    set_target_properties(${RC_TARGETS} PROPERTIES
+        INTERPROCEDURAL_OPTIMIZATION_RELEASE ON INTERPROCEDURAL_OPTIMIZATION_RELWITHDEBINFO ON)
+endif()

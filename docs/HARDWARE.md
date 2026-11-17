@@ -29,6 +29,11 @@ sound preferences remain outside guest state. A speed-mode transition resets
 the wall-clock anchor; full-speed input timing follows every emulated frame,
 including those whose picture is skipped.
 
+Pictures follow the machine's frame period on the host clock. A picture due
+before the machine has finished a new frame waits two milliseconds for it,
+once, and the following pictures keep that offset, so no frame is shown twice
+and its successor dropped.
+
 ## NMOS 6510 / 6502
 
 `hw/mos6510.h` exposes the pins of one access and accepts one granted cycle.
@@ -177,7 +182,10 @@ includes the worked conversion from Inside Commodore DOS.
 
 The board's `pointer` input takes a socket, controller type, X/Y and two
 buttons. For the 1351, X/Y are signed host movement; the chip stores six-bit
-counters and presents bits 6:1 to POTX/POTY. POTY increases upwards. Its
+counters and presents bits 6:1 to POTX/POTY. Host movement reaches the
+counters one count every 700 cycles at most (28 a PAL frame), below the 31 a
+driver polling once a frame can tell from movement the other way; what a fast
+hand adds beyond a 56-count backlog is dropped. POTY increases upwards. Its
 buttons connect to fire and up. For paddles, X/Y are absolute 0-255 conversion
 times and the buttons connect to left/right. The board clocks a 256-cycle
 discharge plus 256-cycle conversion through the CIA1 PA6/PA7-controlled

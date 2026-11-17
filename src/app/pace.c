@@ -28,6 +28,11 @@ void rc_pace_hold(rc_pace *p, uint64_t now, uint64_t guest) {
     p->anchor_guest = guest;
 }
 
+void rc_pace_defer(rc_pace *p, uint64_t now, unsigned ms) {
+    p->next_frame = (double)now + (double)p->freq * ms / 1000.0;
+    p->late = 0;
+}
+
 uint64_t rc_pace_due(const rc_pace *p, uint64_t now) {
     return p->anchor_guest + (uint64_t)((double)(now - p->anchor) * p->osc_per_tick);
 }
