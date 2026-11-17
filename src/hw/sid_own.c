@@ -14,6 +14,37 @@
 static const uint16_t rate_periods[16] = {
     9,32,63,95,149,220,267,313,392,977,1954,3126,3907,11720,19532,31251
 };
+/* Solve the actual series/shunt ladder, from its LSB to the output MSB.
+ * A 1-ohm series resistance sets the units. This is a tridiagonal nodal solve,
+ * not a table of measured or emulator waveform values. */
+static double ladder(unsigned code,unsigned bits,double ratio,int terminated,
+                     double digital_supply,double pull_g,double pull_voltage) {
+    double previous_diagonal=0,previous_rhs=0;
+    for(unsigned i=0;i<bits;++i) {
+        double diagonal=1.0/ratio+(i?1.0:0.0)+(i+1<bits?1.0:0.0);
+        double rhs=((code>>i)&1)*digital_supply/ratio;
+        if(!i && terminated)diagonal+=1.0/ratio;
+        if(i+1==bits){diagonal+=pull_g;rhs+=pull_g*pull_voltage;}
+        if(i){diagonal-=1.0/previous_diagonal;rhs+=previous_rhs/previous_diagonal;}
+        previous_diagonal=diagonal;previous_rhs=rhs;
+    }
+    return previous_rhs/previous_diagonal;
+}
+static double dac(unsigned code,const double *weights,unsigned bits) {
+    double value=0;for(unsigned b=0;b<bits;++b)if(code&(1u<<b))value+=weights[b];return value;
+}
+static void analog_profile(rc_sid_own *s) {
+    /* Die-derived R/2R ratios include driver resistance. The NMOS waveform
+     * ladder has an open LSB and a pullup of (14.844+22.598)k at its output. */
+    double wr=s->model?1.986:2.02,er=s->model?1.979:2.02;
+    double pull=s->model?0.0:14.844/(14.844+22.598);
+    s->waveform_bias=ladder(0,12,wr,s->model!=0,5.0,pull,12.0);
+    for(unsigned b=0;b<12;++b) {
+        s->waveform_weight[b]=ladder(1u<<b,12,wr,s->model!=0,5.0,pull,12.0)-s->waveform_bias;
+        s->cutoff_weight[b]=ladder(1u<<b,12,1.879,0,12.0,0,0);
+    }
+    for(unsigned b=0;b<8;++b)s->envelope_weight[b]=ladder(1u<<b,8,er,1,1.0,0,0);
+}
 static uint32_t bus_lifetime(const rc_sid_own *s) {
     /* Nominal retention only: charge leakage varies with die and temperature. */
     return s->model==RC_SID_OWN_8580 ? 663552u : 7424u;
@@ -99,6 +130,41 @@ static uint16_t triangle_saw(const rc_sid_own_voice *v,const rc_sid_own_voice *s
     if(phase&0x800000u)phase^=PHASE_MASK;
     return (uint16_t)((phase>>11)&0xffe);
 }
+/* Shared selector switches couple waveform bits before the DAC buffers.
+ * Conductance and capacitance below are explicit nominal assumptions, not a
+ * fit: no chip capture of selector thresholds/parasitics is available. */
+static uint16_t combined_waveform(rc_sid_own *s,rc_sid_own_voice *v,uint16_t ts) {
+    double diag[12],rhs[12],upper[12];unsigned wave=v->control>>4;
+    uint16_t noise=noise_output(v->lfsr),result=0;
+    /* Triangle and saw connect adjacent XOR driver lines. Other combinations
+     * retain a weaker adjacent capacitance; charge persists between cycles. */
+    double coupling=(wave&3)==3?1.0:0.08;
+    double history=0.25;
+    for(unsigned b=0;b<12;++b) {
+        double conductance=history,value=history*v->bitline[b];
+        uint16_t words[4]={(uint16_t)((wave&2)?(ts<<1):ts),ts,v->pulse_latch,noise};
+        for(unsigned source=0;source<4;++source)if(wave&(1u<<source)) {
+            int high=(words[source]&(1u<<b))!=0;
+            /* NMOS low drivers discharge more strongly than their pullups.
+             * The narrower upper triangle selectors on 8580 resist more. */
+            double selector=(s->model && source==0 && b>=4)?0.8:1.0;
+            double g=selector*(high?1.0:2.0);
+            conductance+=g;value+=high?g:0.0;
+        }
+        diag[b]=conductance+(b?coupling:0.0)+(b<11?coupling:0.0);
+        rhs[b]=value;upper[b]=b<11?-coupling:0;
+        if(b){double m=-coupling/diag[b-1];diag[b]-=m*upper[b-1];rhs[b]-=m*rhs[b-1];}
+    }
+    for(int b=11;b>=0;--b) {
+        double value=(rhs[b]-(b<11?upper[b]*v->bitline[b+1]:0))/diag[b];
+        v->bitline[b]=value;
+        if(value>0.5)result|=(uint16_t)(1u<<b);
+    }
+    /* The NMOS saw MSB wire reaches the accumulator directly. HMOS has a
+     * separate latch/buffer, preventing selector loading from resetting it. */
+    if(!s->model && (wave&3)==3 && !(result&0x800))v->phase&=0x7fffff;
+    return result;
+}
 static void waveform_clock(rc_sid_own *s,unsigned i) {
     rc_sid_own_voice *v=&s->voice[i];
     const rc_sid_own_voice *source=&s->voice[(i+2)%3];
@@ -108,14 +174,18 @@ static void waveform_clock(rc_sid_own *s,unsigned i) {
         /* Floating selector/DAC nodes retain the last code before leakage. */
         if(v->floating_cycles && !--v->floating_cycles)v->waveform=0;
     } else {
-        if(wave&3)value&=s->model==RC_SID_OWN_8580?v->tri_saw_latch:ts;
-        if((wave&3)==3)value&=(uint16_t)(ts<<1);
-        if(wave&4)value&=v->pulse_latch;
-        if(wave&8)value&=noise_output(v->lfsr);
+        uint16_t selected_ts=s->model==RC_SID_OWN_8580?v->tri_saw_latch:ts;
+        if(wave&(wave-1))value=combined_waveform(s,v,selected_ts);
+        else {
+            if(wave&3)value=selected_ts;
+            if(wave&4)value=v->pulse_latch;
+            if(wave&8)value=noise_output(v->lfsr);
+            for(unsigned b=0;b<12;++b)v->bitline[b]=(value>>b)&1;
+        }
         v->waveform=value;
         if((wave&8) && (wave&7)) {
-            /* Bidirectional selector transistors can discharge noise bits.
-             * Exact analog bit interaction is handled by the later P10c model. */
+            /* The selected noise driver is bidirectional: discharged selector
+             * nodes feed back to their physical LFSR storage bits. */
             static const unsigned taps[8]={0,2,5,9,11,14,18,20};
             for(unsigned b=0;b<8;++b)
                 if(!(value&(1u<<(b+4))))v->lfsr&=~(1u<<taps[b]);
@@ -136,6 +206,14 @@ static void filter_setup(rc_sid_own *s) {
     double cutoff=12000.0*(fc?fc:0.5)/2047.0;
     s->filter_coefficient=2.0*sin(PI*cutoff/s->clock_hz);
     s->filter_damping=input_resistor[resonance&3]/feedback_resistor[resonance>>2];
+    if(s->model==RC_SID_OWN_6581) {
+        /* The real 12-bit voltage DAC has its MSB tied high. */
+        s->cutoff_voltage=dac(fc|0x800,s->cutoff_weight,12);
+        static const double resistance[4]={273.79,138.08,65.886,28.85};
+        double conductance=0;
+        for(unsigned b=0;b<4;++b)if(!(resonance&(1u<<b)))conductance+=1.0/resistance[b];
+        s->filter_damping=38.667*conductance;
+    }
 }
 static void write_register(rc_sid_own *s,unsigned reg,uint8_t value) {
     if(reg>24)return;
@@ -170,6 +248,57 @@ static void write_register(rc_sid_own *s,unsigned reg,uint8_t value) {
         }
     } else if(reg<24)filter_setup(s);
 }
+/* First-order long-channel NMOS channel current, integrated between its two
+ * endpoints. Clamping each overdrive at zero includes pinch-off/saturation.
+ * MIT 6.012 lecture 9; process beta and threshold are explicit assumptions. */
+static double mos_current(double gate,double source,double drain) {
+    const double beta=20e-6,threshold=1.0;
+    double a=gate-source-threshold,b=gate-drain-threshold;
+    if(a<0)a=0;if(b<0)b=0;
+    return 0.5*beta*(a*a-b*b);
+}
+static double bound_voltage(double v) {return v>6.0?6.0:v< -4.0?-4.0:v;}
+static void analog_6581(rc_sid_own *s) {
+    unsigned route=s->registers[23],mode=s->registers[24];
+    double input=0,bypass=0,filtered=0;
+    for(unsigned i=0;i<3;++i) {
+        const rc_sid_own_voice *v=&s->voice[i];
+        double wave=s->waveform_bias+dac(v->waveform,s->waveform_weight,12);
+        double env=dac(v->envelope,s->envelope_weight,8);
+        /* Envelope off connects its ladder to +5V. The +1V displacement
+         * through the two-FET buffer is an explicit unmeasured assumption. */
+        double voice=(wave-5.0)*env+1.0;
+        if(route&(1u<<i))input+=voice;
+        else if(i!=2 || !(mode&128))bypass+=voice;
+    }
+    /* Four substeps limit integration error at the largest conductance. The
+     * 6581 uses self-centering inverters, represented by finite supply bounds.
+     * Physical capacitor/leakage values come from the die and C64 schematic. */
+    const double dt=1.0/(4.0*s->clock_hz),capacitance=470e-12,center=5.0;
+    for(unsigned step=0;step<4;++step) {
+        double hp=s->filter_damping*s->filter_band-s->filter_low-input;
+        s->filter_high=bound_voltage(hp);
+        double source_hp=center+s->filter_high,source_bp=center+s->filter_band;
+        double gate_bp=(source_hp/35.625+s->cutoff_voltage/43.571)/(1.0/35.625+1.0/43.571);
+        double gate_lp=(source_bp/40.174+s->cutoff_voltage/42.143)/(1.0/40.174+1.0/42.143);
+        double bp_current=mos_current(gate_bp,source_hp,center)-s->filter_high/1035010.0;
+        double lp_current=mos_current(gate_lp,source_bp,center)-s->filter_band/1011520.0;
+        s->filter_band=bound_voltage(s->filter_band+dt*bp_current/capacitance);
+        s->filter_low=bound_voltage(s->filter_low+dt*lp_current/capacitance);
+    }
+    if(mode&16)filtered+=s->filter_low;
+    if(mode&32)filtered+=s->filter_band;
+    if(mode&64)filtered+=s->filter_high;
+    /* Mixer and four switched volume conductances, in kOhm. Finite transistor
+     * output resistance means the 16 gains are not an ideal integer ramp. */
+    static const double volume_resistor[4]={790.109,404.67,189.23,100.83};
+    double volume_gain=0;
+    for(unsigned b=0;b<4;++b)if(mode&(1u<<b))volume_gain+=74.592/volume_resistor[b];
+    double mixed=bound_voltage(bypass*(330.05/233.67)+filtered*(330.05/251.54));
+    /* A fixed 10 V usable supply span corresponds to the signed PCM span.
+     * DC changes with the volume ladder and survives when AC coupling is off. */
+    s->cycle_output=bound_voltage(mixed*volume_gain)*3276.8;
+}
 static void analog_clock(rc_sid_own *s) {
     double input=0,bypass=0,filtered=0;
     unsigned route=s->registers[23],mode=s->registers[24];
@@ -181,13 +310,16 @@ static void analog_clock(rc_sid_own *s) {
     }
     /* Inverting HP summer and two inverting integrators. The BP feedback
      * amplifier adds one more inversion, making its summer term positive. */
-    s->filter_low-=s->filter_coefficient*s->filter_band;
-    s->filter_band-=s->filter_coefficient*s->filter_high;
-    s->filter_high=s->filter_damping*s->filter_band-s->filter_low-input;
+    if(s->model==RC_SID_OWN_8580) {
+        s->filter_low-=s->filter_coefficient*s->filter_band;
+        s->filter_band-=s->filter_coefficient*s->filter_high;
+        s->filter_high=s->filter_damping*s->filter_band-s->filter_low-input;
+    }
     if(mode&16)filtered+=s->filter_low;
     if(mode&32)filtered+=s->filter_band;
     if(mode&64)filtered+=s->filter_high;
     double mixed=(bypass+filtered)*(mode&15)/(15.0*64.0);
+    if(s->model==RC_SID_OWN_6581){analog_6581(s);mixed=s->cycle_output;}
     /* Board 250469: 10 kohm / 1000 pF LP and 10 uF / 1 kohm AC coupling.
      * Backward Euler is stable at every supported machine/sample frequency. */
     double lp=1.0/(1.0+0.00001*s->clock_hz);
@@ -210,7 +342,7 @@ int rc_sid_own_init(rc_sid_own *s,unsigned model,uint32_t clock_hz,uint32_t samp
         v->envelope_state=v->pending_state=RC_SID_OWN_RELEASE;
         v->exponential_period=1;v->hold_zero=1;envelope_rate(v);
     }
-    filter_setup(s);
+    analog_profile(s);filter_setup(s);
     return 1;
 }
 void rc_sid_own_reset(rc_sid_own *s) {
@@ -351,15 +483,16 @@ static double read_double(rc_state_reader *r) {
 #define VOICE_U8(X) X(control) X(attack_decay) X(sustain_release) X(envelope) X(envelope_read) X(envelope_state) X(exponential_counter) X(exponential_period) X(hold_zero) X(noise_pipeline) X(envelope_pipeline) X(exponential_pipeline) X(state_pipeline) X(pending_state) X(rate_reset) X(msb_rising)
 #define CHIP_U32(X) X(clock_hz) X(sample_rate) X(bus_cycles) X(sample_phase) X(sample_cycles) X(audio_head) X(audio_count)
 #define CHIP_U8(X) X(model) X(bus_value) X(write_pending) X(write_reg) X(write_value) X(failed) X(external_filter)
-#define CHIP_DOUBLE(X) X(filter_low) X(filter_band) X(filter_high) X(external_low) X(external_high) X(filter_coefficient) X(filter_damping) X(sample_sum) X(cycle_output)
+#define CHIP_DOUBLE(X) X(filter_low) X(filter_band) X(filter_high) X(external_low) X(external_high) X(filter_coefficient) X(filter_damping) X(sample_sum) X(cycle_output) X(waveform_bias) X(cutoff_voltage)
 void rc_sid_own_save(const rc_sid_own *s,rc_state_writer *w) {
-    rc_sw_u32(w,1);
+    rc_sw_u32(w,2);
     for(unsigned i=0;i<3;++i) {
         const rc_sid_own_voice *v=&s->voice[i];
 #define W32(f) rc_sw_u32(w,v->f);
 #define W16(f) rc_sw_u16(w,v->f);
 #define W8(f) rc_sw_u8(w,v->f);
         VOICE_U32(W32) VOICE_U16(W16) VOICE_U8(W8)
+        for(unsigned b=0;b<12;++b)write_double(w,v->bitline[b]);
 #undef W32
 #undef W16
 #undef W8
@@ -372,17 +505,23 @@ void rc_sid_own_save(const rc_sid_own *s,rc_state_writer *w) {
 #undef W8
 #undef WD
     rc_sw_u64(w,s->cycles);rc_sw_bytes(w,s->registers,32);rc_sw_bytes(w,s->pot,2);
+    for(unsigned b=0;b<12;++b){write_double(w,s->waveform_weight[b]);write_double(w,s->cutoff_weight[b]);}
+    for(unsigned b=0;b<8;++b)write_double(w,s->envelope_weight[b]);
     for(unsigned i=0;i<RC_SID_OWN_AUDIO_CAPACITY;++i)rc_sw_u16(w,(uint16_t)s->audio[i]);
 }
 int rc_sid_own_load(rc_sid_own *s,rc_state_reader *r) {
     rc_sid_own next;memset(&next,0,sizeof next);
-    if(rc_sr_u32(r)!=1)return 0;
+    if(rc_sr_u32(r)!=2)return 0;
     for(unsigned i=0;i<3;++i) {
         rc_sid_own_voice *v=&next.voice[i];
 #define R32(f) v->f=rc_sr_u32(r);
 #define R16(f) v->f=rc_sr_u16(r);
 #define R8(f) v->f=rc_sr_u8(r);
         VOICE_U32(R32) VOICE_U16(R16) VOICE_U8(R8)
+        for(unsigned b=0;b<12;++b) {
+            v->bitline[b]=read_double(r);
+            if(!isfinite(v->bitline[b]) || v->bitline[b]<0 || v->bitline[b]>1)return 0;
+        }
 #undef R32
 #undef R16
 #undef R8
@@ -402,12 +541,22 @@ int rc_sid_own_load(rc_sid_own *s,rc_state_reader *r) {
 #undef R8
 #undef RD
     next.cycles=rc_sr_u64(r);rc_sr_bytes(r,next.registers,32);rc_sr_bytes(r,next.pot,2);
+    for(unsigned b=0;b<12;++b) {
+        next.waveform_weight[b]=read_double(r);next.cutoff_weight[b]=read_double(r);
+        if(!isfinite(next.waveform_weight[b]) || !isfinite(next.cutoff_weight[b]) ||
+           next.waveform_weight[b]<0 || next.waveform_weight[b]>5 ||
+           next.cutoff_weight[b]<0 || next.cutoff_weight[b]>12)return 0;
+    }
+    for(unsigned b=0;b<8;++b) {
+        next.envelope_weight[b]=read_double(r);
+        if(!isfinite(next.envelope_weight[b]) || next.envelope_weight[b]<0 || next.envelope_weight[b]>1)return 0;
+    }
     for(unsigned i=0;i<RC_SID_OWN_AUDIO_CAPACITY;++i)next.audio[i]=(int16_t)rc_sr_u16(r);
     if(!rc_sr_ok(r) || next.model!=s->model || next.clock_hz!=s->clock_hz ||
        next.sample_rate!=s->sample_rate || next.sample_phase>=next.clock_hz ||
        next.audio_head>=RC_SID_OWN_AUDIO_CAPACITY || next.audio_count>RC_SID_OWN_AUDIO_CAPACITY ||
        next.write_pending>1 || next.write_reg>31 || next.failed>1 || next.external_filter>1 ||
        next.filter_coefficient<0 || next.filter_coefficient>1 ||
-       next.filter_damping<=0 || next.filter_damping>4)return 0;
+       next.filter_damping<0 || next.filter_damping>4)return 0;
     *s=next;return 1;
 }

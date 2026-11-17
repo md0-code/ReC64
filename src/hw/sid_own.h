@@ -18,6 +18,7 @@ typedef struct rc_sid_own_voice {
     uint8_t envelope_state, exponential_counter, exponential_period, hold_zero;
     uint8_t noise_pipeline, envelope_pipeline, exponential_pipeline, state_pipeline;
     uint8_t pending_state, rate_reset, msb_rising;
+    double bitline[12]; /* waveform-selector charge, normalized to its 5 V rail */
 } rc_sid_own_voice;
 typedef struct rc_sid_own_probe {
     uint32_t phase, lfsr;
@@ -33,6 +34,8 @@ typedef struct rc_sid_own {
     uint8_t write_pending, write_reg, write_value, failed, external_filter;
     double filter_low, filter_band, filter_high, external_low, external_high;
     double filter_coefficient, filter_damping, sample_sum, cycle_output;
+    double waveform_weight[12], envelope_weight[8], cutoff_weight[12];
+    double waveform_bias, cutoff_voltage;
     uint32_t sample_cycles, audio_head, audio_count;
     int16_t audio[RC_SID_OWN_AUDIO_CAPACITY];
 } rc_sid_own;
