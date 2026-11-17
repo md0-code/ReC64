@@ -60,7 +60,9 @@ static void envelope_clock(rc_sid_own_voice *v) {
     if(v->exponential_pipeline && !--v->exponential_pipeline) {
         if(++v->exponential_counter==v->exponential_period) {
             v->exponential_counter=0;
-            v->envelope_pipeline=1;
+            /* FPF (divide-by-one) bypasses the LFSR5 match/reset latch.
+             * Slowed decay uses that extra latch before release_reset. */
+            v->envelope_pipeline=v->exponential_period>1?2:1;
         }
     }
     if(v->rate_reset) {
@@ -151,7 +153,8 @@ static void write_register(rc_sid_own *s,unsigned reg,uint8_t value) {
             if((previous^value)&1) {
                 v->pending_state=(value&1)?RC_SID_OWN_ATTACK:RC_SID_OWN_RELEASE;
                 v->state_pipeline=2;
-                if(value&1)v->hold_zero=0;
+                /* Counter enable follows the latched attack direction; do
+                 * not let an older release event underflow zero first. */
             }
             if((value&8) && !(previous&8)) {
                 v->phase=0;v->noise_pipeline=0;v->test_cycles=0;
