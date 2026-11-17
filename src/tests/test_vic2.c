@@ -33,5 +33,7 @@ int main(void){
         rc_state_reader r;char error[128];CHECK(rc_sr_open(&r,w.data,w.size,error,sizeof error)&&rc_sr_chunk(&r,"VIC2",0)&&rc_vic2_load(v,&r));
         for(unsigned i=0;i<33;++i)half(v);rc_state_writer actual;save(v,&actual);CHECK(actual.size==expected.size&&!memcmp(actual.data,expected.data,actual.size));
         rc_sw_free(&w);rc_sw_free(&expected);rc_sw_free(&actual);
+        /* The largest XSCROLL still shows the character row. */
+        rc_vic2_write(v,22,15);while(v->frames<3)half(v);CHECK(v->pixels[100u*width+200u]==5);
     }free(v);puts("VIC-II PAL/NTSC fetches, pixels, collisions and half-cycle state OK");return 0;
 }

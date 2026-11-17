@@ -21,6 +21,8 @@ typedef struct rc_vic2 {
     uint8_t mc[8],mcbase[8],pointer[8],sprite_pos[8],sprite_sub[8],sprite_active[8];
     uint32_t sprite_data[8],sprite_shift[8];
     uint8_t gdata,gpos,gchar,gcolour,pending_data,pending_char,pending_colour,pending_age,pending;
+    /* A fetch still waiting for its XSCROLL delay when the next one arrives. */
+    uint8_t held_data,held_char,held_colour,held_age,held;
     uint8_t main_border,vertical_border,delay[8],delay_at,last_background;
     rc_vic_access bus[2];
     uint8_t sprite_slot[2],sprite_byte[2];
