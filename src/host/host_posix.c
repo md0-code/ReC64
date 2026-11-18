@@ -154,6 +154,7 @@ int rc_host_local_time(rc_host_time *t) {
 }
 
 int rc_host_replace_file(const char *temporary, const char *path) { return rename(temporary, path) == 0; }
+int rc_host_rename_file(const char *path,const char *destination){if(link(path,destination)!=0)return 0;if(unlink(path)==0)return 1;unlink(destination);return 0;}
 
 int rc_host_same_folder(const char *a, const char *b) {
     char fa[PATH_MAX], fb[PATH_MAX];

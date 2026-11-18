@@ -76,6 +76,8 @@ int rc_host_make_folders(const char *path);
 /* Removes a file; 1 when it is gone (0 when it cannot be removed; a file that
  * was not there counts as gone). */
 int rc_host_delete_file(const char *path);
+/* Rename a regular file in its folder; an existing destination is preserved. */
+int rc_host_rename_file(const char *path,const char *destination);
 
 /* --- byte streams for the serial ports ---------------------------------------- */
 

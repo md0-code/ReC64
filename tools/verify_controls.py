@@ -40,7 +40,7 @@ def main():
     try:
         call('frames 150'); call('expect READY.')
         key('Pad B'); t = text(); assert '6581' in t and 'DEFAULT' not in t, t
-        key('DOWN'); key('Pad A'); call('expect 8580'); key('Pad A'); call('expect 6581'); shot('machine-settings')
+        key('DOWN', 2); key('Pad A'); call('expect 8580'); key('Pad A'); call('expect 6581'); shot('machine-settings')
         key('RIGHT'); t = text()
         assert 'DEVICE' in t and 'FAST LOAD' in t and 'CONTROLS' not in t and 'EJECT' not in t and 'LOAD IMAGE' not in t, t
         shot('media-settings')
@@ -52,7 +52,7 @@ def main():
         shot('controllers-settings'); key('Pad LB'); call('expect KEYBOARD JOYSTICK (P1)')
         key('RIGHT'); t = text(); assert 'REU' in t and 'LOAD CARTRIDGE' in t and 'FREEZE' in t, t
         shot('cartridge-settings'); key('Pad A'); call('expect FILES AND FOLDERS'); key('Pad B'); call('expect CARTRIDGE 6/8'); key('Pad B')
-        key('Pad Y'); t = text(); assert 'DRIVE 1/2' in t and 'EJECT' in t and 'FAST LOAD' not in t and 'SOUNDS' not in t, t
+        key('Pad Y'); t = text(); assert 'DRIVE 1/2' in t and 'EJECT' not in t and 'SAVE FILE' not in t and 'FAST LOAD' not in t and 'SOUNDS' not in t, t
         shot('drive-osd'); key('RIGHT'); call('expect TAPE 2/2'); shot('tape-osd')
         key('RIGHT'); call('expect DRIVE 1/2'); assert 'CARTRIDGE' not in text(); key('Pad Y')
         key('Pad X'); call('expect FILES AND FOLDERS'); shot('load-browser'); key('Pad B')

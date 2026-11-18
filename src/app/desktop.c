@@ -58,6 +58,7 @@ static void restore_machine_config(desktop *d);
 static int shell_key(void *ctx,const char *name,int down);
 static void controller_key(desktop *d,rc_pad_key key,int down);
 static void slot_draw(desktop *d,rc_frame *frame);
+static int program_range(desktop *d,unsigned *start,unsigned *end);
 static void virtual_key(void *ctx,unsigned key,int down){desktop *d=ctx;rc_keymap_virtual(&d->keymap,key,down);}
 static void panel_draw(desktop *d,rc_frame *frame){
     rc_machine_status s;if(!d->panel_visible||!rc_machine_get_status(d->machine,&s))return;
@@ -78,7 +79,7 @@ static int picture(desktop *d,rc_frame *f,char *error,size_t cap) {
         panel_draw(d,f);rc_osk_draw(&d->osk,f,0u,f);if(d->transport)transport_draw(d,f);
         if(d->slot_picker)slot_draw(d,f);
     }
-    f->palette=d->palette;
+    if(!(d->setup.active&&!d->browser.active&&d->setup.page==RC_SETUP_ABOUT))f->palette=d->palette;
     const size_t n=(size_t)f->width*f->height;
     if(n>d->pixel_count) {
         uint32_t *p=realloc(d->pixels,n*sizeof *p);
@@ -320,10 +321,12 @@ static int image_slot(const desktop *d,const char *path){const rc_family *f=rc_m
 static void close_browser(desktop *d){rc_browser_close(&d->browser);input_config(d);d->pace_dirty=1;}
 static int browser_open(desktop *d,int save,char *error,size_t cap){
     if(!media_available(d)){snprintf(error,cap,"No media device available");return 0;}char folder[RC_MEDIA_PATH]=".";
+    unsigned start,end;if(save==1&&!program_range(d,&start,&end)){snprintf(error,cap,"No BASIC program to save");return 0;}
     if(!flush_media(d,error,cap))return 0;
-    if(d->browser.path[0])snprintf(folder,sizeof folder,"%s",d->browser.path);
+    if(d->browser.path[0]&&rc_host_folder_exists(d->browser.path))snprintf(folder,sizeof folder,"%s",d->browser.path);
+    else if(d->config->media_folder[0]&&rc_host_folder_exists(d->config->media_folder))snprintf(folder,sizeof folder,"%s",d->config->media_folder);
     else if(d->config->source[0]){snprintf(folder,sizeof folder,"%s",d->config->source);char *slash=strrchr(folder,'/'),*back=strrchr(folder,'\\');if(back&&(!slash||back>slash))slash=back;if(slash)slash[1]=0;else snprintf(folder,sizeof folder,".");}
-    if(!rc_browser_open(&d->browser,folder,save,error,cap))return 0;d->transport=0;d->slot_picker=0;release_keys(d);input_config(d);d->pace_dirty=1;return 1;
+    if(!rc_browser_open(&d->browser,folder,save,error,cap))return 0;d->osd.text[0]=0;d->transport=0;d->slot_picker=0;release_keys(d);input_config(d);d->pace_dirty=1;return 1;
 }
 /* Leaving the player stops the tune and returns to the file list it came
  * from, with the cursor on that tune. */
@@ -337,17 +340,34 @@ static void sid_to_list(desktop *d){
     if(!browser_open(d,0,error,sizeof error)){message(d,error);return;}
     rc_browser_select(&d->browser,slash+1);
 }
-static int save_program(desktop *d,const char *path,char *error,size_t cap){
+static int program_range(desktop *d,unsigned *start,unsigned *end){
     uint8_t pointers[4];for(unsigned i=0;i<4;++i)if(!rc_machine_peek(d->machine,0x2b+i,&pointers[i]))return 0;
-    const unsigned start=pointers[0]|(unsigned)pointers[1]<<8,end=pointers[2]|(unsigned)pointers[3]<<8;
-    if(start<0x200||end<=start){snprintf(error,cap,"No valid BASIC program in memory");return 0;}
+    *start=pointers[0]|(unsigned)pointers[1]<<8;*end=pointers[2]|(unsigned)pointers[3]<<8;
+    if(*start<0x200||*end<=*start+2||*end>0xa000)return 0;
+    for(unsigned at=*start;at+1<*end;){uint8_t lo,hi,zero;if(!rc_machine_peek(d->machine,at,&lo)||!rc_machine_peek(d->machine,at+1,&hi))return 0;const unsigned next=lo|(unsigned)hi<<8;
+        if(!next)return at==*end-2&&at>*start;if(next<at+5||next>*end-2||!rc_machine_peek(d->machine,next-1,&zero)||zero)return 0;at=next;
+    }return 0;
+}
+static int save_program(desktop *d,const char *path,unsigned action,char *error,size_t cap){
+    unsigned start,end;if(!program_range(d,&start,&end)){snprintf(error,cap,"No valid BASIC program in memory");return 0;}
     const size_t bytes=end-start;uint8_t *data=malloc(bytes+2);if(!data){snprintf(error,cap,"Out of memory");return 0;}data[0]=(uint8_t)start;data[1]=(uint8_t)(start>>8);
     int ok=1;for(size_t i=0;i<bytes;++i)if(!rc_machine_peek(d->machine,start+(uint32_t)i,&data[i+2])){ok=0;snprintf(error,cap,"Cannot read program memory");break;}
-    if(ok)ok=rc_host_write_file(path,data,bytes+2,error,cap);free(data);return ok;
+    uint8_t name[16];memset(name,0xa0,16);const char *base=path;for(const char *p=path;*p;++p)if(*p=='/'||*p=='\\')base=p+1;for(unsigned i=0;i<16&&base[i]&&base[i]!='.';++i)name[i]=(uint8_t)toupper((unsigned char)base[i]);
+    if(ok&&action==RC_BROWSER_SAVE_TAP){rc_tap tape={0};ok=rc_tape_encode(&tape,(uint16_t)start,data+2,bytes,name,error,cap);if(ok)ok=rc_host_write_file(path,tape.image->data,tape.image->size,error,cap);rc_tap_close(&tape);}
+    else if(ok&&action==RC_BROWSER_SAVE_D64){rc_d64 disk={0};ok=rc_d64_create_program(&disk,name,data,bytes+2,error,cap);if(ok)ok=rc_host_write_file(path,disk.image->data,disk.image->size,error,cap);rc_d64_close(&disk);}
+    else if(ok)ok=rc_host_write_file(path,data,bytes+2,error,cap);free(data);return ok;
 }
 static int browser_action(desktop *d,unsigned action,char *error,size_t cap){
     if(!action)return 1;if(action==RC_BROWSER_CLOSE){close_browser(d);return 1;}
     const rc_browser_result selected=d->browser.result;int slot=-1,load=0;
+    if(action==RC_BROWSER_FOLDER){char previous[RC_CONFIG_PATH];snprintf(previous,sizeof previous,"%s",d->config->media_folder);snprintf(d->config->media_folder,sizeof d->config->media_folder,"%s",selected.path);if(!store_config(d,error,cap)){snprintf(d->config->media_folder,sizeof d->config->media_folder,"%s",previous);return 0;}close_browser(d);return 1;}
+    if(action==RC_BROWSER_RENAME||action==RC_BROWSER_DELETE){
+        if(!flush_media(d,error,cap))return 0;const rc_family *family=rc_machine_family(d->machine);
+        /* Detach a selected mounted file before changing it, so a later flush cannot recreate its old name. */
+        for(unsigned i=0;i<family->media_count;++i){const rc_media *media=rc_machine_media(d->machine,i);if(media&&rc_host_same_folder(media->path,selected.path)&&!eject(d,i)){snprintf(error,cap,"Cannot detach selected media");return 0;}}
+        const int ok=action==RC_BROWSER_RENAME?rc_host_rename_file(selected.path,selected.destination):rc_host_delete_file(selected.path);if(!ok){snprintf(error,cap,action==RC_BROWSER_RENAME?"Cannot rename selected file":"Cannot delete selected file");return 0;}
+        if(!rc_browser_refresh(&d->browser,error,cap))return 0;if(action==RC_BROWSER_RENAME){const char *base=selected.destination;for(const char *p=base;*p;++p)if(*p=='/'||*p=='\\')base=p+1;rc_browser_select(&d->browser,base);}return 1;
+    }
     if((action==RC_BROWSER_LOAD||action==RC_BROWSER_INSERT)&&rc_media_extension_in(selected.path,"rcs")){
         if(!state_load(d,selected.path,error,cap))return 0;message(d,"Snapshot loaded");return store_config(d,error,cap);
     }
@@ -358,9 +378,10 @@ static int browser_action(desktop *d,unsigned action,char *error,size_t cap){
     }else {
         if(rc_host_file_exists(selected.path)&&!selected.overwrite){snprintf(error,cap,"File exists: confirm replacement");return 0;}
         if(!flush_media(d,error,cap))return 0;
-        if(action==RC_BROWSER_SAVE_PRG){if(!save_program(d,selected.path,error,cap))return 0;}
-        else if(action==RC_BROWSER_SAVE_TAP){rc_tap tape={0};if(!rc_tap_create(&tape,1,error,cap))return 0;const int ok=rc_host_write_file(selected.path,tape.image->data,tape.image->size,error,cap);rc_tap_close(&tape);if(!ok)return 0;slot=image_slot(d,selected.path);if(slot<0||!mount_media(d,(unsigned)slot,selected.path,error,cap))return 0;if(!rc_machine_control(d->machine,(unsigned)slot,RC_MEDIA_RECORD,0)){snprintf(error,cap,"Cannot record this tape");return 0;}}
-        else if(action==RC_BROWSER_SAVE_D64){rc_d64 disk={0};if(!rc_d64_create(&disk,NULL,NULL,error,cap))return 0;const int ok=rc_host_write_file(selected.path,disk.image->data,disk.image->size,error,cap);rc_d64_close(&disk);if(!ok)return 0;slot=image_slot(d,selected.path);if(slot<0||!mount_media(d,(unsigned)slot,selected.path,error,cap))return 0;}
+        /* Replacing a mounted image must also replace its in-memory copy. */
+        const rc_family *family=rc_machine_family(d->machine);for(unsigned i=0;i<family->media_count;++i){rc_media *media=rc_machine_media(d->machine,i);if(media&&rc_host_same_folder(media->path,selected.path)&&!eject(d,i)){snprintf(error,cap,"Cannot detach selected media");return 0;}}
+        if(!save_program(d,selected.path,action,error,cap))return 0;
+        if(action!=RC_BROWSER_SAVE_PRG){slot=image_slot(d,selected.path);if(slot<0||!mount_media(d,(unsigned)slot,selected.path,error,cap))return 0;if(action==RC_BROWSER_SAVE_TAP)rc_machine_control(d->machine,(unsigned)slot,RC_MEDIA_STOP,0);}
     }
     close_browser(d);d->setup.active=0;d->transport=0;input_config(d);
     if(d->restart_pending){d->restart_pending=0;if(!restart(d,error,cap)){restore_machine_config(d);return 0;}}
@@ -444,6 +465,15 @@ static void keyboard_switch(desktop *d,int swap){
     input_config(d);if(!store_config(d,error,sizeof error))message(d,error);
 }
 /* Controls act on media; persistent preferences belong to setup. */
+enum {TRANSPORT_LOAD,TRANSPORT_SAVE,TRANSPORT_PLAY,TRANSPORT_STOP,TRANSPORT_REWIND,TRANSPORT_RECORD,TRANSPORT_EJECT};
+static unsigned transport_actions(desktop *d,unsigned actions[7]){
+    unsigned count=0,start,end;actions[count++]=TRANSPORT_LOAD;if(program_range(d,&start,&end))actions[count++]=TRANSPORT_SAVE;
+    rc_media *media=rc_machine_media(d->machine,d->transport==1?2u:0u);
+    if(media&&d->transport==2){rc_tape_deck *deck=rc_machine_tape_deck(d->machine,0);
+        if(deck){if(!deck->play&&deck->tape.position<deck->tape.image->size)actions[count++]=TRANSPORT_PLAY;if(deck->play)actions[count++]=TRANSPORT_STOP;if(deck->tape.position>20||deck->eof)actions[count++]=TRANSPORT_REWIND;if(media->writable&&!deck->record)actions[count++]=TRANSPORT_RECORD;}
+    }
+    if(media)actions[count++]=TRANSPORT_EJECT;if(d->transport_row>=count)d->transport_row=count-1;return count;
+}
 static void transport_draw(desktop *d,rc_frame *frame){
     rc_tui *t=&d->setup.tui;rc_tui_clear(t);rc_tui_bar(t,0,d->transport==1?"DRIVE 1/2":"TAPE 2/2");rc_tui_box(t,1,0,12,40);
     rc_machine_status status={0};rc_machine_get_status(d->machine,&status);
@@ -452,13 +482,11 @@ static void transport_draw(desktop *d,rc_frame *frame){
     if(d->transport==1)snprintf(line,sizeof line,"#%u TRACK %u.%u LED %s MOTOR %s",status.drive_device,status.drive_halftrack/2,(status.drive_halftrack&1)?5u:0u,status.drive_led?"ON":"OFF",status.drive_motor?"ON":"OFF");
     else snprintf(line,sizeof line,"POS %llu  %s  MOTOR %s",(unsigned long long)status.tape_counter,status.tape_record?"RECORD":status.tape_play?"PLAY":"STOP",status.tape_motor?"ON":"OFF");
     rc_tui_put(t,3,2,line,14,6);
-    static const char *const disk[]={"LOAD IMAGE","EJECT","SAVE FILE"};
-    static const char *const tape[]={"PLAY","STOP","REWIND","RECORD","EJECT","LOAD IMAGE","SAVE FILE"};
-    for(unsigned i=0;i<(d->transport==2?7u:3u);++i){
-        const int enabled=d->transport==1?(i!=1||media!=NULL):(i>=5||(media&&(i!=3||d->setup.tape_writable)));
+    static const char *const labels[]={"LOAD IMAGE","SAVE FILE","PLAY","STOP","REWIND","RECORD","EJECT"};unsigned actions[7];const unsigned count=transport_actions(d,actions);
+    for(unsigned i=0;i<count;++i){
         const int selected=i==d->transport_row;const char *value="ENTER";
-        snprintf(line,sizeof line," %-20s %12s ",d->transport==1?disk[i]:tape[i],value);
-        rc_tui_put(t,5+i,2,line,(uint8_t)(enabled?(selected?6:14):12),(uint8_t)(enabled&&selected?14:6));
+        snprintf(line,sizeof line," %-20s %12s ",labels[actions[i]],value);
+        rc_tui_put(t,5+i,2,line,(uint8_t)(selected?6:14),(uint8_t)(selected?14:6));
     }
     rc_tui_put(t,13,1,"UP/DOWN SELECT  ENTER ACT  ESC CLOSE",14,6);
     rc_tui_put(t,14,1,"LEFT/RIGHT DRIVE/TAPE",14,6);rc_tui_overlay(t,15,frame,frame);
@@ -472,20 +500,14 @@ static void transport_open(desktop *d,unsigned kind){
 static void transport_key(desktop *d,const char *key){
     if(!strcmp(key,"ESCAPE")){d->transport=0;input_config(d);return;}
     if(!strcmp(key,"LEFT")||!strcmp(key,"RIGHT")){d->transport=3u-d->transport;d->transport_row=0;return;}
-    const unsigned count=d->transport==2?7u:3u;
+    unsigned actions[7];const unsigned count=transport_actions(d,actions);
     if(!strcmp(key,"UP")||!strcmp(key,"DOWN")){d->transport_row=(d->transport_row+(!strcmp(key,"UP")?count-1u:1u))%count;return;}
     if(strcmp(key,"RETURN")&&strcmp(key,"ENTER")&&strcmp(key,"SPACE"))return;
-    char error[256];const unsigned row=d->transport_row;media_status(d);
-    if((d->transport==1&&row==0)||(d->transport==2&&row==5)){d->transport=0;if(!browser_open(d,0,error,sizeof error))message(d,error);return;}
-    if((d->transport==1&&row==2)||(d->transport==2&&row==6)){d->transport=0;if(!browser_open(d,1,error,sizeof error))message(d,error);return;}
-    if(d->transport==1){
-        if(row==1){if(d->setup.has_disk)eject(d,2);return;}
-    }else if(d->setup.has_tape){
-        if(row==4){eject(d,0);return;}
-        if(row==3&&!d->setup.tape_writable)return;
-        const unsigned actions[]={RC_MEDIA_PLAY,RC_MEDIA_STOP,RC_MEDIA_REWIND,RC_MEDIA_RECORD};
-        if(!rc_machine_control(d->machine,0,actions[row],0))message(d,"Tape control unavailable");
-    }
+    char error[256];const unsigned action=actions[d->transport_row];media_status(d);
+    if(action==TRANSPORT_LOAD||action==TRANSPORT_SAVE){if(!browser_open(d,action==TRANSPORT_SAVE,error,sizeof error))message(d,error);return;}
+    if(action==TRANSPORT_EJECT){eject(d,d->transport==1?2u:0u);return;}
+    const unsigned commands[]={RC_MEDIA_PLAY,RC_MEDIA_STOP,RC_MEDIA_REWIND,RC_MEDIA_RECORD};
+    if(!rc_machine_control(d->machine,0,commands[action-TRANSPORT_PLAY],0))message(d,"Tape control unavailable");
 }
 static void controller_key(desktop *d,rc_pad_key key,int down){
     if(d->osk.visible&&!d->setup.active&&!d->browser.active&&!d->slot_picker&&(key==RC_PAD_A||key==RC_PAD_B)){
@@ -557,7 +579,7 @@ static int shell_key(void *ctx,const char *name,int down){
         if(d->slot_picker){slot_key(d,"F12");return 1;}
         if(d->browser.active){close_browser(d);return 1;}
         if(d->transport){d->transport=0;input_config(d);return 1;}
-        if(!d->setup.active){release_keys(d);d->setup.active=1;d->setup.row=d->setup.page==RC_SETUP_STATES?(unsigned)d->config->state_slot-1u:0;d->states_dirty=1;}
+        if(!d->setup.active){release_keys(d);d->osd.text[0]=0;d->setup.active=1;d->setup.row=d->setup.page==RC_SETUP_STATES?(unsigned)d->config->state_slot-1u:0;d->states_dirty=1;}
         else {d->setup.active=0;if(d->restart_pending){if(!restart(d,error,sizeof error)){restore_machine_config(d);message(d,error);}d->restart_pending=0;}if(!store_config(d,error,sizeof error))message(d,error);}
         d->pace_dirty=1;input_config(d);return 1;
     }
@@ -565,11 +587,14 @@ static int shell_key(void *ctx,const char *name,int down){
     if(d->transport){if(down)transport_key(d,bare);return 1;}
     if(d->setup.active){
         if(!down)return 1;media_status(d);const rc_config before=*d->config;const unsigned action=rc_setup_key(&d->setup,bare);
+        if(strcmp(before.setup_page,d->config->setup_page))d->osd.text[0]=0;
         if(action&(RC_SETUP_LOAD|RC_SETUP_SAVE)){if(!browser_open(d,(action&RC_SETUP_SAVE)!=0,error,sizeof error))message(d,error);}
         if(action&(RC_SETUP_DRIVE|RC_SETUP_TAPE))transport_open(d,(action&RC_SETUP_DRIVE)?1u:2u);
         if(action&RC_SETUP_MEDIA_OPTIONS)media_options(d);
         if(action&RC_SETUP_STATE_REFRESH)d->states_dirty=1;
         if(action&RC_SETUP_STATE_SELECT)d->slot_selected=1;
+        if(action&RC_SETUP_MEDIA_FOLDER){if(!browser_open(d,2,error,sizeof error))message(d,error);}
+        if(action&RC_SETUP_STATE_DELETE){char path[RC_HOST_PATH];const rc_family *family=rc_machine_family(d->machine);rc_states_slot_path(d->config->source,family->models[rc_machine_model(d->machine)].id,(unsigned)d->config->state_slot,path,sizeof path);if(!rc_host_delete_file(path))message(d,"Cannot delete snapshot");else {d->states_dirty=1;states_status(d);}}
         if(action&(RC_SETUP_KEYBOARD|RC_SETUP_SWAP))keyboard_switch(d,(action&RC_SETUP_SWAP)!=0);
         if(action&(RC_SETUP_STATE_SAVE|RC_SETUP_STATE_LOAD)){if(!quick_state(d,(action&RC_SETUP_STATE_SAVE)!=0,error,sizeof error))message(d,error);}
         if(action&RC_SETUP_EJECT){if(!eject(d,0))message(d,"Cannot eject tape");}

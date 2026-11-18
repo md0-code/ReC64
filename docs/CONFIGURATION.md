@@ -86,7 +86,8 @@ the keyboard's visibility, selection and latched modifiers. The keyboard
 always touches the screen bottom and covers the status line while open.
 
 F12 opens setup. Left/Right or Tab changes page, Up/Down selects a row,
-Enter or +/- changes its value, and F12/Escape closes. Model and SID changes
+Enter or +/- changes its value, and F12/Escape closes. Model (C64/C64C),
+video standard (PAL/NTSC) and SID type are separate settings. These changes
 restart the machine on close; display and sound changes apply immediately.
 Setup, file browsers and the SID player follow the selected border size
 and the running model's display aspect, just like the guest screen.
@@ -206,8 +207,9 @@ reverse controls; TAP contents use the machine's tape-directory decoder.
 Snapshot, cartridge and SID files load directly on C64 models.
 
 The Save page uses Tab to switch between the file list, format and name.
-Left/Right or Enter changes the format (PRG program, TAP recording or blank
-D64). In the name field, Ctrl+A selects the whole name for replacement,
+Left/Right or Enter changes the format (PRG, TAP or D64); the list shows
+only that type plus folders. F2 renames the selected file; Delete removes it
+after confirmation. In the name field, Ctrl+A selects the whole name for replacement,
 Backspace edits it and Enter saves. The matching extension is added when
 missing. Replacing an existing file requires a separate Enter/Y confirmation;
 Escape/N cancels that replacement. Escape closes either browser.
@@ -222,14 +224,20 @@ input after a cold boot. Space inserts without auto-loading. Opening a
 browser pauses the guest; closing returns to the previous setup or machine
 screen. Manual keyboard input, focus loss and reset cancel auto-typing.
 
-The control OSD has tape Play, Stop, Rewind, Record and Eject actions.
+The control OSD places Load and Save first, followed by available tape
+Play, Stop, Rewind, Record and Eject actions. Unavailable actions are hidden.
 The Machine settings page selects the drive type (1541 or 1541-II).
 The Media settings page selects device 8–11, disk/tape fast loading,
-sounds and auto-load. Alt+F toggles drive fast loading, Alt+S drive sounds, and Alt+T
+sounds and auto-load. **Default media folder** opens a folder selector:
+Enter opens a folder, Space selects the current folder, and Escape cancels.
+`ui.media_folder` stores it for the first browser opened after startup;
+later browsers remember the last visited folder. Relative paths are relative
+to the configuration file. Alt+F toggles drive fast loading, Alt+S drive sounds, and Alt+T
 tape sound. `machine.options.drive_device` stores the device number;
 `machine.options.drive_model` accepts `1541` (the default) or `1541-ii`.
-Saving to TAP creates and mounts a recording target: use BASIC SAVE to
-record the program. Saving a blank D64 creates and inserts that image.
+Saving requires a nonempty BASIC program. PRG exports its bytes and load
+address; TAP and D64 create and insert an image containing the program.
+The saved tape is stopped, so saving does not leave fast playback running.
 Modified media are flushed before replacement, ejection, restart and exit.
 A model restart retains mounted images and selected entries.
 
@@ -250,7 +258,9 @@ choose with Up/Down and confirm with Enter/A, or cancel with Escape/B.
 That selection serves both quick actions for the rest of the session.
 The previous slot remains highlighted at the next launch and needs confirmation.
 The States page has ten slots per model, a guest-screen preview, save time,
-and Save/Load actions. Up/Down chooses a slot; Enter on a slot selects it.
+and Save/Load/Delete actions. Up/Down chooses a slot; Enter on a slot selects it.
+Delete or the Delete row removes the current snapshot after confirmation;
+Escape/N cancels. An invalid snapshot can also be deleted.
 `ui.state_slot` remembers the selection (1–10). Files are stored atomically
 at `states/<model>/slot-N.rcs` beside the configuration file. The Load browser
 and dropped `.rcs` files use the same restore path.

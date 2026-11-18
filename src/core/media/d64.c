@@ -12,6 +12,19 @@ int rc_d64_create(rc_d64 *d,const uint8_t name[16],const uint8_t id[2],char *err
     memset(bam+144,0xa0,27);if(name)memcpy(bam+144,name,16);if(id)memcpy(bam+162,id,2);bam[165]='2';bam[166]='A';data[(bam_index+1)*256u+1]=255;
     const int ok=rc_d64_open(d,data,174848,error,cap);free(data);if(ok)d->image->writable=1;return ok;}
 void rc_d64_close(rc_d64 *d){rc_media_close(d->image);memset(d,0,sizeof *d);}
+int rc_d64_create_program(rc_d64 *d,const uint8_t name[16],const uint8_t *data,size_t size,char *error,size_t cap){
+    if(!data||size<3||size>65538)return rc_image_error(error,cap,"Invalid program size");
+    if(!rc_d64_create(d,name,NULL,error,cap))return 0;
+    uint8_t bam[256],directory[256]={0};memcpy(bam,rc_d64_sector(d,18,0),256);directory[1]=255;directory[2]=0x82;directory[3]=1;directory[4]=0;memcpy(directory+5,name,16);
+    unsigned track=1,sector=0,blocks=0;size_t offset=0;
+    while(offset<size){uint8_t bytes[256]={0};const size_t count=size-offset>254?254:size-offset;memcpy(bytes+2,data+offset,count);offset+=count;++blocks;
+        uint8_t *allocation=bam+4*track;--allocation[0];allocation[1+sector/8]&=(uint8_t)~(1u<<(sector&7u));
+        unsigned next_track=track,next_sector=sector+1;if(next_sector==rc_d64_track_sectors(track)){++next_track;next_sector=0;if(next_track==18)++next_track;}
+        if(offset<size){bytes[0]=(uint8_t)next_track;bytes[1]=(uint8_t)next_sector;}else bytes[1]=(uint8_t)(count+1);
+        if(!rc_d64_write_sector(d,track,sector,bytes)){rc_d64_close(d);return rc_image_error(error,cap,"Cannot write program sector");}track=next_track;sector=next_sector;
+    }
+    rc_image_put16(directory+30,(uint16_t)blocks);rc_d64_write_sector(d,18,0,bam);rc_d64_write_sector(d,18,1,directory);return 1;
+}
 int rc_d64_directory(const rc_d64 *d,rc_d64_entry *entries,size_t capacity,size_t *count,char *error,size_t cap){uint8_t seen[802]={0};unsigned t=18,s=1;size_t n=0;while(t){const unsigned index=index_of(d,t,s);if(index==UINT32_MAX||seen[index])return rc_image_error(error,cap,"Invalid or cyclic D64 directory chain");seen[index]=1;const uint8_t *block=rc_d64_sector(d,t,s);for(unsigned i=0;i<8;++i){const uint8_t *p=block+i*32u;if(!(p[2]&15u))continue;if(n<capacity){rc_d64_entry *e=&entries[n];e->type=p[2];e->track=p[3];e->sector=p[4];memcpy(e->name,p+5,16);e->record_length=p[23];e->blocks=rc_image_u16(p+30);}++n;}t=block[0];s=block[1];}*count=n;return 1;}
 int rc_d64_extract(const rc_d64 *d,const rc_d64_entry *entry,uint8_t **out,size_t *size,char *error,size_t cap){uint8_t seen[802]={0};uint8_t *data=malloc(d->sectors*254u);if(!data)return rc_image_error(error,cap,"Out of memory");unsigned t=entry->track,s=entry->sector;size_t n=0;while(t){const unsigned index=index_of(d,t,s);if(index==UINT32_MAX||seen[index]){free(data);return rc_image_error(error,cap,"Invalid or cyclic D64 file chain");}seen[index]=1;const uint8_t *p=rc_d64_sector(d,t,s);if(!p[0]&&!p[1]){free(data);return rc_image_error(error,cap,"Invalid final D64 sector length");}const size_t bytes=p[0]?254u:p[1]-1u;memcpy(data+n,p+2,bytes);n+=bytes;t=p[0];s=p[1];}*out=data;*size=n;return 1;}
 void rc_d64_save(const rc_d64 *d,rc_state_writer *w){rc_sw_u32(w,1);rc_image_save(d->image,w);}

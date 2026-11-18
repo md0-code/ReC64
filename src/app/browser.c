@@ -20,7 +20,7 @@ static int append_item(rc_browser *b,const rc_browser_item *item){
 }
 static int join(char *out,size_t cap,const char *folder,const char *name){const size_t n=strlen(folder);const int length=snprintf(out,cap,"%s%s%s",folder,n&&folder[n-1]!='/'&&folder[n-1]!='\\'?"/":"",name);return length>=0&&(size_t)length<cap;}
 static int parent(const char *folder,char *out,size_t cap){char path[RC_MEDIA_PATH];if(!rc_host_full_path(folder,path,sizeof path))return 0;size_t n=strlen(path);while(n>1&&(path[n-1]=='/'||path[n-1]=='\\'))path[--n]=0;char *slash=strrchr(path,'/'),*back=strrchr(path,'\\');if(back&&(!slash||back>slash))slash=back;if(!slash)return 0;slash[1]=0;if(rc_host_same_folder(path,folder))return 0;return snprintf(out,cap,"%s",path)>0;}
-static int list_entry(void *ctx,const char *name,int folder,uint64_t size){rc_browser *b=ctx;const unsigned kind=folder?RC_BROWSER_UNKNOWN:format(name);if(!folder&&kind==RC_BROWSER_UNKNOWN)return 1;rc_browser_item item={0};if(strlen(name)>=sizeof item.name)return 1;snprintf(item.name,sizeof item.name,"%s",name);item.folder=(unsigned)folder;item.format=kind;item.bytes=size;item.disabled=!folder&&kind>=RC_BROWSER_CRT&&kind!=RC_BROWSER_G64&&!(kind==RC_BROWSER_STATE&&b->states_enabled)&&!(kind==RC_BROWSER_CRT&&b->cartridges_enabled)&&!(kind==RC_BROWSER_SID&&b->sid_enabled);return append_item(b,&item);}
+static int list_entry(void *ctx,const char *name,int folder,uint64_t size){rc_browser *b=ctx;const unsigned kind=folder?RC_BROWSER_UNKNOWN:format(name);const unsigned saves[]={RC_BROWSER_PRG,RC_BROWSER_TAP,RC_BROWSER_D64};if(!folder&&(kind==RC_BROWSER_UNKNOWN||b->folders_only||(b->save&&kind!=saves[b->save_type])))return 1;rc_browser_item item={0};if(strlen(name)>=sizeof item.name)return 1;snprintf(item.name,sizeof item.name,"%s",name);item.folder=(unsigned)folder;item.format=kind;item.bytes=size;item.disabled=!folder&&kind>=RC_BROWSER_CRT&&kind!=RC_BROWSER_G64&&!(kind==RC_BROWSER_STATE&&b->states_enabled)&&!(kind==RC_BROWSER_CRT&&b->cartridges_enabled)&&!(kind==RC_BROWSER_SID&&b->sid_enabled);return append_item(b,&item);}
 static int refresh(rc_browser *b,char *error,size_t cap){clear_items(b);b->contents=0;b->image[0]=0;b->confirm=0;b->listing_failed=0;b->message[0]=0;
     if(b->roots){if(!rc_host_list_roots(list_entry,b)){snprintf(error,cap,"Cannot list filesystem roots");return 0;}}
     else {char up[RC_MEDIA_PATH];if(parent(b->path,up,sizeof up)){rc_browser_item item={0};snprintf(item.name,sizeof item.name,"..");item.folder=1;if(!append_item(b,&item)){snprintf(error,cap,"Out of memory");return 0;}}
@@ -35,11 +35,12 @@ void rc_browser_select(rc_browser *b,const char *name){
     for(size_t i=0;i<b->count;++i)if(!strcmp(b->items[i].name,name)){b->selected=i;b->top=i>=LIST_ROWS?i-LIST_ROWS/2:0;return;}
 }
 void rc_browser_error(rc_browser *b,const char *message){snprintf(b->message,sizeof b->message,"%s",message?message:"");}
+int rc_browser_refresh(rc_browser *b,char *error,size_t cap){b->renaming=0;return refresh(b,error,cap);}
 int rc_browser_open(rc_browser *b,const char *folder,int save,char *error,size_t cap){
     if(cap)error[0]=0;
     const char *start=folder&&*folder?folder:b->path[0]?b->path:".";char path[RC_MEDIA_PATH];
     if(!rc_host_full_path(start,path,sizeof path)||!rc_host_folder_exists(path)){snprintf(error,cap,"Folder not found");return 0;}
-    snprintf(b->path,sizeof b->path,"%s",path);b->save=save!=0;b->focus=0;b->roots=0;b->active=1;b->result=(rc_browser_result){0};b->result.entry=UINT32_MAX;
+    snprintf(b->path,sizeof b->path,"%s",path);b->save=save==1;b->folders_only=save==2;b->renaming=0;b->focus=0;b->roots=0;b->active=1;b->result=(rc_browser_result){0};b->result.entry=UINT32_MAX;
     return refresh(b,error,cap);
 }
 static int image_items(rc_browser *b,const rc_browser_content *entries,size_t count,unsigned kind){
@@ -65,7 +66,7 @@ unsigned rc_browser_file(rc_browser *b,const char *path,char *error,size_t cap){
     else if(kind==RC_BROWSER_T64){rc_t64 t={0};if(rc_t64_open(&t,image->data,image->size,error,cap)){count=t.count;entries=count?calloc(count,sizeof *entries):NULL;if(!count||entries){ok=1;for(size_t i=0;i<count;++i){rc_t64_entry e;if(!rc_t64_entry_at(&t,(unsigned)i,&e)){ok=0;snprintf(error,cap,"Invalid T64 directory");break;}memcpy(entries[i].name,e.name,16);entries[i].address=e.address;entries[i].length=e.length;entries[i].index=(uint32_t)i;entries[i].type=e.type;}}else snprintf(error,cap,"Out of memory");rc_t64_close(&t);}}
     else if(kind==RC_BROWSER_TAP){if(!b->tape_list)snprintf(error,cap,"TAP directory reader unavailable");else if(b->tape_list(b->tape_ctx,image,NULL,0,&count,error,cap)){entries=count?calloc(count,sizeof *entries):NULL;if(!count||entries)ok=b->tape_list(b->tape_ctx,image,entries,count,&count,error,cap);else snprintf(error,cap,"Out of memory");}}
     rc_media_close(image);
-    if(ok){ok=image_items(b,entries,count,kind);if(ok){snprintf(b->image,sizeof b->image,"%s",absolute);snprintf(b->path,sizeof b->path,"%s",absolute);char *slash=strrchr(b->path,'/'),*back=strrchr(b->path,'\\');if(back&&(!slash||back>slash))slash=back;if(slash)slash[1]=0;b->active=1;b->save=0;b->focus=0;b->confirm=0;b->message[0]=0;}if(!ok)snprintf(error,cap,"Out of memory");else if(!count)rc_browser_error(b,"No loadable entries. Space inserts image");}
+    if(ok){ok=image_items(b,entries,count,kind);if(ok){snprintf(b->image,sizeof b->image,"%s",absolute);snprintf(b->path,sizeof b->path,"%s",absolute);char *slash=strrchr(b->path,'/'),*back=strrchr(b->path,'\\');if(back&&(!slash||back>slash))slash=back;if(slash)slash[1]=0;b->active=1;b->save=b->folders_only=b->renaming=0;b->focus=0;b->confirm=0;b->message[0]=0;}if(!ok)snprintf(error,cap,"Out of memory");else if(!count)rc_browser_error(b,"No loadable entries. Space inserts image");}
     free(entries);return RC_BROWSER_NONE;
 }
 static void reveal(rc_browser *b){if(b->selected<b->top)b->top=b->selected;if(b->selected>=b->top+LIST_ROWS)b->top=b->selected-LIST_ROWS+1;}
@@ -78,15 +79,27 @@ static unsigned save_action(rc_browser *b,int overwrite){static const unsigned a
     if(rc_host_file_exists(path)&&!overwrite){b->confirm=1;return RC_BROWSER_NONE;}
     b->confirm=0;return result(b,actions[b->save_type],path,UINT32_MAX,overwrite);
 }
+static unsigned file_action(rc_browser *b,int rename){
+    if(!b->original_name[0])return RC_BROWSER_NONE;char path[RC_MEDIA_PATH];if(!join(path,sizeof path,b->path,b->original_name)){rc_browser_error(b,"Path is too long");return RC_BROWSER_NONE;}
+    if(!rename){b->confirm=0;return result(b,RC_BROWSER_DELETE,path,UINT32_MAX,0);}
+    char *name=b->edit_name;if(!name[0]||!strcmp(name,".")||!strcmp(name,"..")||strpbrk(name,"<>:\"/\\|?*")||name[strlen(name)-1]=='.'||name[strlen(name)-1]==' '){rc_browser_error(b,"Choose a valid file name");return RC_BROWSER_NONE;}
+    const char *extension=strrchr(b->original_name,'.');if(extension&&!rc_media_extension_in(name,extension+1)){const size_t n=strlen(name),e=strlen(extension);if(n+e>=sizeof b->edit_name){rc_browser_error(b,"File name is too long");return RC_BROWSER_NONE;}memcpy(name+n,extension,e+1);}
+    char destination[RC_MEDIA_PATH];if(!join(destination,sizeof destination,b->path,name)){rc_browser_error(b,"Path is too long");return RC_BROWSER_NONE;}
+    if(rc_host_file_exists(destination)){rc_browser_error(b,"A file with this name exists");return RC_BROWSER_NONE;}
+    const unsigned action=result(b,RC_BROWSER_RENAME,path,UINT32_MAX,0);snprintf(b->result.destination,sizeof b->result.destination,"%s",destination);return action;
+}
 static int go_parent(rc_browser *b){char error[128],up[RC_MEDIA_PATH];if(b->contents){b->contents=0;if(!refresh(b,error,sizeof error)){rc_browser_error(b,error);return 0;}return 1;}
     if(parent(b->path,up,sizeof up))snprintf(b->path,sizeof b->path,"%s",up);else b->roots=1;
     if(!refresh(b,error,sizeof error)){rc_browser_error(b,error);return 0;}return 1;}
 unsigned rc_browser_key(rc_browser *b,const char *name){
     if(!b->active)return RC_BROWSER_NONE;char key[64];size_t n=strlen(name);if(n>=sizeof key)return RC_BROWSER_NONE;for(size_t i=0;i<=n;++i)key[i]=(char)toupper((unsigned char)name[i]);
-    if(b->confirm){if(same(key,"Y")||same(key,"RETURN")||same(key,"ENTER"))return save_action(b,1);if(same(key,"N")||same(key,"ESCAPE")||same(key,"BACKSPACE"))b->confirm=0;return RC_BROWSER_NONE;}
+    if(b->confirm){if(same(key,"Y")||same(key,"RETURN")||same(key,"ENTER"))return b->confirm==2?file_action(b,0):save_action(b,1);if(same(key,"N")||same(key,"ESCAPE")||same(key,"BACKSPACE"))b->confirm=0;return RC_BROWSER_NONE;}
+    if(b->renaming){if(same(key,"ESCAPE")){b->renaming=0;b->message[0]=0;}else if(same(key,"RETURN")||same(key,"ENTER"))return file_action(b,1);else if(same(key,"CTRL+A"))b->replace_name=1;else if(same(key,"BACKSPACE")||same(key,"DELETE")){const size_t length=strlen(b->edit_name);if(b->replace_name)b->edit_name[0]=0;else if(length)b->edit_name[length-1]=0;b->replace_name=0;}return RC_BROWSER_NONE;}
     if(same(key,"ESCAPE")||same(key,"F12"))return RC_BROWSER_CLOSE;
+    if(b->folders_only&&same(key,"SPACE")&&!b->roots)return result(b,RC_BROWSER_FOLDER,b->path,UINT32_MAX,0);
+    if(b->save&&!b->focus&&b->count&&!b->items[b->selected].folder&&(same(key,"F2")||same(key,"DELETE"))){snprintf(b->original_name,sizeof b->original_name,"%s",b->items[b->selected].name);snprintf(b->edit_name,sizeof b->edit_name,"%s",b->original_name);b->message[0]=0;if(same(key,"F2")){b->renaming=1;b->replace_name=1;}else b->confirm=2;return RC_BROWSER_NONE;}
     if(same(key,"TAB")&&b->save){b->focus=(b->focus+1)%3;return RC_BROWSER_NONE;}
-    if(b->save&&b->focus==1){if(same(key,"LEFT")||same(key,"RIGHT")||same(key,"+")||same(key,"-")||same(key,"RETURN")||same(key,"ENTER")){set_save_type(b,(b->save_type+(same(key,"LEFT")||same(key,"-")?2u:1u))%3);return RC_BROWSER_NONE;}}
+    if(b->save&&b->focus==1){if(same(key,"LEFT")||same(key,"RIGHT")||same(key,"+")||same(key,"-")||same(key,"RETURN")||same(key,"ENTER")){set_save_type(b,(b->save_type+(same(key,"LEFT")||same(key,"-")?2u:1u))%3);char error[128];if(!refresh(b,error,sizeof error))rc_browser_error(b,error);return RC_BROWSER_NONE;}}
     if(b->save&&b->focus==2){if(same(key,"CTRL+A")){b->replace_name=1;return RC_BROWSER_NONE;}if(same(key,"BACKSPACE")||same(key,"DELETE")){size_t length=strlen(b->filename);if(b->replace_name){b->filename[0]=0;b->replace_name=0;}else if(length)b->filename[length-1]=0;return RC_BROWSER_NONE;}if(same(key,"RETURN")||same(key,"ENTER"))return save_action(b,0);return RC_BROWSER_NONE;}
     if(same(key,"LEFT")||same(key,"BACKSPACE")){go_parent(b);return RC_BROWSER_NONE;}
     if(same(key,"HOME")||same(key,"END")||same(key,"UP")||same(key,"DOWN")||same(key,"PAGEUP")||same(key,"PAGEDOWN"))b->search[0]=0;
@@ -113,7 +126,7 @@ unsigned rc_browser_key(rc_browser *b,const char *name){
     reveal(b);return RC_BROWSER_NONE;
 }
 void rc_browser_input(rc_browser *b,const char *text){if(!b->active||b->confirm)return;
-    char *target=b->save&&b->focus==2?b->filename:b->search;if(target==b->filename&&b->replace_name){target[0]=0;b->replace_name=0;}size_t length=strlen(target);
+    char *target=b->renaming?b->edit_name:b->save&&b->focus==2?b->filename:b->search;if(target!=b->search&&b->replace_name){target[0]=0;b->replace_name=0;}size_t length=strlen(target);
     for(;*text;++text){const unsigned char c=(unsigned char)*text;if(c<32||c>126)continue;if(length+1<RC_BROWSER_NAME)target[length++]=(char)c;}target[length]=0;
     if(target==b->search&&length){for(size_t i=0;i<b->count;++i){size_t j=0;for(;j<length&&b->items[i].name[j];++j)if(toupper((unsigned char)target[j])!=toupper((unsigned char)b->items[i].name[j]))break;if(j==length){b->selected=i;reveal(b);break;}}}
 }
@@ -127,19 +140,20 @@ static void content_row(rc_browser *b,unsigned row,const rc_browser_item *item,i
 }
 static const char *tail(const char *path,size_t width){const size_t length=strlen(path);return length>width?path+length-width:path;}
 void rc_browser_draw(rc_browser *b,const uint32_t palette[16],rc_frame *frame){
-    char title[40];snprintf(title,sizeof title,"%s %zu/%zu",b->save?"SAVE":"LOAD",b->selected/15u+1u,(b->count+14u)/15u? (b->count+14u)/15u:1u);rc_tui_clear(&b->tui);rc_tui_bar(&b->tui,0,title);rc_tui_put(&b->tui,2,2,b->roots?"FILESYSTEM ROOTS":tail(b->contents?b->image:b->path,36),14,6);rc_tui_box(&b->tui,4,1,17,38);
-    if(b->save){const char *types[]={"PROGRAM .PRG","RECORD .TAP","BLANK .D64"};char line[37];snprintf(line,sizeof line,"FORMAT: %-27s",types[b->save_type]);rc_tui_put(&b->tui,3,2,line,b->focus==1?6:14,b->focus==1?14:6);}
-    else rc_tui_put(&b->tui,3,2,b->contents?"IMAGE CONTENTS":"FILES AND FOLDERS",14,6);
+    char title[40];snprintf(title,sizeof title,"%s %zu/%zu",b->folders_only?"FOLDER":b->save?"SAVE":"LOAD",b->selected/15u+1u,(b->count+14u)/15u? (b->count+14u)/15u:1u);rc_tui_clear(&b->tui);rc_tui_bar(&b->tui,0,title);rc_tui_put(&b->tui,2,2,b->roots?"FILESYSTEM ROOTS":tail(b->contents?b->image:b->path,36),14,6);rc_tui_box(&b->tui,4,1,17,38);
+    if(b->save){const char *types[]={"PROGRAM .PRG","PROGRAM .TAP","PROGRAM .D64"};char line[37];snprintf(line,sizeof line,"FORMAT: %-27s",types[b->save_type]);rc_tui_put(&b->tui,3,2,line,b->focus==1?6:14,b->focus==1?14:6);}
+    else rc_tui_put(&b->tui,3,2,b->folders_only?"SELECT DEFAULT MEDIA FOLDER":b->contents?"IMAGE CONTENTS":"FILES AND FOLDERS",14,6);
     for(unsigned row=0;row<LIST_ROWS&&b->top+row<b->count;++row){const size_t index=b->top+row;const rc_browser_item *item=&b->items[index];const int selected=index==b->selected&&(!b->save||!b->focus)&&!item->disabled;char line[37];memset(line,' ',36);line[36]=0;rc_tui_put(&b->tui,5+row,2,line,selected?6:item->disabled?12:14,selected?14:6);
         if(b->contents)content_row(b,5+row,item,selected);
         else {snprintf(line,sizeof line,"%c %-31.31s%s",item->folder?'[':' ',item->name,item->folder?"]":" ");rc_tui_put(&b->tui,5+row,2,line,selected?6:item->disabled?12:14,selected?14:6);}}
     if(!b->count)rc_tui_put(&b->tui,7,3,b->contents?"NO PROGRAM ENTRIES":"NO MATCHING FILES",12,6);
     if(b->save){char line[37];snprintf(line,sizeof line,"NAME: %-30.30s",tail(b->filename,30));rc_tui_put(&b->tui,21,2,line,b->focus==2?6:14,b->focus==2?14:6);}
-    else rc_tui_put(&b->tui,21,2,b->contents?"SPACE INSERTS WITHOUT LOADING":"SPACE INSERT  ENTER OPEN/LOAD",14,6);
+    else rc_tui_put(&b->tui,21,2,b->folders_only?"SPACE USES CURRENT FOLDER":b->contents?"SPACE INSERTS WITHOUT LOADING":"SPACE INSERT  ENTER OPEN/LOAD",14,6);
     if(b->message[0])rc_tui_put(&b->tui,22,1,b->message,14,6);
+    else if(b->save&&!b->search[0])rc_tui_put(&b->tui,22,1,"F2 RENAME  DEL DELETE SELECTED FILE",14,6);
     else if(b->search[0]){char line[39];snprintf(line,sizeof line,"FIND: %.31s",b->search);rc_tui_put(&b->tui,22,1,line,14,6);}
-    rc_tui_put(&b->tui,24,1,b->save?"TAB FIELD  ENTER SAVE  ESC CANCEL":"UP/DOWN SELECT  LEFT BACK  ESC CLOSE",14,6);
-    if(b->confirm){rc_tui_box(&b->tui,9,3,7,34);for(unsigned row=10;row<15;++row)rc_tui_put(&b->tui,row,4,"                                ",14,6);rc_tui_put(&b->tui,10,5,"REPLACE EXISTING FILE?",14,6);rc_tui_put(&b->tui,12,5,tail(b->filename,28),14,6);rc_tui_put(&b->tui,14,5,"ENTER/Y REPLACE   ESC/N CANCEL",14,6);}
+    rc_tui_put(&b->tui,24,1,b->folders_only?"SPACE SELECT FOLDER  ENTER OPEN  ESC":b->save?"TAB FIELD  ENTER SAVE  ESC CANCEL":"UP/DOWN SELECT  LEFT BACK  ESC CLOSE",14,6);
+    if(b->confirm||b->renaming){rc_tui_box(&b->tui,9,3,7,34);for(unsigned row=10;row<15;++row)rc_tui_put(&b->tui,row,4,"                                ",14,6);rc_tui_put(&b->tui,10,5,b->renaming?"RENAME SELECTED FILE":b->confirm==2?"DELETE SELECTED FILE?":"REPLACE EXISTING FILE?",14,6);rc_tui_put(&b->tui,12,5,tail(b->renaming?b->edit_name:b->confirm==2?b->original_name:b->filename,28),14,6);rc_tui_put(&b->tui,14,5,b->renaming?"ENTER RENAME   ESC CANCEL":b->confirm==2?"ENTER/Y DELETE   ESC/N CANCEL":"ENTER/Y REPLACE   ESC/N CANCEL",14,6);}
     rc_tui_frame(&b->tui,palette,frame);
 }
 size_t rc_browser_text(rc_browser *b,char *out,size_t capacity){rc_frame frame;rc_browser_draw(b,NULL,&frame);return rc_tui_text(&b->tui,out,capacity);}

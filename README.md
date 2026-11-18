@@ -37,16 +37,17 @@ cartridge families and their purposes compared with VICE.
 For a searchable comparison, open `docs/C64-ROM-AUDIT.html` in a browser.
 
 Ctrl+F1 opens Load for PRG/P00 files and D64/T64/TAP contents; dropped files
-use the same browser. Ctrl+F2 saves a PRG, creates a TAP recording target,
-or makes a blank D64. G64 images load directly and preserve raw tracks and
+use the same browser. Ctrl+F2 saves the BASIC program as PRG, TAP or D64.
+The Save list shows the chosen format; F2 renames a selected file and Delete removes it.
+G64 images load directly and preserve raw tracks and
 half-tracks. Both disk formats support disk SAVE through the emulated drive.
 The Machine page selects the drive type (1541 or 1541-II). The Media page holds
-device number, fast loading and loading sounds.
+device number, fast loading, loading sounds and the default media folder.
 Ctrl+F3/F4 opens the media control OSD. Alt+F switches drive fast loading, Alt+S drive sounds,
 and Alt+T tape sound.
 
 Ctrl+F5 saves the current snapshot slot; Ctrl+F6 restores it. The States
-page selects among ten slots per model and shows a preview of each save.
+page selects among ten slots per model and shows a preview of each save; Delete removes a slot.
 The first quick save/load in a session opens a slot picker.
 Snapshot files (`.rcs`) also open through Ctrl+F1 or drag and drop.
 

@@ -96,6 +96,7 @@ typedef struct rc_config {
     /* media */
     rc_config_media media[RC_CONFIG_MEDIA];
     unsigned media_count;
+    char media_folder[RC_CONFIG_PATH]; /* ui.media_folder: initial load/save folder */
     /* ports: the ends the file names, for any model */
     rc_config_port ports[RC_CONFIG_PORTS];
     unsigned port_count;

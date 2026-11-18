@@ -7,7 +7,11 @@ enum {RC_SETUP_VIDEO=1,RC_SETUP_AUDIO=2,RC_SETUP_RESTART=4,RC_SETUP_RESET=8,RC_S
 typedef struct rc_setup {rc_tui tui;rc_config *config;unsigned page,row;int active,crt_available,media_available,has_tape,tape_writable,tape_playing,tape_recording,has_disk,cartridge_available,has_cartridge,can_freeze;
     uint8_t state_status[RC_STATES_SLOTS];char state_time[RC_STATES_SLOTS][20],state_version[RC_STATES_VERSION];rc_states_thumb state_thumb;
     int keyboard_active,controller_present;
+    int delete_confirm;
+    uint32_t about_palette[256];
 } rc_setup;
+#define RC_SETUP_STATE_DELETE 134217728u
+#define RC_SETUP_MEDIA_FOLDER 268435456u
 void rc_setup_init(rc_setup *s,rc_config *config);
 unsigned rc_setup_key(rc_setup *s,const char *key);
 void rc_setup_draw(rc_setup *s,const uint32_t palette[16],rc_frame *frame);

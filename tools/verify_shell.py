@@ -54,12 +54,12 @@ def main() -> int:
         shot('media')
         key('RIGHT'); key('DOWN'); key('RETURN'); call('expect COLOR-CORRECTED')
         key('RETURN'); call('expect DEFAULT')
-        key('LEFT', 2); key('RETURN', 2); key('F12'); call('frames 200')
+        key('LEFT', 2); key('DOWN'); key('RETURN'); key('F12'); call('frames 200')
         key('F12'); ntsc = shot('ntsc')
         with Image.open(pal) as a, Image.open(ntsc) as b:
             assert a.getpixel((40,55)) != b.getpixel((40,55)), 'Automatic PAL/NTSC palette did not change'
-        key('DOWN', 3); key('RETURN'); assert 'MACHINE' not in text(); call('frames 200'); call('expect READY.')
-        key('F12'); key('DOWN', 4); key('RETURN'); assert 'MACHINE' not in text(); call('frames 200'); call('expect READY.')
+        key('DOWN', 4); key('RETURN'); assert 'MACHINE' not in text(); call('frames 200'); call('expect READY.')
+        key('F12'); key('DOWN', 5); key('RETURN'); assert 'MACHINE' not in text(); call('frames 200'); call('expect READY.')
         key('F12'); key('RIGHT', 4); key('DOWN'); sources=[]
         for _ in range(3):
             key('RETURN'); sources.append(next(line.strip() for line in text().splitlines() if 'INPUT 1' in line))
@@ -74,9 +74,15 @@ def main() -> int:
         key('RIGHT'); call('expect TAPE 2/2'); shot('tape-empty'); key('Ctrl+F4'); assert 'TAPE 2/2' not in text()
         # The widget uses the actual writable Datasette transport.
         tape = work/'controls.tap'; tape.write_bytes(b'C64-TAPE-RAW'+bytes([1,0,0,0])+struct.pack('<I',64)+bytes([48])*64)
-        call(f'insert tape {tape.as_posix()}'); key('Ctrl+F4'); key('RETURN'); call('expect PLAY'); key('DOWN'); key('RETURN'); call('expect STOP')
-        key('DOWN'); key('RETURN'); key('DOWN'); key('RETURN'); call('expect RECORD'); shot('tape-widget')
-        key('DOWN'); key('RETURN'); call('expect NO IMAGE INSERTED'); key('ESCAPE')
+        call(f'insert tape {tape.as_posix()}')
+        def tape_action(label):
+            if 'TAPE 2/2' in text(): key('ESCAPE')
+            key('Ctrl+F4')
+            actions=[line.strip().split('  ')[0] for line in text().splitlines()[5:12] if 'ENTER' in line]
+            key('DOWN',actions.index(label)); key('RETURN')
+        tape_action('PLAY'); call('expect PLAY'); tape_action('STOP'); call('expect STOP')
+        tape_action('RECORD'); call('expect RECORD'); shot('tape-widget')
+        tape_action('EJECT'); call('expect NO IMAGE INSERTED'); key('ESCAPE')
         # A real KERNAL LOAD and RUN complete using the instant command paste.
         program = work/'instant.prg'; body = b'\x99"SHELL OK"'; line = struct.pack('<H',10)+body+b'\0'
         program.write_bytes(b'\x01\x08'+struct.pack('<H',0x801+2+len(line))+line+b'\0\0')

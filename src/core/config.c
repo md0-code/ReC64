@@ -588,7 +588,7 @@ static int ports_section(reader *r, yaml_node_t *v, const char *base, rc_config 
     return 1;
 }
 
-static int ui_section(reader *r, yaml_node_t *v, rc_config *c) {
+static int ui_section(reader *r, yaml_node_t *v, const char *base, rc_config *c) {
     if (!mapping(r, v)) return 0;
     PAIRS(v, q) {
         const char *name = scalar(r, node(r, q->key));
@@ -596,6 +596,7 @@ static int ui_section(reader *r, yaml_node_t *v, rc_config *c) {
         int ok;
         if (!strcmp(name, "language")) ok = choice(r, x, "ui.language", languages, &c->language);
         else if (!strcmp(name, "state_slot")) ok = integer(r, x, "ui.state_slot", 1, 10, &c->state_slot);
+        else if (!strcmp(name, "media_folder")) {const char *value=scalar(r,x);ok=value!=NULL;if(ok){c->media_folder[0]=0;if(*value)ok=path_value(r,value,base,c->media_folder);}}
         else if (!strcmp(name, "setup_page")) {
             const char *word = scalar(r, x);
             size_t n = 0;
@@ -604,7 +605,7 @@ static int ui_section(reader *r, yaml_node_t *v, rc_config *c) {
             ok = n && !word[n] && n < sizeof c->setup_page;
             if (ok) snprintf(c->setup_page, sizeof c->setup_page, "%s", word);
             else ok = fail(r, "ui.setup_page is the name of a page of the setup screen (media, machine...)");
-        } else ok = fail(r, "Unknown ui key; expected language, state_slot or setup_page");
+        } else ok = fail(r, "Unknown ui key; expected language, state_slot, setup_page or media_folder");
         if (!ok) return 0;
     }
     return 1;
@@ -721,7 +722,7 @@ int rc_config_parse(const char *text, size_t length, const char *source, rc_conf
             else if (!strcmp(key,"keyboard")) ok=keyboard_section(&r,v,&c);
             else if (!strcmp(key, "controllers")) ok = controllers_section(&r, v, &c);
             else if (!strcmp(key, "ports")) ok = ports_section(&r, v, base, &c);
-            else if (!strcmp(key, "ui")) ok = ui_section(&r, v, &c);
+            else if (!strcmp(key, "ui")) ok = ui_section(&r, v, base, &c);
             else ok = fail(&r, "Unknown section; expected machine, media, video, sound, keyboard, controllers, ports or ui");
             if (!ok) break;
         }
@@ -878,5 +879,6 @@ int rc_config_store(const rc_config *c, struct rc_ydoc *doc) {
         const char *path[2] = {"ui", "setup_page"};
         ok = set_unless_default(doc, path, 2, c->setup_page, 0, !strcmp(c->setup_page, "machine"));
     }
+    if(ok){const char *path[]={"ui","media_folder"};char base[RC_CONFIG_PATH];folder_of(c->source,base);const size_t n=strlen(base);const char *value=n&&!strncmp(c->media_folder,base,n)?c->media_folder+n:c->media_folder;ok=set_unless_default(doc,path,2,value,1,!c->media_folder[0]);}
     return ok && set(doc, "ui", "language", rc_config_language_name(c->language));
 }

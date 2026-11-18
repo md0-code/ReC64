@@ -179,6 +179,7 @@ int rc_host_local_time(rc_host_time *t) {
 int rc_host_replace_file(const char *temporary, const char *path) {
     return MoveFileExA(temporary, path, MOVEFILE_REPLACE_EXISTING | MOVEFILE_WRITE_THROUGH) != 0;
 }
+int rc_host_rename_file(const char *path,const char *destination){return MoveFileA(path,destination)!=0;}
 
 int rc_host_same_folder(const char *a, const char *b) {
     char fa[RC_HOST_PATH], fb[RC_HOST_PATH];
