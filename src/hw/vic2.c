@@ -65,7 +65,8 @@ static inline uint8_t graphics(rc_vic2 *v,int *foreground){
     const unsigned pos=v->gpos<8?v->gpos:7;
     const unsigned bit=v->gpos<8?(v->gdata>>(7u-pos))&1u:0;
     const unsigned pair=v->gpos<8?(v->gdata>>(6u-(pos&6u)))&3u:0;
-    *foreground=v->vertical_border?0:(int)(mcm?pair&2u:bit);
+    /* A multicolour text cell without its colour bit 3 is a hires cell: its set bits are the foreground. */
+    *foreground=v->vertical_border?0:(int)(mcm&&(bmm||(v->gcolour&8u))?pair&2u:bit);
     uint8_t bg=v->reg[33],out=bg;
     if(ecm&&!bmm)bg=v->reg[33+(v->gchar>>6)];
     if(bmm){if(mcm){const uint8_t colors[4]={v->reg[33],(uint8_t)(v->gchar>>4),(uint8_t)(v->gchar&15u),v->gcolour};out=colors[pair];}else {bg=v->gchar&15u;out=bit?v->gchar>>4:bg;}}
