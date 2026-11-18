@@ -4,7 +4,7 @@
 #include <stdio.h>
 #include <string.h>
 static const char *const PAGES[]={"MACHINE","MEDIA","DISPLAY","SOUND","CONTROLLERS","CARTRIDGE","STATES","ABOUT"};
-static const char *const COLORS[]={"default","color-corrected","tuned","tuned-strong"};
+static const char *const COLORS[]={"default","color-corrected","tuned","tuned-dark"};
 static const char *const IDS[]={"machine","media","display","sound","controllers","cartridge","states","about"};
 void rc_setup_init(rc_setup *s,rc_config *c){memset(s,0,sizeof *s);s->config=c;s->crt_available=1;rc_tui_init(&s->tui);
     for(unsigned i=0;i<8;++i)if(!strcmp(c->setup_page,IDS[i]))s->page=i;
