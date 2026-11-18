@@ -1,5 +1,6 @@
-/* Original 1541 sound synthesis. The board supplies mechanism status and
- * requests one sample at each 48 kHz audio boundary, including while muted. */
+/* The 1541's sounds, played from recordings of the drive. The board supplies
+ * mechanism status and requests one sample at each 48 kHz audio boundary,
+ * including while muted. */
 #ifndef RC_DRIVESND_H
 #define RC_DRIVESND_H
 #include "hw.h"
@@ -7,22 +8,25 @@
 
 #define RC_DRIVESND_RATE 48000u
 #define RC_DRIVESND_VOICES 8u
-#define RC_DRIVESND_MODES 24u       /* resonances of the richest sound */
-#define RC_DRIVESND_NOISE 20u       /* order of the motor's noise filter */
-/* One struck sound: its resonances, each a turning and decaying pair. */
+/* A motor recording being played: which, where in it and how loud (256 is full). */
+typedef struct rc_drivesnd_source {
+    uint32_t at;
+    uint16_t gain;
+    uint8_t kind;
+} rc_drivesnd_source;
+/* A head sound being played. */
 typedef struct rc_drivesnd_voice {
-    double mode[RC_DRIVESND_MODES][2];
     uint32_t age;
     uint8_t kind;
 } rc_drivesnd_voice;
 typedef struct rc_drivesnd {
     rc_dev dev;
     uint64_t steps, bumps;
-    uint32_t random, age;
-    /* Motor: loudness and speed against the running drive, the speed it coasts down from, the place in its loop. */
-    double level, speed, coast, turn, hiss[RC_DRIVESND_NOISE];
+    rc_drivesnd_source now, before;     /* the motor, and what it fades out of */
     rc_drivesnd_voice voice[RC_DRIVESND_VOICES];
-    uint8_t motor, mode, next_voice;
+    uint32_t fade, step_gap, knock_gap;
+    int32_t line[4];                    /* the last samples at the recordings' rate */
+    uint8_t motor, next_voice, step_turn, knock_phase, half;
 } rc_drivesnd;
 
 void rc_drivesnd_init(rc_drivesnd *s);

@@ -11,7 +11,7 @@ static int snapshot(const rc_drivesnd *s,rc_state_writer *w){
 }
 int main(void){
     rc_drivesnd s,t;rc_drivesnd_init(&s);CHECK(energy(&s,480)==0);
-    rc_drivesnd_status(&s,1,0,0);CHECK(energy(&s,24000)>0&&s.mode==2);
+    rc_drivesnd_status(&s,1,0,0);CHECK(energy(&s,24000)>0&&s.now.kind==2);
     uint64_t hum=energy(&s,4800);CHECK(hum>4800u*100u*100u&&hum<4800ull*2000u*2000u);
     rc_drivesnd_reset(&s);rc_drivesnd_status(&s,0,1,0);uint64_t step=energy(&s,6000);CHECK(step>0&&energy(&s,64)==0);
     rc_drivesnd_status(&s,0,1,0);CHECK(energy(&s,64)==0);
@@ -29,9 +29,9 @@ int main(void){
     }
     CHECK(snapshot(&s,&b)&&snapshot(&t,&c));CHECK(b.size==c.size&&!memcmp(b.data,c.data,b.size));
     rc_sw_free(&a);rc_sw_free(&b);rc_sw_free(&c);
-    rc_drivesnd_status(&s,0,5,2);CHECK(energy(&s,17000)>0&&s.mode==0&&energy(&s,100)==0);
+    rc_drivesnd_status(&s,0,5,2);CHECK(energy(&s,20000)>0&&s.now.kind==0&&energy(&s,100)==0);
     /* Malformed state is rejected atomically. */
     CHECK(snapshot(&s,&a));CHECK(rc_sr_open(&r,a.data,a.size,error,sizeof error)&&rc_sr_chunk(&r,"DSND",0));
     a.data[r.at]=2;CHECK(!rc_drivesnd_load(&s,&r));rc_sw_free(&a);
-    printf("1541 synthesized motor, distinct steps/bump and exact 48kHz state passed (hum=%llu step=%llu bump=%llu)\n",(unsigned long long)hum,(unsigned long long)step,(unsigned long long)bump);return 0;
+    printf("1541 recorded motor, steps and knock with exact 48kHz state passed (hum=%llu step=%llu bump=%llu)\n",(unsigned long long)hum,(unsigned long long)step,(unsigned long long)bump);return 0;
 }

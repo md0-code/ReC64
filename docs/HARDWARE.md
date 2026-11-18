@@ -291,17 +291,15 @@ or speed blocks are copied when modified. Snapshots retain the raw tracks,
 speed maps, rotational position and separator phase, including pending writes.
 Version 1 drive and track snapshots still load.
 
-Drive sounds are generated at 48 kHz from the pinned 1541 recordings without
-storing a sample. A head step or a hit on the head stop is a set of measured
-resonances struck once, each turning and decaying at its own rate; the two
-head steps alternate. The running motor is one measured loop, kept as its 120
-strongest lines, plus noise through the spectrum of what the lines leave.
-Spin-up and coast-down read the same loop at the motor's speed and follow the
-measured level. The board feeds actual motor levels and monotonically counted
-mechanical events. Sound state advances while muted and is saved exactly; a
-tune in the SID player mutes it.
-The recordings, their hashes and the measurement method are in
-`sources.lock.json`.
+Drive sounds are recordings of a 1541, stored at 24 kHz and interpolated to
+48 kHz. The motor has three: its start, which runs into a loop of the running
+drive, and its stop; a change of state fades from one into the other. The
+head has four recordings of a track change, played in turn, and one of the
+knock on its stop. A recorded track change is two steps and a recorded knock
+spans five, so a step or a hit that follows closely starts no new sound. The
+board feeds actual motor levels and monotonically counted mechanical events.
+Sound state advances while muted and is saved exactly; a tune in the SID
+player mutes it. The recordings and the cuts are named in `sources.lock.json`.
 
 ## Automatic disk speed
 
