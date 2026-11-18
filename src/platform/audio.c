@@ -111,12 +111,13 @@ int rc_wav_open(rc_wav *w, const char *path) {
     fclose(w->file); w->file = NULL; return 0;
 }
 
-void rc_wav_pump(rc_wav *w, rc_machine *m) {
+void rc_wav_pump(rc_wav *w, rc_machine *m, int muted) {
     int16_t buf[2048 * 2];
     size_t n;
     if (!w->file) return;
     if (!w->rate) w->rate = rc_machine_audio_rate(m);
     while ((n = rc_machine_audio_pull(m, buf, 2048)) > 0) {
+        if (muted) memset(buf, 0, n * 2 * sizeof *buf);
         for (size_t i = 0; i < 2 * n; i++) {
             const int v = buf[i] < 0 ? -buf[i] : buf[i];
             if (v > w->peak) w->peak = v;

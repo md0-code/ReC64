@@ -91,8 +91,8 @@ video standard (PAL/NTSC) and SID type are separate settings. These changes
 restart the machine on close; display and sound changes apply immediately.
 Setup, file browsers and the SID player follow the selected border size
 and the running model's display aspect, just like the guest screen.
-Changes preserve comments in the selected YAML file. Unavailable controls
-are disabled.
+Changes preserve comments in the selected YAML file. The cursor skips
+disabled setup options and file entries.
 
 `video.look` is `crt` or `plain`; `video.filter` is `nearest` or `linear`.
 The Display page combines these into CRT, Nearest and Linear. Border is
@@ -175,7 +175,8 @@ uses an existing terminal or redirected pipes.
 `--hidden` never opens a window or an audio device. Supply `--frames N`,
 `--script FILE` or `--control stdin|tcp:PORT`. TCP binds to localhost.
 `--screenshot FILE.png` writes the final raw frame; `--audio FILE.wav` records
-guest audio. `--list-models`, `--list-roms` and `--version` print information.
+guest audio and follows the main Sound switch. `--list-models`, `--list-roms`
+and `--version` print information.
 
 Scripts contain one command per line; blank lines and `#` comments are ignored.
 `pointer ID X Y down|move|up|cancel` sends a contact to the open on-screen
@@ -254,9 +255,10 @@ A model restart retains mounted images and selected entries.
 save_traps and accelerate settings for `media.program` as well. An explicit
 program setting overrides that one default; storing an image path alone
 preserves inheritance. `media.disk` has independent fast, sound, autoload
-and full_speed settings. Fast loading mutes the corresponding loading sound.
-The drive's startup self-test remains audible when drive sounds are enabled,
-even with Fast Load on and no disk inserted. Auto-load omits the self-test sound
+and full_speed settings. Fast Load disables the corresponding Sound row
+and mutes loading sounds. The drive's startup self-test plays whenever the
+main Sound switch is on, even with Fast Load on and no disk inserted.
+Auto-load omits the self-test sound
 from its preparatory reset. D64 and G64 use the 1541 recordings during disk
 access. TAP uses only the tape signal during
 playback or recording. PRG, P00 and T64 loads are silent, including when

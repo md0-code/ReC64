@@ -37,7 +37,7 @@ typedef struct rc_wav {
     int peak;                   /* loudest sample so far */
 } rc_wav;
 int rc_wav_open(rc_wav *wav, const char *path);
-void rc_wav_pump(rc_wav *wav, rc_machine *machine);
+void rc_wav_pump(rc_wav *wav, rc_machine *machine, int muted);
 /* Completes the header; 0 when the file could not be written. */
 int rc_wav_close(rc_wav *wav);
 

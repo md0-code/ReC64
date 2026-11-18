@@ -60,7 +60,7 @@ def main():
         assert 'c64-ntsc' in config.read_text()
         # Return to PAL and show the new palette label.
         key('F12'); key('DOWN'); key('RETURN'); key('RIGHT', 2); call('expect PALETTE'); assert 'COLOURS' not in text(); shot('display')
-        key('LEFT'); key('DOWN', 7); call('expect DEFAULT MEDIA FOLDER'); shot('media')
+        key('LEFT'); key('UP'); call('expect DEFAULT MEDIA FOLDER'); shot('media')
         key('RETURN'); call('expect FOLDER'); call('type media'); key('RETURN'); shot('folder-selector'); key('SPACE')
         call('expect DEFAULT MEDIA FOLDER'); key('F12'); call('frames 180')
         assert 'media_folder' in config.read_text() and config.read_text().startswith('# Preserve this comment')

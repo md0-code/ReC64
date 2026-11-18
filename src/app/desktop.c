@@ -600,8 +600,8 @@ static int shell_key(void *ctx,const char *name,int down){
         const char *kind=tape?"tape":"disk";
         rc_config_media effective;
         rc_config_media_settings(d->config,kind,&effective);
-        if(tape&&effective.fast){
-            message(d,"Tape sound muted by fast load");
+        if(!toggle_fast&&effective.fast){
+            message(d,tape?"Tape sound muted by fast load":"Drive sounds muted by fast load");
             return 1;
         }
         rc_config_media *media=rc_config_media_slot(d->config,kind);
@@ -615,7 +615,6 @@ static int shell_key(void *ctx,const char *name,int down){
             media->sound=!effective.sound;
             media->explicit_flags|=RC_MEDIA_SETTING_SOUND;
             if(tape)message(d,media->sound?"Tape sound on":"Tape sound off");
-            else if(effective.fast)message(d,media->sound?"Drive startup sound on":"Drive sounds off");
             else message(d,media->sound?"Drive sounds on":"Drive sounds off");
         }
         media_options(d);
@@ -845,7 +844,7 @@ int rc_desktop_run(rc_machine **owner,rc_config *c,const rc_rom_index *roms,cons
         if(!d.setup.active&&!d.browser.active&&!d.slot_picker&&!d.paused&&input_frame&&rc_typist_frame(&d.typist,m,&d.keymap)<0)message(&d,d.typist.error);
         if(!d.setup.active&&!d.browser.active&&!d.slot_picker&&!d.paused&&rc_machine_run(m,ticks)!=RC_RUN_OK) { snprintf(error,cap,"%s",rc_machine_error(m));goto done; }
         if(present)++d.frames;if(input_frame&&!d.setup.active&&!d.browser.active&&!d.slot_picker&&!d.paused)rc_keymap_frame(&d.keymap);
-        if(d.wav.file) rc_wav_pump(&d.wav,m);
+        if(d.wav.file) rc_wav_pump(&d.wav,m,!c->sound);
         else rc_host_audio_pump(&d.audio,m,(unsigned)c->volume,o->hidden||d.full||!c->sound||d.setup.active||d.browser.active||d.slot_picker||d.paused,racing);
         if(d.video&&present) {
             rc_frame f;if(!picture(&d,&f,error,cap)) goto done;

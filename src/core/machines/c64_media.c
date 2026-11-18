@@ -88,7 +88,6 @@ static int before_fetch(void *self,uint16_t pc){
 void rc_c64_media_init(rc_c64 *c){
     rc_datasette_init(&c->tape,&c->host);rc_datasette_auto_play(&c->tape,0);rc_traps_init(&c->traps,c->rom_hashes);c->source=255;
     for(unsigned i=0;i<3;++i)c->tape_bits[i]=RC_TAPE_SOUND|RC_TAPE_TRAPS|RC_TAPE_SAVE_TRAPS|RC_TAPE_ACCELERATE;
-    c->tape_bits[2]|=RC_DRIVE_START_SOUND;
     if(c->traps.known){const unsigned addresses[]={0xf4a5,0xf5ed,0xf817};for(unsigned i=0;i<3;++i)c->fetch_watch[addresses[i]>>3]|=(uint8_t)(1u<<(addresses[i]&7));}
     c->hooks=(rc_cpu_hooks){c,c->fetch_watch,before_fetch,NULL};c->cpu.hooks=&c->hooks;
 }
@@ -126,10 +125,9 @@ void rc_c64_media_tick(rc_c64 *c){
             if(tape_active){
                 if(c->physical&&(c->tape_bits[c->source]&RC_TAPE_SOUND))
                     sample=rc_datasette_sample(&c->tape);
-            }else{
-                const unsigned sound=c->drive_audio_mode==RC_DRIVE_AUDIO_SELF_TEST?RC_DRIVE_START_SOUND:
-                    c->drive_audio_mode==RC_DRIVE_AUDIO_DISK?RC_TAPE_SOUND:0;
-                if(c->tape_bits[2]&sound)sample=drive;
+            }else if(c->drive_audio_mode==RC_DRIVE_AUDIO_SELF_TEST||
+                (c->drive_audio_mode==RC_DRIVE_AUDIO_DISK&&(c->tape_bits[2]&RC_TAPE_SOUND))){
+                sample=drive;
             }
         }
         c->tape_audio[(c->tape_audio_head+c->tape_audio_count++)%48000]=sample;
@@ -180,13 +178,10 @@ unsigned rc_c64_activity(const void *self){
     const unsigned disk=c->drive_audio_mode!=RC_DRIVE_AUDIO_SELF_TEST&&rc_fastload_active(&c->fastload)?4u:0;
     return tape|disk;
 }
-static unsigned media_option_mask(unsigned slot){
-    return 15u|(slot==2?RC_DRIVE_START_SOUND:0u);
-}
 unsigned rc_c64_tape_options(void *self,unsigned slot,unsigned bits){
     rc_c64 *c=self;
     if(slot>=3)return 0;
-    if(!(bits&RC_TAPE_QUERY))c->tape_bits[slot]=bits&media_option_mask(slot);
+    if(!(bits&RC_TAPE_QUERY))c->tape_bits[slot]=bits&15u;
     return c->tape_bits[slot];
 }
 const char *rc_c64_autoload(const void *self,unsigned slot,int *power){rc_c64 *c=(rc_c64 *)self;*power=1;if(slot>=3)return NULL;
@@ -224,7 +219,9 @@ int rc_c64_media_load(rc_c64 *c,rc_state_reader *r){
     rc_c64_sid_eject(c);
     rc_datasette_eject(&c->tape);rc_media_close(c->synthetic);c->synthetic=NULL;free(c->program);c->program=NULL;c->program_size=0;
     for(unsigned i=0;i<(version>=4?5u:version>=3?4u:3u);++i){c->selected[i]=rc_sr_u32(r);c->tape_bits[i]=rc_sr_u32(r);const unsigned present=rc_sr_u8(r);
-        if(present>1||(c->tape_bits[i]&~(version>=6?media_option_mask(i):15u)))return 0;
+        /* Earlier version-6 states could store a per-drive self-test switch. */
+        if(version==6&&i==2)c->tape_bits[i]&=~16u;
+        if(present>1||c->tape_bits[i]>15u)return 0;
         rc_media *next=present?rc_image_load(r):NULL;if(present&&!next)return 0;rc_media *old=c->media[i];
         if(next&&old&&!c->media_owned[i]&&!strcmp(next->path,old->path)){free(old->data);*old=*next;free(next);next=old;}
         else {if(c->media_owned[i])rc_media_close(old);c->media_owned[i]=(uint8_t)(next!=NULL);}c->media[i]=next;

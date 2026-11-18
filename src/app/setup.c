@@ -12,22 +12,83 @@ void rc_setup_init(rc_setup *s,rc_config *c){memset(s,0,sizeof *s);s->config=c;s
 }
 static unsigned rows(const rc_setup *s){return s->page==RC_SETUP_MACHINE?7u:s->page==RC_SETUP_DISPLAY?7u:s->page==RC_SETUP_SOUND?2u:s->page==RC_SETUP_CONTROLLERS?6u:s->page==RC_SETUP_MEDIA?8u:s->page==RC_SETUP_CARTRIDGE?6u:s->page==RC_SETUP_STATES?13u:0;}
 static unsigned cycle(unsigned value,unsigned count,int direction){return (value+count+(direction<0?count-1u:1u))%count;}
+
+static int row_enabled(const rc_setup *s,unsigned index){
+    if(index>=rows(s))return 0;
+    const rc_config *c=s->config;
+    switch(s->page){
+    case RC_SETUP_MACHINE:
+        if(index==1||index==2)return strcmp(c->model,"test")!=0;
+        if(index==3)return s->media_available;
+        return 1;
+    case RC_SETUP_MEDIA:
+        if(!s->media_available)return 0;
+        if(index==2||index==5){
+            rc_config_media media;
+            rc_config_media_settings(c,index==2?"disk":"tape",&media);
+            return !media.fast;
+        }
+        return 1;
+    case RC_SETUP_CONTROLLERS:
+        if(index==4)return !s->controller_present;
+        if(index==1||index==3){
+            const unsigned type=c->sticks[index/2].type;
+            return type!=RC_CONTROL_MOUSE1351&&type!=RC_CONTROL_NONE;
+        }
+        return 1;
+    case RC_SETUP_CARTRIDGE:
+        if(!s->cartridge_available)return 0;
+        if(index==1||index==5)return s->has_cartridge;
+        if(index==2)return s->can_freeze;
+        return 1;
+    case RC_SETUP_STATES:
+        if(index==11)return s->state_status[c->state_slot-1]==1;
+        if(index==12)return s->state_status[c->state_slot-1]!=0;
+        return 1;
+    default:return 1;
+    }
+}
+
+static unsigned find_enabled_row(const rc_setup *s,unsigned first,int direction){
+    const unsigned count=rows(s);
+    for(unsigned i=0;i<count;++i){
+        if(row_enabled(s,first))return first;
+        first=cycle(first,count,direction);
+    }
+    return count;
+}
+
+static void ensure_selection(rc_setup *s){
+    if(!row_enabled(s,s->row))s->row=find_enabled_row(s,s->row<rows(s)?s->row:0,1);
+}
+
 unsigned rc_setup_key(rc_setup *s,const char *key){
     if(s->delete_confirm){if(!strcmp(key,"RETURN")||!strcmp(key,"ENTER")||!strcmp(key,"Y")){s->delete_confirm=0;return RC_SETUP_STATE_DELETE;}if(!strcmp(key,"ESCAPE")||!strcmp(key,"N")||!strcmp(key,"F12"))s->delete_confirm=0;return 0;}
     if(!strcmp(key,"ESCAPE")||!strcmp(key,"F12")){s->active=0;return RC_SETUP_CLOSE;}
     if(!strcmp(key,"LEFT")||!strcmp(key,"RIGHT")||!strcmp(key,"TAB")){
-        s->page=cycle(s->page,8,!strcmp(key,"LEFT")?-1:1);s->row=s->page==RC_SETUP_STATES?(unsigned)s->config->state_slot-1u:0;snprintf(s->config->setup_page,sizeof s->config->setup_page,"%s",IDS[s->page]);return s->page==RC_SETUP_STATES?RC_SETUP_STATE_REFRESH:0;}
+        s->page=cycle(s->page,8,!strcmp(key,"LEFT")?-1:1);s->row=s->page==RC_SETUP_STATES?(unsigned)s->config->state_slot-1u:0;
+        ensure_selection(s);
+        snprintf(s->config->setup_page,sizeof s->config->setup_page,"%s",IDS[s->page]);return s->page==RC_SETUP_STATES?RC_SETUP_STATE_REFRESH:0;}
     const unsigned count=rows(s);if(!count)return 0;
-    if(!strcmp(key,"UP")||!strcmp(key,"DOWN")){s->row=cycle(s->row,count,!strcmp(key,"UP")?-1:1);if(s->page==RC_SETUP_STATES&&s->row<10){s->config->state_slot=(int)s->row+1;return RC_SETUP_STATE_REFRESH|RC_SETUP_STATE_SELECT;}return 0;}
-    if(s->page==RC_SETUP_STATES&&!strcmp(key,"DELETE")){s->delete_confirm=s->state_status[s->config->state_slot-1]!=0;return 0;}
+    if(!strcmp(key,"UP")||!strcmp(key,"DOWN")){
+        const int direction=!strcmp(key,"UP")?-1:1;
+        const unsigned first=s->row<count?cycle(s->row,count,direction):(direction<0?count-1:0);
+        s->row=find_enabled_row(s,first,direction);
+        if(s->page==RC_SETUP_STATES&&s->row<RC_STATES_SLOTS){
+            s->config->state_slot=(int)s->row+1;
+            return RC_SETUP_STATE_REFRESH|RC_SETUP_STATE_SELECT;
+        }
+        return 0;
+    }
+    if(s->page==RC_SETUP_STATES&&!strcmp(key,"DELETE")){s->delete_confirm=row_enabled(s,12);return 0;}
     int direction=1;
     if(!strcmp(key,"-")||!strcmp(key,"PAGEDOWN"))direction=-1;
     else if(strcmp(key,"RETURN")&&strcmp(key,"ENTER")&&strcmp(key,"+")&&strcmp(key,"=")&&strcmp(key,"PAGEUP"))return 0;
+    if(!row_enabled(s,s->row)){ensure_selection(s);return 0;}
     rc_config *c=s->config;
     if(s->page==RC_SETUP_CARTRIDGE){
-        if(!s->cartridge_available)return 0;
-        if(s->row<3)return !s->row?RC_SETUP_LOAD:s->row==1?(s->has_cartridge?RC_SETUP_EJECT_CART:0):(s->can_freeze?RC_SETUP_FREEZE:0);
-        if(s->row==5){if(!s->has_cartridge)return 0;rc_config_media *cart=rc_config_media_slot(c,"cartridge");if(cart)cart->startup=!cart->startup;return RC_SETUP_MEDIA_OPTIONS;}
+        if(s->row<3)return !s->row?RC_SETUP_LOAD:s->row==1?RC_SETUP_EJECT_CART:RC_SETUP_FREEZE;
+        if(s->row==5){rc_config_media *cart=rc_config_media_slot(c,"cartridge");if(cart)cart->startup=!cart->startup;return RC_SETUP_MEDIA_OPTIONS;}
         const rc_family *family=rc_family_of_model(c->model,NULL);const unsigned index=s->row==3?2u:3u,other=index==2?3u:2u;
         if(!family||family->option_count<=other)return 0;
         const rc_option_desc *option=&family->options[index];const char *current=rc_config_option_value(c,option->key);unsigned value=option->initial,value_count=0;
@@ -35,12 +96,12 @@ unsigned rc_setup_key(rc_setup *s,const char *key){
         value=cycle(value,value_count,direction);rc_config_set_option(c,option->key,option->values[value]);
         if(value)rc_config_set_option(c,family->options[other].key,"off");return RC_SETUP_RESTART;
     }
-    if(s->page==RC_SETUP_STATES){if(s->row<10){c->state_slot=(int)s->row+1;return RC_SETUP_STATE_REFRESH|RC_SETUP_STATE_SELECT;}if(s->row==12){s->delete_confirm=s->state_status[c->state_slot-1]!=0;return 0;}return s->row==10?RC_SETUP_STATE_SAVE:s->state_status[c->state_slot-1]==1?RC_SETUP_STATE_LOAD:0;}
+    if(s->page==RC_SETUP_STATES){if(s->row<10){c->state_slot=(int)s->row+1;return RC_SETUP_STATE_REFRESH|RC_SETUP_STATE_SELECT;}if(s->row==12){s->delete_confirm=1;return 0;}return s->row==10?RC_SETUP_STATE_SAVE:RC_SETUP_STATE_LOAD;}
     if(s->page==RC_SETUP_MACHINE){
-        if(s->row<2&&!strcmp(c->model,"test")){if(s->row)return 0;snprintf(c->model,sizeof c->model,"c64-pal");return RC_SETUP_RESTART;}
+        if(!s->row&&!strcmp(c->model,"test")){snprintf(c->model,sizeof c->model,"c64-pal");return RC_SETUP_RESTART;}
         if(s->row<2){int c64c=!strncmp(c->model,"c64c-",5),ntsc=strstr(c->model,"ntsc")!=NULL;if(!s->row)c64c=!c64c;else ntsc=!ntsc;snprintf(c->model,sizeof c->model,"%s-%s",c64c?"c64c":"c64",ntsc?"ntsc":"pal");return RC_SETUP_RESTART;}
-        if(s->row==2){if(!strcmp(c->model,"test"))return 0;const char *current=rc_config_option_value(c,"sid");unsigned v=current&&!strcmp(current,"8580");const char *values[]={"6581","8580"};rc_config_set_option(c,"sid",values[cycle(v,2,direction)]);return RC_SETUP_RESTART;}
-        if(s->row==3){if(!s->media_available)return 0;const char *current=rc_config_option_value(c,"drive_model");const unsigned v=current&&!strcmp(current,"1541-ii");rc_config_set_option(c,"drive_model",v?"1541":"1541-ii");return RC_SETUP_RESTART;}
+        if(s->row==2){const char *current=rc_config_option_value(c,"sid");unsigned v=current&&!strcmp(current,"8580");const char *values[]={"6581","8580"};rc_config_set_option(c,"sid",values[cycle(v,2,direction)]);return RC_SETUP_RESTART;}
+        if(s->row==3){const char *current=rc_config_option_value(c,"drive_model");const unsigned v=current&&!strcmp(current,"1541-ii");rc_config_set_option(c,"drive_model",v?"1541":"1541-ii");return RC_SETUP_RESTART;}
         return s->row==4?RC_SETUP_RESET:s->row==5?RC_SETUP_COLD:RC_SETUP_OFF;
     }
     if(s->page==RC_SETUP_DISPLAY){
@@ -56,13 +117,11 @@ unsigned rc_setup_key(rc_setup *s,const char *key){
     }
     if(s->page==RC_SETUP_MEDIA){
         if(s->row==7)return RC_SETUP_MEDIA_FOLDER;
-        if(!s->media_available)return 0;
         if(s->row==0){const char *current=rc_config_option_value(c,"drive_device");unsigned v=current?(unsigned)(current[0]=='1'?current[1]-'0'+2:current[0]-'8'):0;const char *values[]={"8","9","10","11"};rc_config_set_option(c,"drive_device",values[cycle(v,4,direction)]);return RC_SETUP_RESTART;}
         const char *kind=s->row<4?"disk":"tape";rc_config_media effective;rc_config_media_settings(c,kind,&effective);rc_config_media *media=rc_config_media_slot(c,kind);if(!media)return 0;
         const unsigned field=s->row<4?s->row-1:s->row-4;
         if(field==0){media->fast=!effective.fast;media->explicit_flags|=RC_MEDIA_SETTING_FAST;}
         else if(field==1){
-            if(effective.fast&&s->row>=4)return 0;
             media->sound=!effective.sound;media->explicit_flags|=RC_MEDIA_SETTING_SOUND;
         }
         else {media->autoload=!effective.autoload;media->explicit_flags|=RC_MEDIA_SETTING_AUTOLOAD;}
@@ -71,53 +130,63 @@ unsigned rc_setup_key(rc_setup *s,const char *key){
 
     if(s->page==RC_SETUP_SOUND){if(!s->row)c->sound=!c->sound;else c->volume=(int)cycle((unsigned)c->volume/5,21,direction)*5;return RC_SETUP_AUDIO;}
     if(s->page==RC_SETUP_CONTROLLERS){
-        if(s->row<4){if((s->row&1u)&&(c->sticks[s->row/2].type==RC_CONTROL_MOUSE1351||c->sticks[s->row/2].type==RC_CONTROL_NONE))return 0;rc_config_stick *st=&c->sticks[s->row/2];
+        if(s->row<4){rc_config_stick *st=&c->sticks[s->row/2];
             if(!(s->row&1u)){st->type=cycle(st->type,4,direction);if(st->type==RC_CONTROL_PADDLES)st->device=RC_STICK_MOUSE;else if(st->device==RC_STICK_MOUSE)st->device=RC_STICK_NONE;}
             else {const int mouse=st->type==RC_CONTROL_PADDLES;unsigned source=st->device==RC_STICK_CONTROLLER?st->pad:st->device==RC_STICK_MOUSE&&mouse?3u:0u;
                 source=cycle(source,mouse?4u:3u,direction);st->device=source==0?RC_STICK_NONE:source==3?RC_STICK_MOUSE:RC_STICK_CONTROLLER;st->pad=st->device==RC_STICK_CONTROLLER?source:0;}
 
-        }else if(s->row==4)return s->controller_present?0:RC_SETUP_KEYBOARD;
+        }else if(s->row==4)return RC_SETUP_KEYBOARD;
         else return RC_SETUP_SWAP;
         return RC_SETUP_INPUT;
     }
     return 0;
 }
-static void row(rc_setup *s,unsigned index,const char *label,const char *value,int enabled){char line[37];snprintf(line,sizeof line," %-16.16s %15.15s ",label,value);const int selected=enabled&&s->row==index;
-    rc_tui_put(&s->tui,6+index*2,2,line,(uint8_t)(enabled?(selected?6:14):12),(uint8_t)(selected?14:6));}
-static void media_row(rc_setup *s,unsigned index,const char *label,const char *value,int enabled){char line[37];snprintf(line,sizeof line," %-16.16s %15.15s ",label,value);const int selected=enabled&&s->row==index;rc_tui_put(&s->tui,5+index+(index>=4?2u:0u),2,line,(uint8_t)(enabled?(selected?6:14):12),(uint8_t)(selected?14:6));}
+static void option_text(rc_setup *s,unsigned index,unsigned y,unsigned x,const char *text){
+    const int enabled=row_enabled(s,index);
+    const int selected=enabled&&s->row==index;
+    rc_tui_put(&s->tui,y,x,text,(uint8_t)(enabled?(selected?6:14):12),(uint8_t)(selected?14:6));
+}
+static void row(rc_setup *s,unsigned index,const char *label,const char *value){
+    char line[37];
+    snprintf(line,sizeof line," %-16.16s %15.15s ",label,value);
+    const unsigned y=s->page==RC_SETUP_MEDIA?5+index+(index>=4?2u:0u):6+index*2;
+    option_text(s,index,y,2,line);
+}
 void rc_setup_draw(rc_setup *s,const uint32_t palette[16],rc_frame *f){
+    ensure_selection(s);
     rc_tui_clear(&s->tui);char title[40];snprintf(title,sizeof title,"%s %u/8",PAGES[s->page],s->page+1);rc_tui_bar(&s->tui,0,title);
     rc_tui_box(&s->tui,3,1,s->page==RC_SETUP_STATES||s->page==RC_SETUP_ABOUT?19u:18u,38);
     rc_config *c=s->config;
     switch(s->page){
     case RC_SETUP_MACHINE:{const char *sid=rc_config_option_value(c,"sid");
-        const char *drive=rc_config_option_value(c,"drive_model");row(s,0,"MODEL",!strcmp(c->model,"test")?"TEST":!strncmp(c->model,"c64c-",5)?"C64C":"C64",1);row(s,1,"VIDEO STANDARD",strstr(c->model,"ntsc")?"NTSC":"PAL",strcmp(c->model,"test")!=0);row(s,2,"SID TYPE",sid?sid:"6581",strcmp(c->model,"test")!=0);
-        row(s,3,"DRIVE TYPE",drive&&!strcmp(drive,"1541-ii")?"1541-II":"1541",s->media_available);row(s,4,"RESET","ENTER",1);row(s,5,"COLD BOOT","ENTER",1);row(s,6,"POWER OFF","ENTER",1);break;}
-    case RC_SETUP_DISPLAY:row(s,0,"FILTER",c->look==RC_LOOK_CRT?"CRT":c->filter==RC_CONFIG_FILTER_LINEAR?"LINEAR":"NEAREST",1);
-        row(s,1,"PALETTE",c->palette,1);row(s,2,"BORDER",c->border==RC_BORDER_NONE?"NONE":c->border==RC_BORDER_MINIMAL?"MINIMAL":"FULL",1);
-        row(s,3,"FULL SCREEN",c->fullscreen?"ON":"OFF",1);row(s,4,"SCALE",c->scale?"INTEGER":"FIT",1);row(s,5,"PIXEL SHAPE",c->aspect?"SQUARE":"ORIGINAL",1);row(s,6,"VSYNC",c->vsync?"ON":"OFF",1);break;
-    case RC_SETUP_SOUND:{char volume[16];snprintf(volume,sizeof volume,"%d%%",c->volume);row(s,0,"SOUND",c->sound?"ON":"OFF",1);row(s,1,"VOLUME",volume,1);break;}
+        const char *drive=rc_config_option_value(c,"drive_model");row(s,0,"MODEL",!strcmp(c->model,"test")?"TEST":!strncmp(c->model,"c64c-",5)?"C64C":"C64");row(s,1,"VIDEO STANDARD",strstr(c->model,"ntsc")?"NTSC":"PAL");row(s,2,"SID TYPE",sid?sid:"6581");
+        row(s,3,"DRIVE TYPE",drive&&!strcmp(drive,"1541-ii")?"1541-II":"1541");row(s,4,"RESET","ENTER");row(s,5,"COLD BOOT","ENTER");row(s,6,"POWER OFF","ENTER");break;}
+    case RC_SETUP_DISPLAY:row(s,0,"FILTER",c->look==RC_LOOK_CRT?"CRT":c->filter==RC_CONFIG_FILTER_LINEAR?"LINEAR":"NEAREST");
+        row(s,1,"PALETTE",c->palette);row(s,2,"BORDER",c->border==RC_BORDER_NONE?"NONE":c->border==RC_BORDER_MINIMAL?"MINIMAL":"FULL");
+        row(s,3,"FULL SCREEN",c->fullscreen?"ON":"OFF");row(s,4,"SCALE",c->scale?"INTEGER":"FIT");row(s,5,"PIXEL SHAPE",c->aspect?"SQUARE":"ORIGINAL");row(s,6,"VSYNC",c->vsync?"ON":"OFF");break;
+    case RC_SETUP_SOUND:{char volume[16];snprintf(volume,sizeof volume,"%d%%",c->volume);row(s,0,"SOUND",c->sound?"ON":"OFF");row(s,1,"VOLUME",volume);break;}
     case RC_SETUP_MEDIA:{rc_config_media disk,tape;rc_config_media_settings(c,"disk",&disk);rc_config_media_settings(c,"tape",&tape);const char *device=rc_config_option_value(c,"drive_device");
         rc_tui_put(&s->tui,4,3,"DRIVE",1,6);rc_tui_put(&s->tui,10,3,"TAPE",1,6);
-        media_row(s,0,"DEVICE",device?device:"8",s->media_available);media_row(s,1,"FAST LOAD",disk.fast?"ON":"OFF",s->media_available);
-        media_row(s,2,"SOUNDS",disk.sound?(disk.fast?"STARTUP ONLY":"ON"):"OFF",s->media_available);media_row(s,3,"AUTO-LOAD",disk.autoload?"ON":"OFF",s->media_available);
-        media_row(s,4,"FAST LOAD",tape.fast?"ON":"OFF",s->media_available);media_row(s,5,"SOUND",tape.sound&&!tape.fast?"ON":"OFF",s->media_available&&!tape.fast);media_row(s,6,"AUTO-LOAD",tape.autoload?"ON":"OFF",s->media_available);
-        rc_tui_put(&s->tui,16,3,"DEFAULT MEDIA FOLDER",s->row==7?6:14,s->row==7?14:6);rc_tui_put(&s->tui,16,32,"ENTER",s->row==7?6:14,s->row==7?14:6);const char *folder=c->media_folder[0]?c->media_folder:"PROGRAM FOLDER";const size_t length=strlen(folder);rc_tui_put(&s->tui,18,3,length>34?folder+length-34:folder,14,6);break;}
+        row(s,0,"DEVICE",device?device:"8");row(s,1,"FAST LOAD",disk.fast?"ON":"OFF");
+        row(s,2,"SOUNDS",disk.sound&&!disk.fast?"ON":"OFF");row(s,3,"AUTO-LOAD",disk.autoload?"ON":"OFF");
+        row(s,4,"FAST LOAD",tape.fast?"ON":"OFF");row(s,5,"SOUND",tape.sound&&!tape.fast?"ON":"OFF");row(s,6,"AUTO-LOAD",tape.autoload?"ON":"OFF");
+        option_text(s,7,16,3,"DEFAULT MEDIA FOLDER");option_text(s,7,16,32,"ENTER");
+        const char *folder=c->media_folder[0]?c->media_folder:"PROGRAM FOLDER";const size_t length=strlen(folder);rc_tui_put(&s->tui,18,3,length>34?folder+length-34:folder,14,6);break;}
 
     case RC_SETUP_CONTROLLERS:{const char *types[]={"JOYSTICK","1351 MOUSE","PADDLES","NONE"};char source[32];
-        row(s,0,"PORT 1",types[c->sticks[0].type],1);rc_config_stick_device_name(&c->sticks[0],source,sizeof source);row(s,1,"INPUT 1",c->sticks[0].type==RC_CONTROL_MOUSE1351?"MOUSE":source,c->sticks[0].type!=RC_CONTROL_MOUSE1351&&c->sticks[0].type!=RC_CONTROL_NONE);
-        row(s,2,"PORT 2",types[c->sticks[1].type],1);rc_config_stick_device_name(&c->sticks[1],source,sizeof source);row(s,3,"INPUT 2",c->sticks[1].type==RC_CONTROL_MOUSE1351?"MOUSE":source,c->sticks[1].type!=RC_CONTROL_MOUSE1351&&c->sticks[1].type!=RC_CONTROL_NONE);
+        row(s,0,"PORT 1",types[c->sticks[0].type]);rc_config_stick_device_name(&c->sticks[0],source,sizeof source);row(s,1,"INPUT 1",c->sticks[0].type==RC_CONTROL_MOUSE1351?"MOUSE":source);
+        row(s,2,"PORT 2",types[c->sticks[1].type]);rc_config_stick_device_name(&c->sticks[1],source,sizeof source);row(s,3,"INPUT 2",c->sticks[1].type==RC_CONTROL_MOUSE1351?"MOUSE":source);
         char label[37],line[37];snprintf(label,sizeof label,"KEYBOARD JOYSTICK (%s)",s->keyboard_active?(c->keyboard_port?"P2":"P1"):s->controller_present?"AUTO OFF":"OFF");snprintf(line,sizeof line," %-28.28s %3s ",label,"F11");
-        const int selected=s->row==4&&!s->controller_present;rc_tui_put(&s->tui,14,2,line,(uint8_t)(s->controller_present?12:selected?6:14),(uint8_t)(selected?14:6));
-        row(s,5,"SWAP PORTS","SHIFT+F11",1);break;}
+        option_text(s,4,14,2,line);
+        row(s,5,"SWAP PORTS","SHIFT+F11");break;}
 
     case RC_SETUP_CARTRIDGE:{
         rc_config_media cart;rc_config_media_settings(c,"cartridge",&cart);const char *name=cart.image[0]?cart.image:"NO CARTRIDGE ATTACHED";size_t length=strlen(name);
         rc_tui_put(&s->tui,2,2,length>36?name+length-36:name,12,6);
-        row(s,0,"LOAD CARTRIDGE","ENTER",s->cartridge_available);row(s,1,"EJECT CARTRIDGE","ENTER",s->has_cartridge);row(s,2,"FREEZE","RIGHT ALT",s->can_freeze);
+        row(s,0,"LOAD CARTRIDGE","ENTER");row(s,1,"EJECT CARTRIDGE","ENTER");row(s,2,"FREEZE","RIGHT ALT");
         const char *reu=rc_config_option_value(c,"reu"),*geo=rc_config_option_value(c,"georam");
-        row(s,3,"REU",reu?reu:"off",s->cartridge_available);row(s,4,"GEORAM",geo?geo:"off",s->cartridge_available);
-        row(s,5,"START INSERTED",cart.startup?"ON":"OFF",s->has_cartridge);break;}
+        row(s,3,"REU",reu?reu:"off");row(s,4,"GEORAM",geo?geo:"off");
+        row(s,5,"START INSERTED",cart.startup?"ON":"OFF");break;}
     case RC_SETUP_STATES:{
         for(unsigned i=0;i<RC_STATES_SLOTS;++i){char line[22];const int selected=s->row==i;
             snprintf(line,sizeof line,"%c%02u %-14.14s",(unsigned)c->state_slot==i+1?'>':' ',i+1,s->state_status[i]==1?(s->state_time[i][0]?s->state_time[i]+5:"SAVED"):s->state_status[i]==2?"INVALID":"EMPTY");
@@ -126,21 +195,19 @@ void rc_setup_draw(rc_setup *s,const uint32_t palette[16],rc_frame *f){
         if(!s->state_thumb.width)rc_tui_put(&s->tui,10,24,s->state_status[c->state_slot-1]==1?"NO PREVIEW":"EMPTY SLOT",12,6);
         if(s->state_version[0]){char version[32];snprintf(version,sizeof version,"REC64 %s",s->state_version);rc_tui_put(&s->tui,16,23,version,12,6);}
         rc_tui_put(&s->tui,17,3,s->state_time[c->state_slot-1],14,6);
-        rc_tui_put(&s->tui,18,3,"SAVE CURRENT SLOT  CTRL+F5",(uint8_t)(s->row==10?6:14),(uint8_t)(s->row==10?14:6));
-        const int can_load=s->state_status[c->state_slot-1]==1;
-        rc_tui_put(&s->tui,19,3,"LOAD CURRENT SLOT  CTRL+F6",(uint8_t)(can_load?(s->row==11?6:14):12),(uint8_t)(can_load&&s->row==11?14:6));const int can_delete=s->state_status[c->state_slot-1]!=0;
-        rc_tui_put(&s->tui,20,3,"DELETE CURRENT SLOT  DEL/Y",(uint8_t)(can_delete?(s->row==12?6:14):12),(uint8_t)(can_delete&&s->row==12?14:6));break;}
+        option_text(s,10,18,3,"SAVE CURRENT SLOT  CTRL+F5");
+        option_text(s,11,19,3,"LOAD CURRENT SLOT  CTRL+F6");
+        option_text(s,12,20,3,"DELETE CURRENT SLOT  DEL/Y");break;}
     case RC_SETUP_ABOUT:
         rc_tui_put(&s->tui,10,3,"NEW IN " RC_VERSION,1,6);
-        rc_tui_put(&s->tui,11,3,"HOLD START + Y: COLD BOOT",14,6);
-        rc_tui_put(&s->tui,12,3,"HOLD START + X: EXIT",14,6);
-        rc_tui_put(&s->tui,13,3,"CONTROLLER FILE AND FOLDER ACTIONS",14,6);
-        rc_tui_put(&s->tui,14,3,"EDIT FILENAMES WITH THE D-PAD",14,6);
+        rc_tui_put(&s->tui,11,3,"DRIVE AND TAPE SOUNDS MATCH",14,6);
+        rc_tui_put(&s->tui,12,3,"MAIN SOUND MUTES THE SELF-TEST",14,6);
+        rc_tui_put(&s->tui,13,3,"CURSOR SKIPS DISABLED OPTIONS",14,6);
         rc_tui_put(&s->tui,16,3,"ALSO IN 0.20",1,6);
         rc_tui_put(&s->tui,17,3,"PALETTE, MODEL, VIDEO AND SID TYPE",14,6);
         rc_tui_put(&s->tui,18,3,"BASIC SAVES TO PRG, TAP AND D64",14,6);
         rc_tui_put(&s->tui,19,3,"RENAME FILES, DELETE FILES & STATES",14,6);
-        rc_tui_put(&s->tui,20,3,"DEFAULT FOLDER / 1541 SELF-TEST",14,6);
+        rc_tui_put(&s->tui,20,3,"CONTROLLER FILE / FOLDER ACTIONS",14,6);
         break;
     }
     if(s->page==RC_SETUP_ABOUT)rc_tui_put(&s->tui,24,1,"LEFT/RIGHT PAGE  F12 CLOSE",14,6);

@@ -42,6 +42,14 @@ def main():
     def shot(name, size=(320, 200)):
         path = work/f'{name}.png'; call('shot '+path.as_posix())
         with Image.open(path) as im: assert im.size == size, (name, im.size, size)
+        return path
+
+    def selected_row(name, selected, disabled=None):
+        with Image.open(shot(name)) as im:
+            highlight = im.getpixel((0, 0))
+            assert im.getpixel((16, selected*8)) == highlight, name
+            if disabled is not None:
+                assert im.getpixel((16, disabled*8)) != highlight, name
 
     try:
         call('frames 150'); call('expect READY.')
@@ -49,7 +57,11 @@ def main():
         key('DOWN', 2); key('Pad A'); call('expect 8580'); key('Pad A'); call('expect 6581'); shot('machine-settings')
         key('RIGHT'); t = text()
         assert 'DEVICE' in t and 'FAST LOAD' in t and 'CONTROLS' not in t and 'EJECT' not in t and 'LOAD IMAGE' not in t, t
-        shot('media-settings')
+        assert 'STARTUP ONLY' not in t and all(row.strip().endswith('OFF') for row in t.splitlines() if row.strip().startswith('SOUND'))
+        key('DOWN', 2); selected_row('media-skip-drive-sound', 8, 7)
+        pad('Down', 'Down'); selected_row('media-skip-tape-sound', 13, 12)
+        pad('Up', 'A', 'Down'); selected_row('media-tape-sound-enabled', 12)
+        pad('Up', 'A')
         key('RIGHT', 3); t = text(); assert 'KEYBOARD JOYSTICK (P2)' in t and 'F11' in t, t
         assert 'KEYBOARD JOY ' not in t and 'ON/OFF' not in t
         key('F11'); call('expect KEYBOARD JOYSTICK (OFF)'); key('DOWN', 4); key('Pad A'); call('expect KEYBOARD JOYSTICK (P2)')

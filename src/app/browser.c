@@ -12,6 +12,19 @@ static int same(const char *a,const char *b){for(;*a&&*b;++a,++b)if(toupper((uns
 static int compare_name(const char *a,const char *b){for(;*a&&*b;++a,++b){const int d=toupper((unsigned char)*a)-toupper((unsigned char)*b);if(d)return d;}return (unsigned char)*a-(unsigned char)*b;}
 static int compare(const void *a,const void *b){const rc_browser_item *x=a,*y=b;if(x->folder!=y->folder)return x->folder?-1:1;return compare_name(x->name,y->name);}
 static unsigned format(const char *name){static const char *const extensions[]={"prg","p00","d64","t64","tap","crt","sid","rcs","g64"};for(unsigned i=0;i<9;++i)if(rc_media_extension_in(name,extensions[i]))return i;return RC_BROWSER_UNKNOWN;}
+static void reveal(rc_browser *b){if(b->selected<b->top)b->top=b->selected;if(b->selected>=b->top+LIST_ROWS)b->top=b->selected-LIST_ROWS+1;}
+static int select_enabled(rc_browser *b,size_t index,int direction){
+    while(index<b->count){
+        if(!b->items[index].disabled){
+            b->selected=index;
+            reveal(b);
+            return 1;
+        }
+        if(direction>0)++index;
+        else{if(!index)break;--index;}
+    }
+    return 0;
+}
 static void clear_items(rc_browser *b){free(b->items);b->items=NULL;b->count=b->selected=b->top=b->capacity=0;b->search[0]=0;}
 static int append_item(rc_browser *b,const rc_browser_item *item){
     if(b->count==b->capacity){const size_t capacity=b->capacity?b->capacity*2:32;if(capacity<b->capacity||capacity>SIZE_MAX/sizeof *b->items){b->listing_failed=1;return 0;}
@@ -26,13 +39,15 @@ static int refresh(rc_browser *b,char *error,size_t cap){clear_items(b);b->conte
     else {char up[RC_MEDIA_PATH];if(parent(b->path,up,sizeof up)){rc_browser_item item={0};snprintf(item.name,sizeof item.name,"..");item.folder=1;if(!append_item(b,&item)){snprintf(error,cap,"Out of memory");return 0;}}
         if(!rc_host_list_folder(b->path,list_entry,b)){snprintf(error,cap,"Cannot read folder");return 0;}}
     if(b->listing_failed){snprintf(error,cap,"Out of memory");return 0;}
-    if(b->count>1)qsort(b->items,b->count,sizeof *b->items,compare);return 1;
+    if(b->count>1)qsort(b->items,b->count,sizeof *b->items,compare);
+    select_enabled(b,0,1);
+    return 1;
 }
 void rc_browser_init(rc_browser *b){memset(b,0,sizeof *b);rc_tui_init(&b->tui);snprintf(b->filename,sizeof b->filename,"program.prg");}
 void rc_browser_close(rc_browser *b){clear_items(b);b->active=b->confirm=b->finding=b->renaming=0;}
 void rc_browser_set_tape_reader(rc_browser *b,rc_browser_tape_list_fn reader,void *ctx){b->tape_list=reader;b->tape_ctx=ctx;}
 void rc_browser_select(rc_browser *b,const char *name){
-    for(size_t i=0;i<b->count;++i)if(!strcmp(b->items[i].name,name)){b->selected=i;b->top=i>=LIST_ROWS?i-LIST_ROWS/2:0;return;}
+    for(size_t i=0;i<b->count;++i)if(!b->items[i].disabled&&!strcmp(b->items[i].name,name)){b->selected=i;b->top=i>=LIST_ROWS?i-LIST_ROWS/2:0;return;}
 }
 void rc_browser_error(rc_browser *b,const char *message){snprintf(b->message,sizeof b->message,"%s",message?message:"");}
 int rc_browser_refresh(rc_browser *b,char *error,size_t cap){b->renaming=0;return refresh(b,error,cap);}
@@ -47,7 +62,9 @@ static int image_items(rc_browser *b,const rc_browser_content *entries,size_t co
     rc_browser_item *items=count?calloc(count,sizeof *items):NULL;if(count&&!items)return 0;
     for(size_t i=0;i<count;++i){items[i].content=entries[i];items[i].format=kind;items[i].bytes=entries[i].length;items[i].disabled=kind==RC_BROWSER_D64&&(entries[i].type&7u)!=2;
         unsigned at=0;for(unsigned j=0;j<16;++j){const unsigned c=entries[i].name[j];if(!c)break;if(c!=0x12&&c!=0x92)items[i].name[at++]=(char)petscii(c);}items[i].name[at]=0;}
-    clear_items(b);b->items=items;b->count=b->capacity=count;b->contents=1;b->roots=0;return 1;
+    clear_items(b);b->items=items;b->count=b->capacity=count;b->contents=1;b->roots=0;
+    select_enabled(b,0,1);
+    return 1;
 }
 static unsigned result(rc_browser *b,unsigned action,const char *path,uint32_t entry,int overwrite){
     b->result=(rc_browser_result){0};snprintf(b->result.path,sizeof b->result.path,"%s",path);b->result.entry=entry;b->result.action=action;b->result.overwrite=overwrite;return action;
@@ -69,7 +86,6 @@ unsigned rc_browser_file(rc_browser *b,const char *path,char *error,size_t cap){
     if(ok){ok=image_items(b,entries,count,kind);if(ok){snprintf(b->image,sizeof b->image,"%s",absolute);snprintf(b->path,sizeof b->path,"%s",absolute);char *slash=strrchr(b->path,'/'),*back=strrchr(b->path,'\\');if(back&&(!slash||back>slash))slash=back;if(slash)slash[1]=0;b->active=1;b->save=b->folders_only=b->renaming=b->finding=0;b->focus=0;b->confirm=0;b->message[0]=0;}if(!ok)snprintf(error,cap,"Out of memory");else if(!count)rc_browser_error(b,"No loadable entries");}
     free(entries);return RC_BROWSER_NONE;
 }
-static void reveal(rc_browser *b){if(b->selected<b->top)b->top=b->selected;if(b->selected>=b->top+LIST_ROWS)b->top=b->selected-LIST_ROWS+1;}
 static void set_save_type(rc_browser *b,unsigned kind){static const char *const extensions[]={".prg",".tap",".d64"};b->save_type=kind;char *dot=strrchr(b->filename,'.');if(dot)*dot=0;const size_t n=strlen(b->filename);if(n+4<sizeof b->filename)memcpy(b->filename+n,extensions[kind],5);}
 static unsigned save_action(rc_browser *b,int overwrite){static const unsigned actions[]={RC_BROWSER_SAVE_PRG,RC_BROWSER_SAVE_TAP,RC_BROWSER_SAVE_D64};static const char *const extensions[]={"prg","tap","d64"};
     if(!b->filename[0]||!strcmp(b->filename,".")||!strcmp(b->filename,"..")||strpbrk(b->filename,"<>:\"/\\|?*")){rc_browser_error(b,"Choose a valid file name");return RC_BROWSER_NONE;}
@@ -96,6 +112,7 @@ static int find_prefix(rc_browser *b,const char *prefix){
     const size_t length=strlen(prefix);
     if(!length)return 0;
     for(size_t i=0;i<b->count;++i){
+        if(b->items[i].disabled)continue;
         size_t j=0;
         while(j<length&&b->items[i].name[j]&&
             toupper((unsigned char)prefix[j])==toupper((unsigned char)b->items[i].name[j]))++j;
@@ -170,12 +187,20 @@ unsigned rc_browser_key(rc_browser *b,const char *name){
     if(b->save&&b->focus==2){if(same(key,"CTRL+A")){b->replace_name=1;return RC_BROWSER_NONE;}if(same(key,"BACKSPACE")||same(key,"DELETE")){size_t length=strlen(b->filename);if(b->replace_name){b->filename[0]=0;b->replace_name=0;}else if(length)b->filename[length-1]=0;return RC_BROWSER_NONE;}if(same(key,"RETURN")||same(key,"ENTER"))return save_action(b,0);return RC_BROWSER_NONE;}
     if(same(key,"LEFT")||same(key,"BACKSPACE")){go_parent(b);return RC_BROWSER_NONE;}
     if(same(key,"HOME")||same(key,"END")||same(key,"UP")||same(key,"DOWN")||same(key,"PAGEUP")||same(key,"PAGEDOWN"))b->search[0]=0;
-    if(same(key,"HOME"))b->selected=0;
-    else if(same(key,"END")){if(b->count)b->selected=b->count-1;}
-    else if(same(key,"UP")){if(b->selected)--b->selected;}
-    else if(same(key,"DOWN")){if(b->selected+1<b->count)++b->selected;}
-    else if(same(key,"PAGEUP"))b->selected=b->selected>LIST_ROWS?b->selected-LIST_ROWS:0;
-    else if(same(key,"PAGEDOWN")){if(b->count)b->selected=b->selected+LIST_ROWS<b->count?b->selected+LIST_ROWS:b->count-1;}
+    if(same(key,"HOME"))select_enabled(b,0,1);
+    else if(same(key,"END")){if(b->count)select_enabled(b,b->count-1,-1);}
+    else if(same(key,"UP")){if(b->selected)select_enabled(b,b->selected-1,-1);}
+    else if(same(key,"DOWN"))select_enabled(b,b->selected+1,1);
+    else if(same(key,"PAGEUP")){
+        const size_t index=b->selected>LIST_ROWS?b->selected-LIST_ROWS:0;
+        if(!select_enabled(b,index,-1))select_enabled(b,index,1);
+    }
+    else if(same(key,"PAGEDOWN")){
+        if(b->count){
+            const size_t index=b->selected+LIST_ROWS<b->count?b->selected+LIST_ROWS:b->count-1;
+            if(!select_enabled(b,index,1))select_enabled(b,index,-1);
+        }
+    }
     else if(same(key,"SPACE")||same(key,"RETURN")||same(key,"ENTER")||same(key,"RIGHT")){
         if(b->save&&same(key,"SPACE"))return save_action(b,0);
         if(b->contents){if(same(key,"SPACE"))return result(b,RC_BROWSER_INSERT,b->image,UINT32_MAX,0);if(b->count){if(b->items[b->selected].disabled){rc_browser_error(b,"Only PRG files can be loaded");return RC_BROWSER_NONE;}return result(b,RC_BROWSER_LOAD,b->image,b->items[b->selected].content.index,0);}return RC_BROWSER_NONE;}
