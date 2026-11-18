@@ -1,9 +1,5 @@
 /* ROM identification. Every file in a roms folder is known by the SHA-256
- * of its content, whatever its name: the firmware of each machine as the
-lock.json),
- * one image for each ROM a board has. tools/fetch_roms.py puts them in roms/
- * under their standard names. A board asks for its ROMs by key. After
- */
+ * of its content, whatever its name. A board asks for its ROMs by key. */
 
 #ifndef RC_ROMDB_H
 #define RC_ROMDB_H
@@ -18,7 +14,6 @@ typedef struct rc_known_rom {
     const char *name;          /* "C64 BASIC" */
     uint32_t size;
     const char *sha256;        /* lower-case hex */
-    const char *file;          /* standard file name in roms/ */
 } rc_known_rom;
 
 size_t rc_romdb_count(void);
@@ -40,7 +35,6 @@ typedef struct rc_rom_file {
     char sha256[65];           /* empty for files too large to be a ROM */
     const rc_known_rom *rom;   /* NULL: not a known ROM */
     uint8_t *data;             /* a known ROM's content */
-    int standard;              /* under its standard file name */
     int duplicate;             /* index of the file used for the same ROM, or -1 */
 } rc_rom_file;
 
@@ -54,8 +48,8 @@ typedef struct rc_rom_index {
 void rc_rom_index_init(rc_rom_index *index);
 /* Reads every file of each folder (missing folders are skipped; the same
  * folder named twice is read once), the files of a folder in name order.
- * Of files holding the same ROM the one under the standard name is used,
- * else the first found. 0 when out of memory. */
+ * Of files holding the same ROM the first found is used. 0 when out of
+ * memory. */
 int rc_rom_index_scan(rc_rom_index *index, const char *const *folders, size_t count);
 /* Adds a file's content as if found under `name` (tests); 0 when out of
  * memory. */

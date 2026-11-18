@@ -54,6 +54,7 @@ def main() -> int:
         shot('media')
         key('RIGHT'); key('DOWN'); key('RETURN'); call('expect COLOR-CORRECTED')
         key('RETURN'); call('expect TUNED')
+        key('RETURN'); call('expect TUNED-STRONG')
         key('RETURN'); call('expect DEFAULT')
         key('LEFT', 2); key('DOWN'); key('RETURN'); key('F12'); call('frames 200')
         key('F12'); ntsc = shot('ntsc')

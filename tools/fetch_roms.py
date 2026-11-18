@@ -28,14 +28,15 @@ def main() -> int:
                 local[hashlib.sha256(data).hexdigest()] = data
     failures = 0
     for rom in manifest["roms"]:
-        path = ROOT / "roms" / rom["file"]
+        name = rom["key"] + ".bin"   # any name works: ROMs are recognised by content
+        path = ROOT / "roms" / name
         def valid(data: bytes) -> bool:
             return len(data) == rom["bytes"] and hashlib.sha256(data).hexdigest() == rom["sha256"]
         if path.is_file() and valid(path.read_bytes()):
-            print(f'{rom["file"]}: OK')
+            print(f'{name}: OK')
             continue
         if args.check:
-            print(f'{rom["file"]}: missing or wrong hash')
+            print(f'{name}: missing or wrong hash')
             failures += 1
             continue
         try:
@@ -50,9 +51,9 @@ def main() -> int:
                 raise ValueError("firmware size or SHA-256 differs from the lock")
             path.parent.mkdir(exist_ok=True)
             path.write_bytes(data)
-            print(f'{rom["file"]}: installed')
+            print(f'{name}: installed')
         except (OSError, ValueError, KeyError) as error:
-            print(f'{rom["file"]}: {error}', file=sys.stderr)
+            print(f'{name}: {error}', file=sys.stderr)
             failures += 1
     return int(failures != 0)
 

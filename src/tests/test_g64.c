@@ -1,5 +1,6 @@
 /* Original G64 fixture through the unmodified 1541-II DOS job queue. */
 #include "../hw/c1541.h"
+#include "../core/romdb.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -9,7 +10,7 @@ static char error[128];
 static void tick(unsigned cycles){while(cycles--)rc_c1541_tick(drive);}
 static int save(rc_state_writer *w){rc_sw_init(w);rc_sw_header(w,"drive","1541-ii",NULL,0);rc_sw_begin(w,"DRV ",0);rc_c1541_save(drive,w);rc_sw_end(w);return rc_sw_finish(w);}
 int main(void){
-    drive=calloc(1,sizeof *drive);CHECK(drive);uint8_t rom[16384];FILE *f=fopen(RC_ROM_DIR "/dos1541ii-251968-03.bin","rb");CHECK(f);CHECK(fread(rom,1,sizeof rom,f)==sizeof rom);fclose(f);
+    drive=calloc(1,sizeof *drive);CHECK(drive);uint8_t rom[16384];rc_rom_index rom_index;rc_rom_index_init(&rom_index);const char *rom_folders[]={RC_ROM_DIR};CHECK(rc_rom_index_scan(&rom_index,rom_folders,1));const rc_rom_file *rom_file=rc_rom_index_find(&rom_index,rc_romdb_find("dos1541ii"));CHECK(rom_file);memcpy(rom,rom_file->data,sizeof rom);rc_rom_index_free(&rom_index);
     rc_c1541_init(drive,rom,8);rc_c1541_reset(drive); /* board startup also asserts RESET */
     rc_d64 disk={0};CHECK(rc_d64_create(&disk,NULL,NULL,error,sizeof error)&&rc_c1541_mount(drive,disk.image,error,sizeof error));
     uint8_t header[12+70*8]={0};memcpy(header,"GCR-1541",8);header[9]=70;rc_image_put16(header+10,7928);

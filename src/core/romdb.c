@@ -12,11 +12,11 @@
  * cores' lock files record. */
 /* Filled from the pinned firmware data in docs/sources.lock.json. */
 static const rc_known_rom ROMS[] = {
-    {"kernal", "C64 KERNAL 901227-03", 8192u, "83c60d47047d7beab8e5b7bf6f67f80daa088b7a6a27de0d7e016f6484042721", "kernal-901227-03.bin"},
-    {"basic", "C64 BASIC 901226-01", 8192u, "89878cea0a268734696de11c4bae593eaaa506465d2029d619c0e0cbccdfa62d", "basic-901226-01.bin"},
-    {"chargen", "C64 character generator 901225-01", 4096u, "fd0d53b8480e86163ac98998976c72cc58d5dd8eb824ed7b829774e74213b420", "chargen-901225-01.bin"},
-    {"dos1541", "1541 DOS 325302-01 + 901229-05", 16384u, "d1d45afb46fd4e2b48d93ca367b889d75654a3b7acf73044e51f6d880c09369e", "dos1541-325302-01+901229-05.bin"},
-    {"dos1541ii", "1541-II DOS 251968-03", 16384u, "326c289c38753323d7e8167897447cf61ef35189d82eb8d75210ece949adda7c", "dos1541ii-251968-03.bin"},
+    {"kernal", "C64 KERNAL 901227-03", 8192u, "83c60d47047d7beab8e5b7bf6f67f80daa088b7a6a27de0d7e016f6484042721"},
+    {"basic", "C64 BASIC 901226-01", 8192u, "89878cea0a268734696de11c4bae593eaaa506465d2029d619c0e0cbccdfa62d"},
+    {"chargen", "C64 character generator 901225-01", 4096u, "fd0d53b8480e86163ac98998976c72cc58d5dd8eb824ed7b829774e74213b420"},
+    {"dos1541", "1541 DOS 325302-01 + 901229-05", 16384u, "d1d45afb46fd4e2b48d93ca367b889d75654a3b7acf73044e51f6d880c09369e"},
+    {"dos1541ii", "1541-II DOS 251968-03", 16384u, "326c289c38753323d7e8167897447cf61ef35189d82eb8d75210ece949adda7c"},
 };
 #define ROM_COUNT (sizeof ROMS / sizeof ROMS[0])
 /* Nothing larger is read whole. */
@@ -130,7 +130,6 @@ static void settle(rc_rom_index *ix, rc_rom_file *f, const uint8_t *data) {
         f->rom = by_hash(f->sha256, f->size);
     }
     if (!f->rom) return;
-    f->standard = !strcmp(f->name, f->rom->file);
     f->data = malloc((size_t)f->size);
     if (f->data) memcpy(f->data, data, (size_t)f->size);
     else f->rom = NULL;
@@ -138,14 +137,9 @@ static void settle(rc_rom_index *ix, rc_rom_file *f, const uint8_t *data) {
     for (size_t i = 0; f->rom && i < self; ++i) {
         rc_rom_file *o = &ix->files[i];
         if (o->rom != f->rom || o->duplicate >= 0) continue;
-        if (f->standard && !o->standard) o->duplicate = (int)self;   /* the standard name wins */
-        else f->duplicate = (int)i;
+        f->duplicate = (int)i;     /* the first found is used */
         break;
     }
-    /* Duplicates of a file that just lost point to the winner. */
-    for (size_t i = 0; i < self; ++i)
-        if (ix->files[i].duplicate >= 0 && ix->files[ix->files[i].duplicate].duplicate >= 0)
-            ix->files[i].duplicate = ix->files[ix->files[i].duplicate].duplicate;
 }
 
 int rc_rom_index_add(rc_rom_index *ix, const char *name, const uint8_t *data, size_t size) {
@@ -243,7 +237,6 @@ const char *rc_rom_file_describe(const rc_rom_index *ix, const rc_rom_file *f, c
         else snprintf(buffer, capacity, "unknown (%llu bytes, SHA-256 %.16s...)", (unsigned long long)f->size, f->sha256);
     } else if (f->duplicate >= 0)
         snprintf(buffer, capacity, "%s, a copy of %s (not used)", f->rom->name, ix->files[f->duplicate].name);
-    else if (!f->standard) snprintf(buffer, capacity, "%s (standard name %s)", f->rom->name, f->rom->file);
     else snprintf(buffer, capacity, "%s", f->rom->name);
     return buffer;
 }
