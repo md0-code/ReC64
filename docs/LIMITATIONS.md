@@ -27,7 +27,7 @@ The log that differed was the combined-waveform one. The failing 6581 audio
 window was band-pass at resonance 8 (relative RMS error 0.295 against a limit
 of 0.25). Two real tunes rendered through the emulator at 48 kHz correlated
 0.989 (6581) and 0.998 (8580) with the reSID render, at the same level. The
-model is described in [HARDWARE.md](HARDWARE.md).
+model is described in the [design notes](DESIGN.md).
 
 Snapshots saved with the reSID engine still load: the SID's registers are
 restored and its notes start again. Snapshots of the experimental built-in
