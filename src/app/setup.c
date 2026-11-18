@@ -4,7 +4,7 @@
 #include <stdio.h>
 #include <string.h>
 static const char *const PAGES[]={"MACHINE","MEDIA","DISPLAY","SOUND","CONTROLLERS","CARTRIDGE","STATES","ABOUT"};
-static const char *const COLORS[]={"default","color-corrected"};
+static const char *const COLORS[]={"default","color-corrected","tuned"};
 static const char *const IDS[]={"machine","media","display","sound","controllers","cartridge","states","about"};
 void rc_setup_init(rc_setup *s,rc_config *c){memset(s,0,sizeof *s);s->config=c;s->crt_available=1;rc_tui_init(&s->tui);
     for(unsigned i=0;i<8;++i)if(!strcmp(c->setup_page,IDS[i]))s->page=i;
@@ -19,7 +19,7 @@ static int row_enabled(const rc_setup *s,unsigned index){
     switch(s->page){
     case RC_SETUP_MACHINE:
         if(index==1||index==2)return strcmp(c->model,"test")!=0;
-        if(index==3)return s->media_available;
+        if(index==3)return s->media_available&&s->drive_choice;
         return 1;
     case RC_SETUP_MEDIA:
         if(!s->media_available)return 0;
@@ -107,7 +107,7 @@ unsigned rc_setup_key(rc_setup *s,const char *key){
     if(s->page==RC_SETUP_DISPLAY){
         switch(s->row){
         case 0:{unsigned v=c->look==RC_LOOK_CRT?0u:c->filter==RC_CONFIG_FILTER_LINEAR?2u:1u;v=cycle(v,3,direction);if(!v&&!s->crt_available)v=direction>0?1u:2u;c->look=v?RC_LOOK_PLAIN:RC_LOOK_CRT;c->filter=v==2?RC_CONFIG_FILTER_LINEAR:RC_CONFIG_FILTER_NEAREST;break;}
-        case 1:{const unsigned v=!strcmp(c->palette,COLORS[1]);snprintf(c->palette,sizeof c->palette,"%s",COLORS[cycle(v,2,direction)]);break;}
+        case 1:{unsigned v=0;for(unsigned i=1;i<3;++i)if(!strcmp(c->palette,COLORS[i]))v=i;snprintf(c->palette,sizeof c->palette,"%s",COLORS[cycle(v,3,direction)]);break;}
         case 2:c->border=cycle(c->border,3,direction);break;
         case 3:c->fullscreen=!c->fullscreen;break;
         case 4:c->scale=!c->scale;break;
@@ -149,7 +149,9 @@ static void option_text(rc_setup *s,unsigned index,unsigned y,unsigned x,const c
 static void row(rc_setup *s,unsigned index,const char *label,const char *value){
     char line[37];
     snprintf(line,sizeof line," %-16.16s %15.15s ",label,value);
-    const unsigned y=s->page==RC_SETUP_MEDIA?5+index+(index>=4?2u:0u):6+index*2;
+    /* Without a choice of drive the rows below its place move up. */
+    if(s->page==RC_SETUP_MACHINE&&index==3&&!s->drive_choice)return;
+    const unsigned y=s->page==RC_SETUP_MEDIA?5+index+(index>=4?2u:0u):6+index*2-(s->page==RC_SETUP_MACHINE&&index>3&&!s->drive_choice?2u:0u);
     option_text(s,index,y,2,line);
 }
 void rc_setup_draw(rc_setup *s,const uint32_t palette[16],rc_frame *f){
@@ -200,11 +202,11 @@ void rc_setup_draw(rc_setup *s,const uint32_t palette[16],rc_frame *f){
         option_text(s,12,20,3,"DELETE CURRENT SLOT  DEL/Y");break;}
     case RC_SETUP_ABOUT:
         rc_tui_put(&s->tui,10,3,"NEW IN " RC_VERSION,1,6);
-        rc_tui_put(&s->tui,11,3,"DRIVE AND TAPE SOUNDS MATCH",14,6);
-        rc_tui_put(&s->tui,12,3,"MAIN SOUND MUTES THE SELF-TEST",14,6);
-        rc_tui_put(&s->tui,13,3,"CURSOR SKIPS DISABLED OPTIONS",14,6);
+        rc_tui_put(&s->tui,11,3,"FIRMWARE SCREEN LISTS MISSING ROMS",14,6);
+        rc_tui_put(&s->tui,12,3,"ONE DRIVE ROM IS ENOUGH",14,6);
+        rc_tui_put(&s->tui,13,3,"TUNED PALETTE WITH A TRUE BLUE",14,6);
         rc_tui_put(&s->tui,16,3,"ALSO IN 0.20",1,6);
-        rc_tui_put(&s->tui,17,3,"PALETTE, MODEL, VIDEO AND SID TYPE",14,6);
+        rc_tui_put(&s->tui,17,3,"DRIVE AND TAPE SOUNDS MATCH",14,6);
         rc_tui_put(&s->tui,18,3,"BASIC SAVES TO PRG, TAP AND D64",14,6);
         rc_tui_put(&s->tui,19,3,"RENAME FILES, DELETE FILES & STATES",14,6);
         rc_tui_put(&s->tui,20,3,"CONTROLLER FILE / FOLDER ACTIONS",14,6);

@@ -103,7 +103,7 @@ typedef struct rc_config {
     /* video */
     uint32_t look, aspect, scale, filter;
     uint32_t border;                    /* full, sixteen-pixel margin, no border */
-    char palette[128];                  /* default or color-corrected */
+    char palette[128];                  /* default, color-corrected or tuned */
     int fullscreen, vsync;
     /* sound: enabled is the mute switch, volume 0 to 100 percent */
     int sound, volume;

@@ -7,6 +7,7 @@ enum {RC_SETUP_VIDEO=1,RC_SETUP_AUDIO=2,RC_SETUP_RESTART=4,RC_SETUP_RESET=8,RC_S
 typedef struct rc_setup {rc_tui tui;rc_config *config;unsigned page,row;int active,crt_available,media_available,has_tape,tape_writable,tape_playing,tape_recording,has_disk,cartridge_available,has_cartridge,can_freeze;
     uint8_t state_status[RC_STATES_SLOTS];char state_time[RC_STATES_SLOTS][20],state_version[RC_STATES_VERSION];rc_states_thumb state_thumb;
     int keyboard_active,controller_present;
+    int drive_choice;                   /* both drive ROMs were found */
     int delete_confirm;
     uint32_t about_palette[256];
 } rc_setup;

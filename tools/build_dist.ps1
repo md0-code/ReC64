@@ -1,4 +1,4 @@
-<# Build a portable Windows test snapshot. Existing user settings are kept. #>
+<# Build the portable Windows folder. It holds no firmware; existing user settings and ROMs are kept. #>
 [CmdletBinding()]
 param([switch]$NoBuild)
 $ErrorActionPreference = 'Stop'
@@ -28,7 +28,6 @@ if (-not $NoBuild) {
     & "$repo/src/build.ps1" -NoTest -StaticRuntime
     & "$repo/src/build.ps1" -Arch arm64 -NoTest -StaticRuntime
 }
-$lock = Get-Content -LiteralPath "$repo/docs/sources.lock.json" -Raw | ConvertFrom-Json
 $version = (Get-Content -LiteralPath "$repo/src/VERSION" -Raw).Trim()
 $commit = git -C $repo rev-parse HEAD
 foreach ($arch in @('x64', 'arm64')) {
@@ -53,18 +52,9 @@ foreach ($arch in @('x64', 'arm64')) {
     Copy-Item -LiteralPath "$repo/README.md" -Destination "$target/README.md" -Force
     Copy-Item -LiteralPath "$repo/src/third_party/libyaml/LICENSE" -Destination "$target/docs/licenses/libyaml-MIT" -Force
     Copy-Item -LiteralPath "$build/_deps/sdl2-src/LICENSE.txt" -Destination "$target/docs/licenses/SDL-zlib" -Force
-    foreach ($rom in $lock.roms) {
-        $source = "$repo/roms/$($rom.file)"
-        if ((Get-Item -LiteralPath $source).Length -ne $rom.bytes -or
-            (Get-FileHash -LiteralPath $source -Algorithm SHA256).Hash.ToLowerInvariant() -ne $rom.sha256) {
-            throw "Firmware differs from the source lock: $($rom.file)"
-        }
-        Copy-Item -LiteralPath $source -Destination "$target/roms/$($rom.file)" -Force
-    }
     $manifest = [ordered]@{
         version = $version; architecture = "windows-$arch"; commit = $commit
         executable_sha256 = (Get-FileHash -LiteralPath "$target/rec64.exe" -Algorithm SHA256).Hash.ToLowerInvariant()
-        firmware = $lock.roms
     }
     $manifest | ConvertTo-Json -Depth 8 | Set-Content -LiteralPath "$target/docs/build.json" -Encoding utf8
     Write-Host "Ready: $target/rec64.exe ($version, $arch)"

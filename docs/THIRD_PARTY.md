@@ -8,11 +8,11 @@
 The source locks are in `sources.lock.json`. The CRT presenter uses the
 project's M-CRT shader. Program source is GPL-3.0-or-later (`LICENSE`).
 
-The five Commodore firmware images fetched into the ignored `roms/` folder
-retain their original owners' rights and are not ReC64 source. No firmware
-is committed to this repository. Each image's source, exact byte count and
-SHA-256 are recorded in the lock. The 1541 image is joined from the 325302-01
-lower half and the 901229-05 upper half.
+ReC64 includes no firmware: none is committed to this repository and none is
+part of a build. The Commodore images a user supplies retain their owners'
+rights. Their exact byte counts and SHA-256 checksums are listed in the
+README; the 1541 image is joined from the 325302-01 lower half and the
+901229-05 upper half.
 The test screen does not require firmware.
 
 SingleStepTests/65x02 test vectors are MIT-licensed, downloaded only into

@@ -17,15 +17,29 @@ Linux, on x64 and ARM64.
 
 ## Getting started
 
-Run `rec64.exe`. A PAL C64 starts at the BASIC prompt. Press **Ctrl+F1** to
+Supply the [firmware](#firmware), then run `rec64.exe`. A PAL C64 starts at
+the BASIC prompt. Press **Ctrl+F1** to
 load a program, disk, tape or cartridge, or drop a file on the window.
 **F12** opens setup, where every setting can be changed.
 
-ReC64 needs five original ROM images in `roms/`: BASIC, KERNAL revision 3,
-the character set, and the 1541 and 1541-II DOS. The portable Windows build
-contains them; in a source checkout `python tools/fetch_roms.py` downloads
-them. Images are recognised by content, so file names do not matter, but
-other revisions and replacement ROMs such as JiffyDOS are not accepted.
+## Firmware
+
+ReC64 contains no Commodore firmware. Copy the ROM images below into the
+`roms` folder beside the program; until they are there, ReC64 shows which
+ones are missing. File names do not matter: each image is recognised by its
+checksum. BASIC, KERNAL and the character generator are required, and at
+least one of the two drive ROMs.
+
+| ROM | What it is | Bytes | SHA-256 |
+| --- | --- | --- | --- |
+| BASIC 901226-01 | The BASIC interpreter | 8192 | `89878cea0a268734696de11c4bae593eaaa506465d2029d619c0e0cbccdfa62d` |
+| KERNAL 901227-03 | The operating system, revision 3 | 8192 | `83c60d47047d7beab8e5b7bf6f67f80daa088b7a6a27de0d7e016f6484042721` |
+| Characters 901225-01 | The screen font | 4096 | `fd0d53b8480e86163ac98998976c72cc58d5dd8eb824ed7b829774e74213b420` |
+| 1541 DOS 325302-01 + 901229-05 | Firmware of the 1541 disk drive | 16384 | `d1d45afb46fd4e2b48d93ca367b889d75654a3b7acf73044e51f6d880c09369e` |
+| 1541-II DOS 251968-03 | Firmware of the 1541-II disk drive | 16384 | `326c289c38753323d7e8167897447cf61ef35189d82eb8d75210ece949adda7c` |
+
+The 1541 image is one file: the 325302-01 ROM followed by the 901229-05 ROM.
+Other revisions and replacement ROMs such as JiffyDOS are not accepted.
 
 ## Keys
 
@@ -78,9 +92,9 @@ file and Delete removes it. With a disk inserted, `SAVE"NAME",8` writes into
 that image. Changed images are written back on eject and exit.
 
 Disks always run through the emulated drive and its own firmware, so custom
-loaders work. The Machine page selects the 1541 or 1541-II; the Media page
-holds the device number (8 to 11), fast loading, loading sounds and the
-default media folder. Fast loading runs the machine at full speed while the
+loaders work. With both drive ROMs present the Machine page selects the 1541
+or 1541-II; the Media page holds the device number (8 to 11), fast loading,
+loading sounds and the default media folder. Fast loading runs the machine at full speed while the
 drive or tape is busy, without changing what the C64 sees; loading sounds
 play only with fast loading off. Ctrl+F3 and Ctrl+F4 open the drive and tape
 controls: load, save, eject, and for tape also play, stop, rewind and record.
@@ -167,7 +181,7 @@ rejected with a line number.
 | `machine.options.georam` | `off`, `512k`, `1m`, `2m`, `4m` |
 | `video.look`, `video.filter` | `crt`, `plain`; `nearest`, `linear` |
 | `video.border` | `full`, `minimal`, `none` |
-| `video.palette` | `default` (follows PAL or NTSC), `color-corrected` |
+| `video.palette` | `default` (follows PAL or NTSC), `color-corrected`, `tuned` |
 | `media.cartridge.startup` | `true` keeps the cartridge between launches |
 | `ui.media_folder` | Folder the first file browser opens |
 
@@ -191,7 +205,7 @@ Windows needs Visual Studio's C++ tools, CMake 3.24 or later and Ninja:
 ```powershell
 ./src/build.ps1                # x64, into work/build-x64
 ./src/build.ps1 -Arch arm64    # needs the ARM64 compiler tools
-python tools/fetch_roms.py     # firmware into roms/
+python tools/fetch_roms.py     # firmware for the checks, into roms/
 ./work/build-x64/rec64.exe
 ./tools/build_dist.ps1         # portable build in dist/, ARM64 in dist/arm64/
 ```

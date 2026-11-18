@@ -16,6 +16,7 @@
 #include "joykeys.h"
 #include "../core/keymap.h"
 #include "../core/palette.h"
+#include "firmware.h"
 #include "../core/yamledit.h"
 #include "../host/host.h"
 #include "../platform/video.h"
@@ -33,6 +34,7 @@ typedef struct desktop {
     rc_host_audio audio;
     rc_wav wav;
     rc_config *config;const rc_rom_index *roms;rc_machine **owner;
+    rc_rom_index *rom_index;const rc_desktop_options *options;int firmware;      /* the screen asking for the ROMs is up */
     rc_pads pads;rc_joykeys joykeys;rc_keymap keymap;int suppress_text,freeze_pending;
     rc_media *media[RC_CONFIG_MEDIA];uint32_t media_entry[RC_CONFIG_MEDIA];
     rc_browser browser;rc_typist typist;
@@ -71,7 +73,8 @@ static void message(desktop *d,const char *text){rc_osd_show(&d->osd,(uint32_t)(
 static int picture(desktop *d,rc_frame *f,char *error,size_t cap) {
     media_status(d);if(!load_palette(d,error,cap))return 0;
     rc_frame guest;if(!rc_machine_frame(d->machine,&guest)){snprintf(error,cap,"No machine frame");return 0;}
-    if(d->browser.active){rc_browser_draw(&d->browser,d->palette,f);rc_tui_fit(&d->browser.tui,&guest,f);}
+    if(d->firmware){rc_firmware_draw(&d->setup.tui,d->roms,d->options->rom_folder);rc_tui_frame(&d->setup.tui,d->palette,f);rc_tui_fit(&d->setup.tui,&guest,f);}
+    else if(d->browser.active){rc_browser_draw(&d->browser,d->palette,f);rc_tui_fit(&d->browser.tui,&guest,f);}
     else if(d->setup.active){rc_setup_draw(&d->setup,d->palette,f);rc_tui_fit(&d->setup.tui,&guest,f);}
     else {rc_machine_status s;rc_machine_get_status(d->machine,&s);
         if(d->player.active&&s.sid_loaded){rc_sidplayer_draw(&d->player,s.sid_song,s.sid_cycles,s.sid_hz,s.sid_paused,d->palette,f);rc_tui_fit(&d->player.tui,&guest,f);}
@@ -191,7 +194,8 @@ static int audio_capture(void *ctx,const char *path,char *error,size_t cap) {
 }
 static size_t screen_text(void *ctx,char *out,size_t cap){desktop *d=ctx;size_t n;
     media_status(d);
-    if(d->browser.active)n=rc_browser_text(&d->browser,out,cap);
+    if(d->firmware){rc_firmware_draw(&d->setup.tui,d->roms,d->options->rom_folder);n=rc_tui_text(&d->setup.tui,out,cap);}
+    else if(d->browser.active)n=rc_browser_text(&d->browser,out,cap);
     else if(d->setup.active){rc_frame f;rc_setup_draw(&d->setup,d->palette,&f);n=rc_tui_text(&d->setup.tui,out,cap);}
     else {rc_frame f;char error[128];if(!picture(d,&f,error,sizeof error))return 0;
         if(d->transport||d->slot_picker)n=rc_tui_text(&d->setup.tui,out,cap);
@@ -235,7 +239,7 @@ static void states_status(desktop *d){
 static void media_status(desktop *d){
     states_status(d);
     d->setup.controller_present=rc_pads_any(&d->pads);d->setup.keyboard_active=rc_pads_keyboard(&d->pads,d->config->keyboard_joystick);
-    d->setup.media_available=media_available(d);d->setup.cartridge_available=d->browser.cartridges_enabled=d->browser.sid_enabled=0;d->setup.has_cartridge=d->setup.can_freeze=0;d->setup.has_disk=0;d->setup.has_tape=d->setup.tape_writable=d->setup.tape_playing=d->setup.tape_recording=0;
+    d->setup.drive_choice=rc_firmware_drive_choice(d->roms);d->setup.media_available=media_available(d);d->setup.cartridge_available=d->browser.cartridges_enabled=d->browser.sid_enabled=0;d->setup.has_cartridge=d->setup.can_freeze=0;d->setup.has_disk=0;d->setup.has_tape=d->setup.tape_writable=d->setup.tape_playing=d->setup.tape_recording=0;
     if(!d->setup.media_available)return;rc_media *media=rc_machine_media(d->machine,0);rc_tape_deck *deck=rc_machine_tape_deck(d->machine,0);
     d->setup.has_tape=media!=NULL;d->setup.tape_writable=media&&media->writable&&rc_media_extension_in(media->path,"tap");d->setup.tape_playing=deck&&deck->play;d->setup.tape_recording=deck&&deck->record;
     d->setup.has_disk=rc_machine_media(d->machine,2)!=NULL;
@@ -523,7 +527,7 @@ static void controller_key(desktop *d,rc_pad_key key,int down){
     }
     switch(key){
     case RC_PAD_A:
-        if(d->setup.active||d->transport||d->slot_picker)shell_key(d,"RETURN",1);
+        if(d->firmware||d->setup.active||d->transport||d->slot_picker)shell_key(d,"RETURN",1);
         else if(d->player.active)shell_key(d,"SPACE",1);
         break;
     case RC_PAD_B:
@@ -551,6 +555,22 @@ static void controller_key(desktop *d,rc_pad_key key,int down){
     default:break;
     }
     if(d->browser.active)d->browser.pad_ui=1;
+}
+static void startup_cartridge(desktop *d){
+    char error[256]="";const rc_config_media *startup=rc_config_media_find(d->config,"cartridge");
+    if(startup&&startup->startup&&startup->image[0]&&rc_machine_family(d->machine)->media_count>3){
+        char path[RC_CONFIG_PATH];snprintf(path,sizeof path,"%s",startup->image);
+        if(!mount_media(d,3,path,error,sizeof error))message(d,error);
+    }
+}
+/* Reads the ROM folders again and, once nothing is missing, starts the configured machine. */
+static void firmware_retry(desktop *d){
+    char error[256]="";rc_rom_index_free(d->rom_index);rc_rom_index_init(d->rom_index);
+    if(!rc_rom_index_scan(d->rom_index,d->options->rom_folders,d->options->rom_folder_count)||!rc_firmware_complete(d->roms)){message(d,"The ROMs are still missing");return;}
+    rc_firmware_apply(d->config,d->roms);
+    if(!restart(d,error,sizeof error)){message(d,error);return;}
+    d->firmware=0;startup_cartridge(d);media_options(d);media_status(d);input_config(d);
+    if(!store_config(d,error,sizeof error))message(d,error);
 }
 /* The same host controls serve SDL and the headless harness. */
 static int shell_key(void *ctx,const char *name,int down){
@@ -581,6 +601,10 @@ static int shell_key(void *ctx,const char *name,int down){
         if(down){d->config->fullscreen=!d->config->fullscreen;
             if(!apply_video(d,error,sizeof error)||!store_config(d,error,sizeof error))message(d,error);}
         return 1;
+    }
+    if(d->firmware){
+        if(down){if(!strcmp(bare,"ESCAPE")||!strcmp(bare,"F12"))d->quit=1;else if(!strcmp(bare,"RETURN")||!strcmp(bare,"ENTER")||!strcmp(bare,"KEYPAD ENTER"))firmware_retry(d);}
+        return d->quit?2:1;
     }
     if(ctrl&&(!strcmp(bare,"F1")||!strcmp(bare,"F2"))){if(down&&!browser_open(d,!strcmp(bare,"F2"),error,sizeof error))message(d,error);return 1;}
     if(ctrl&&(!strcmp(bare,"F3")||!strcmp(bare,"F4"))){if(down&&media_available(d))transport_open(d,!strcmp(bare,"F3")?1u:2u);return 1;}
@@ -720,12 +744,12 @@ static void control_write(void *ctx,const char *line) {
     }
     if(sent!=(size_t)n) d->io_failed=1;
 }
-int rc_desktop_run(rc_machine **owner,rc_config *c,const rc_rom_index *roms,const rc_desktop_options *o,char *error,size_t cap) {
-    rc_machine *m=*owner;desktop d={0};d.machine=m;d.owner=owner;d.config=c;d.roms=roms;d.hidden=o->hidden;d.running_config=*c;d.source_slot=-1;d.states_dirty=1;for(unsigned i=0;i<RC_CONFIG_MEDIA;++i)d.media_entry[i]=UINT32_MAX;rc_browser_init(&d.browser);d.browser.states_enabled=1;rc_browser_set_tape_reader(&d.browser,tape_directory,&d);rc_typist_init(&d.typist);
+int rc_desktop_run(rc_machine **owner,rc_config *c,rc_rom_index *roms,const rc_desktop_options *o,char *error,size_t cap) {
+    rc_machine *m=*owner;desktop d={0};d.machine=m;d.owner=owner;d.config=c;d.roms=d.rom_index=roms;d.options=o;d.hidden=o->hidden;d.running_config=*c;d.source_slot=-1;d.states_dirty=1;for(unsigned i=0;i<RC_CONFIG_MEDIA;++i)d.media_entry[i]=UINT32_MAX;rc_browser_init(&d.browser);d.browser.states_enabled=1;rc_browser_set_tape_reader(&d.browser,tape_directory,&d);rc_typist_init(&d.typist);
     rc_keymap_init(&d.keymap,m,c);rc_panel_init(&d.panel);rc_sidplayer_init(&d.player);rc_osk_init(&d.osk,virtual_key,&d);int keys[RC_CONFIG_STICK_KEYS];for(unsigned i=0;i<RC_CONFIG_STICK_KEYS;++i)keys[i]=(int)SDL_GetScancodeFromName(c->stick_keys[i]);rc_joykeys_init(&d.joykeys,keys,c->keyboard_joystick);
     int status=1;rc_harness *h=NULL;rc_setup_init(&d.setup,c);
     if(!apply_video(&d,error,cap))return 1;
-    if(strcmp(c->model,"test")&&!strcmp(rc_machine_family(m)->id,"stub")){d.setup.active=1;message(&d,"Required firmware missing: use roms/");}
+    d.firmware=strcmp(c->model,"test")&&!strcmp(rc_machine_family(m)->id,"stub");
     const int driven=o->script||o->control;
     if(SDL_Init(o->hidden?SDL_INIT_TIMER:SDL_INIT_VIDEO|SDL_INIT_AUDIO|SDL_INIT_TIMER)!=0) {
         snprintf(error,cap,"SDL: %s",SDL_GetError());return 1;
@@ -745,11 +769,7 @@ int rc_desktop_run(rc_machine **owner,rc_config *c,const rc_rom_index *roms,cons
     input_config(&d);
     /* Only the explicitly selected startup cartridge survives a new session. */
     for(unsigned i=0;i<c->media_count;++i)if(strcmp(c->media[i].key,"cartridge")||!c->media[i].startup)c->media[i].image[0]=0;
-    const rc_config_media *startup=rc_config_media_find(c,"cartridge");
-    if(startup&&startup->startup&&startup->image[0]&&rc_machine_family(d.machine)->media_count>3){
-        char path[RC_CONFIG_PATH];snprintf(path,sizeof path,"%s",startup->image);
-        if(!mount_media(&d,3,path,error,cap))message(&d,error);
-    }
+    startup_cartridge(&d);
     media_options(&d);media_status(&d);
     if(!store_config(&d,error,cap))message(&d,error);
     if(o->audio&&!audio_capture(&d,o->audio,error,cap)) goto done;
@@ -826,7 +846,7 @@ int rc_desktop_run(rc_machine **owner,rc_config *c,const rc_rom_index *roms,cons
             const int action=rc_harness_step(h);
             if(action==RC_HARNESS_QUIT) { status=rc_harness_status(h);if(status) snprintf(error,cap,"%s",rc_harness_error(h));break; }
             if(action==RC_HARNESS_IDLE) { rc_host_sleep_us(1000);continue; }
-        } else if(!o->hidden&&(d.setup.active||d.browser.active||d.slot_picker||d.paused)) {rc_host_sleep_us(16000);d.pace_dirty=1;}
+        } else if(!o->hidden&&(d.firmware||d.setup.active||d.browser.active||d.slot_picker||d.paused)) {rc_host_sleep_us(16000);d.pace_dirty=1;}
         else if(!o->hidden) {
             const int free_running=d.full||automatic_speed(&d);racing=free_running;
             const rc_pace_step step=rc_pace_next(&pace,free_running,SDL_GetPerformanceCounter(),rc_machine_time(m),ticks);

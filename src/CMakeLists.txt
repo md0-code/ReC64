@@ -69,7 +69,7 @@ add_library(rc_platform STATIC platform/video.c platform/audio.c platform/audios
 target_link_libraries(rc_platform PUBLIC rc_shell SDL2::SDL2-static)
 target_compile_definitions(rc_platform PUBLIC SDL_MAIN_HANDLED)
 rc_set_warnings(rc_platform)
-add_executable(rec64 app/rec64.c app/desktop.c app/browser.c app/tui.c app/setup.c app/pads.c app/joykeys.c
+add_executable(rec64 app/rec64.c app/desktop.c app/browser.c app/tui.c app/setup.c app/firmware.c app/pads.c app/joykeys.c
     app/panel.c app/sidplayer.c app/osk.c)
 if(WIN32)
     set_target_properties(rec64 PROPERTIES WIN32_EXECUTABLE TRUE)

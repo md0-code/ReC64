@@ -53,6 +53,7 @@ def main() -> int:
         key('RIGHT'); screen = text(); assert screen.index('DRIVE') < screen.index('TAPE') and 'FAST LOAD' in screen and 'EJECT' not in screen
         shot('media')
         key('RIGHT'); key('DOWN'); key('RETURN'); call('expect COLOR-CORRECTED')
+        key('RETURN'); call('expect TUNED')
         key('RETURN'); call('expect DEFAULT')
         key('LEFT', 2); key('DOWN'); key('RETURN'); key('F12'); call('frames 200')
         key('F12'); ntsc = shot('ntsc')

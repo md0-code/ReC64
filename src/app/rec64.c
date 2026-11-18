@@ -1,4 +1,5 @@
 #include "desktop.h"
+#include "firmware.h"
 #include "pads.h"
 #include "../host/host.h"
 #include "rc_version.h"
@@ -80,7 +81,18 @@ int main(int argc,char **argv) {
         char buffer[256];for(size_t i=0;i<roms.count;++i) printf("%s: %s\n",roms.files[i].path,rc_rom_file_describe(&roms,&roms.files[i],buffer,sizeof buffer));
         rc_rom_index_free(&roms);return 0;
     }
-    rc_machine *m=rc_machine_create(&c,&roms,error,sizeof error);
+    o.rom_folders=folders;o.rom_folder_count=3;o.rom_folder=program_roms[0]?program_roms:"roms";
+    rc_machine *m=NULL;
+    if(strcmp(c.model,"test")&&!rc_firmware_complete(&roms)) {
+        /* Without its firmware the shell runs the test machine behind a screen that asks for the ROMs. */
+        char report[2048];rc_firmware_report(&roms,o.rom_folder,report,sizeof report);fputs(report,stderr);
+        if(!o.hidden) rc_host_make_folders(o.rom_folder);
+        rc_config stub;rc_config_defaults(&stub);snprintf(stub.model,sizeof stub.model,"test");
+        m=rc_machine_create(&stub,&roms,error,sizeof error);
+    } else {
+        rc_firmware_apply(&c,&roms);
+        m=rc_machine_create(&c,&roms,error,sizeof error);
+    }
     const int status=m?rc_desktop_run(&m,&c,&roms,&o,error,sizeof error):1;
     if(status) fprintf(stderr,"%s\n",error);
     rc_machine_destroy(m);rc_rom_index_free(&roms);return status;
