@@ -30,7 +30,8 @@ typedef enum rc_pad_key {
     RC_PAD_SHOULDER_RIGHT,              /* full speed */
     RC_PAD_START,                       /* open and close the setup screen (the Guide button too) */
     RC_PAD_BACK,                        /* Select / Back: on-screen keyboard */
-    RC_PAD_X, RC_PAD_Y, RC_PAD_TRIGGER_LEFT, RC_PAD_TRIGGER_RIGHT
+    RC_PAD_X, RC_PAD_Y, RC_PAD_TRIGGER_LEFT, RC_PAD_TRIGGER_RIGHT,
+    RC_PAD_COLD_BOOT, RC_PAD_EXIT, RC_PAD_L3, RC_PAD_R3, RC_PAD_SCREENSHOT
 } rc_pad_key;
 
 typedef struct rc_pads {
@@ -38,6 +39,7 @@ typedef struct rc_pads {
     int held;                           /* the direction held (a rc_pad_key), RC_PAD_NONE for none */
     uint32_t next_ms;                   /* when a held direction repeats */
     uint8_t trigger[RC_PADS_MAX][2];    /* rising edges, one action per squeeze */
+    uint8_t start[RC_PADS_MAX];         /* idle, held for a tap, held after a shortcut */
 } rc_pads;
 
 typedef enum rc_pads_result {

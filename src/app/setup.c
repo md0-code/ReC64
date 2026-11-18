@@ -129,18 +129,18 @@ void rc_setup_draw(rc_setup *s,const uint32_t palette[16],rc_frame *f){
         rc_tui_put(&s->tui,18,3,"SAVE CURRENT SLOT  CTRL+F5",(uint8_t)(s->row==10?6:14),(uint8_t)(s->row==10?14:6));
         const int can_load=s->state_status[c->state_slot-1]==1;
         rc_tui_put(&s->tui,19,3,"LOAD CURRENT SLOT  CTRL+F6",(uint8_t)(can_load?(s->row==11?6:14):12),(uint8_t)(can_load&&s->row==11?14:6));const int can_delete=s->state_status[c->state_slot-1]!=0;
-        rc_tui_put(&s->tui,20,3,"DELETE CURRENT SLOT  DEL",(uint8_t)(can_delete?(s->row==12?6:14):12),(uint8_t)(can_delete&&s->row==12?14:6));break;}
+        rc_tui_put(&s->tui,20,3,"DELETE CURRENT SLOT  DEL/Y",(uint8_t)(can_delete?(s->row==12?6:14):12),(uint8_t)(can_delete&&s->row==12?14:6));break;}
     case RC_SETUP_ABOUT:
         rc_tui_put(&s->tui,10,3,"NEW IN " RC_VERSION,1,6);
-        rc_tui_put(&s->tui,11,3,"1541 SELF-TEST SOUND AT STARTUP",14,6);
-        rc_tui_put(&s->tui,12,3,"FAST LOAD MUTES LOADING SOUNDS",14,6);
-        rc_tui_put(&s->tui,13,3,"1541 DISK SOUNDS / TAP SIGNAL",14,6);
-        rc_tui_put(&s->tui,14,3,"PRG, P00 AND T64 LOAD SILENTLY",14,6);
+        rc_tui_put(&s->tui,11,3,"HOLD START + Y: COLD BOOT",14,6);
+        rc_tui_put(&s->tui,12,3,"HOLD START + X: EXIT",14,6);
+        rc_tui_put(&s->tui,13,3,"CONTROLLER FILE AND FOLDER ACTIONS",14,6);
+        rc_tui_put(&s->tui,14,3,"EDIT FILENAMES WITH THE D-PAD",14,6);
         rc_tui_put(&s->tui,16,3,"ALSO IN 0.20",1,6);
         rc_tui_put(&s->tui,17,3,"PALETTE, MODEL, VIDEO AND SID TYPE",14,6);
         rc_tui_put(&s->tui,18,3,"BASIC SAVES TO PRG, TAP AND D64",14,6);
         rc_tui_put(&s->tui,19,3,"RENAME FILES, DELETE FILES & STATES",14,6);
-        rc_tui_put(&s->tui,20,3,"DEFAULT MEDIA FOLDER",14,6);
+        rc_tui_put(&s->tui,20,3,"DEFAULT FOLDER / 1541 SELF-TEST",14,6);
         break;
     }
     if(s->page==RC_SETUP_ABOUT)rc_tui_put(&s->tui,24,1,"LEFT/RIGHT PAGE  F12 CLOSE",14,6);
@@ -148,7 +148,7 @@ void rc_setup_draw(rc_setup *s,const uint32_t palette[16],rc_frame *f){
         rc_tui_put(&s->tui,22,1,"LEFT/RIGHT PAGE  UP/DOWN SELECT",14,6);
         rc_tui_put(&s->tui,24,1,"ENTER CHANGE  +/- VALUE  F12 CLOSE",14,6);
     }
-    if(s->delete_confirm){rc_tui_box(&s->tui,9,3,6,34);for(unsigned y=10;y<14;++y)rc_tui_put(&s->tui,y,4,"                                ",14,6);rc_tui_put(&s->tui,10,5,"DELETE CURRENT SNAPSHOT?",14,6);rc_tui_put(&s->tui,13,5,"ENTER/Y DELETE  ESC/N CANCEL",14,6);}
+    if(s->delete_confirm){rc_tui_box(&s->tui,9,3,6,34);for(unsigned y=10;y<14;++y)rc_tui_put(&s->tui,y,4,"                                ",14,6);rc_tui_put(&s->tui,10,5,"DELETE CURRENT SNAPSHOT?",14,6);rc_tui_put(&s->tui,13,5,"ENTER/A DELETE  ESC/B CANCEL",14,6);}
     rc_tui_frame(&s->tui,palette,f);
     if(s->page==RC_SETUP_ABOUT&&palette){memcpy(s->about_palette,palette,16*sizeof *palette);for(unsigned i=0;i<240;++i){const uint32_t color=RC_ABOUT_COLORS[i],a=color>>24;uint32_t blended=0;for(unsigned shift=0;shift<=16;shift+=8)blended|=((((color>>shift)&255u)*a+((palette[6]>>shift)&255u)*(255u-a)+127u)/255u)<<shift;s->about_palette[16+i]=blended;}
         const unsigned left=(RC_TUI_W-RC_ABOUT_W)/2;

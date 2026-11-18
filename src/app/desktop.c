@@ -167,7 +167,7 @@ static void input_config(desktop *d){
     if(!d->hidden){int mouse=0;for(unsigned p=0;p<2;++p)if(d->config->sticks[p].type==RC_CONTROL_MOUSE1351)mouse=1;SDL_SetRelativeMouseMode(mouse&&!d->slot_picker&&!d->setup.active&&!d->browser.active&&!d->transport&&!d->paused&&!d->osk.visible?SDL_TRUE:SDL_FALSE);}
 }
 static void input_poll(desktop *d){
-    if(d->setup.active||d->browser.active||d->paused||d->osk.visible||d->transport||d->slot_picker)return;
+    if(d->setup.active||d->browser.active||d->paused||d->osk.visible||d->transport||d->slot_picker||d->player.active)return;
     const unsigned keyboard=rc_joykeys_held(&d->joykeys);
     for(unsigned p=0;p<2;++p){const rc_config_stick *st=&d->config->sticks[p];
         if(st->type==RC_CONTROL_JOYSTICK){unsigned held=st->device==RC_STICK_CONTROLLER?rc_pads_joystick(&d->pads,st->pad-1):0;
@@ -180,7 +180,7 @@ static void input_poll(desktop *d){
         }else if(st->type==RC_CONTROL_NONE)rc_machine_pointer(d->machine,p,st->type,0,0,0);
     }
 }
-static void reset(void *ctx,int power) { desktop *d=ctx;release_keys(d);if(power!=2){d->setup.active=0;d->transport=0;d->slot_picker=0;rc_browser_close(&d->browser);rc_machine_reset(d->machine,power==1?RC_RESET_COLD:RC_RESET_WARM);d->pace_dirty=1;input_config(d);} }
+static void reset(void *ctx,int power) { desktop *d=ctx;release_keys(d);if(power!=2){d->setup.active=d->setup.delete_confirm=0;d->transport=0;d->slot_picker=0;rc_browser_close(&d->browser);rc_osk_open(&d->osk,0);rc_machine_reset(d->machine,power==1?RC_RESET_COLD:RC_RESET_WARM);d->pace_dirty=1;input_config(d);} }
 static void speed(void *ctx,int full) { desktop *d=ctx;d->full=full!=0;d->pace_dirty=1; }
 static int audio_capture(void *ctx,const char *path,char *error,size_t cap) {
     desktop *d=ctx;
@@ -514,19 +514,43 @@ static void controller_key(desktop *d,rc_pad_key key,int down){
         rc_osk_key(&d->osk,key==RC_PAD_A?"A":"B",down);if(!d->osk.visible)input_config(d);return;
     }
     if(!down)return;
+    if(d->browser.active&&((key>=RC_PAD_UP&&key<=RC_PAD_SHOULDER_RIGHT)||
+        key==RC_PAD_X||key==RC_PAD_Y||key==RC_PAD_BACK)){
+        char error[256]="";
+        const unsigned action=rc_browser_pad(&d->browser,key);
+        if(action&&!browser_action(d,action,error,sizeof error))rc_browser_error(&d->browser,error);
+        return;
+    }
     switch(key){
-    case RC_PAD_A:if(d->setup.active||d->browser.active||d->transport||d->slot_picker)shell_key(d,"RETURN",1);break;
-    case RC_PAD_B:case RC_PAD_START:shell_key(d,"F12",1);break;
+    case RC_PAD_A:
+        if(d->setup.active||d->transport||d->slot_picker)shell_key(d,"RETURN",1);
+        else if(d->player.active)shell_key(d,"SPACE",1);
+        break;
+    case RC_PAD_B:
+        if(d->setup.delete_confirm||(d->player.active&&!d->setup.active&&!d->transport&&!d->slot_picker))
+            shell_key(d,"ESCAPE",1);
+        else shell_key(d,"F12",1);
+        break;
+    case RC_PAD_START:shell_key(d,"F12",1);break;
     case RC_PAD_X:shell_key(d,"Ctrl+F1",1);break;
-    case RC_PAD_Y:if(media_available(d))transport_open(d,d->transport?d->transport:1u);break;
+    case RC_PAD_Y:
+        if(d->setup.active&&d->setup.page==RC_SETUP_STATES)shell_key(d,"DELETE",1);
+        else if(media_available(d))transport_open(d,d->transport?d->transport:1u);
+        break;
     case RC_PAD_SHOULDER_LEFT:shell_key(d,"Shift+F11",1);break;
     case RC_PAD_SHOULDER_RIGHT:shell_key(d,"F10",1);break;
     case RC_PAD_TRIGGER_LEFT:shell_key(d,"Ctrl+F5",1);break;
     case RC_PAD_TRIGGER_RIGHT:shell_key(d,"Ctrl+F6",1);break;
     case RC_PAD_BACK:shell_key(d,"Shift+F9",1);break;
+    case RC_PAD_COLD_BOOT:shell_key(d,"Ctrl+F12",1);break;
+    case RC_PAD_EXIT:shell_key(d,"Shift+F12",1);break;
+    case RC_PAD_L3:shell_key(d,"Pause",1);break;
+    case RC_PAD_R3:shell_key(d,"F9",1);break;
+    case RC_PAD_SCREENSHOT:shell_key(d,"Print Screen",1);break;
     case RC_PAD_UP:case RC_PAD_DOWN:case RC_PAD_LEFT:case RC_PAD_RIGHT:{const char *names[]={"","UP","DOWN","LEFT","RIGHT"};shell_key(d,names[key],1);break;}
     default:break;
     }
+    if(d->browser.active)d->browser.pad_ui=1;
 }
 /* The same host controls serve SDL and the headless harness. */
 static int shell_key(void *ctx,const char *name,int down){
@@ -536,8 +560,12 @@ static int shell_key(void *ctx,const char *name,int down){
     const int ctrl=strstr(key,"CTRL+")!=NULL,alt=strstr(key,"ALT+")!=NULL,shifted=strstr(key,"SHIFT+")!=NULL;
     char error[256]="";
     if(!strncmp(key,"PAD ",4)){
-        static const char *const names[]={"UP","DOWN","LEFT","RIGHT","A","B","LB","RB","START","BACK","X","Y","LT","RT"};
-        for(unsigned i=0;i<sizeof names/sizeof names[0];++i)if(!strcmp(key+4,names[i])){controller_key(d,(rc_pad_key)(i+1),down);return 1;}
+        static const char *const names[]={"UP","DOWN","LEFT","RIGHT","A","B","LB","RB","START","BACK","X","Y","LT","RT",
+            "START+Y","START+X","L3","R3","START+R3"};
+        for(unsigned i=0;i<sizeof names/sizeof names[0];++i)if(!strcmp(key+4,names[i])){
+            controller_key(d,(rc_pad_key)(i+1),down);
+            return d->quit?2:1;
+        }
         return 0;
     }
     if(!strcmp(bare,"F11")){if(down)keyboard_switch(d,shifted);return 1;}
@@ -562,6 +590,9 @@ static int shell_key(void *ctx,const char *name,int down){
         return 1;
     }
     if(!strcmp(bare,"F10")){if(down){speed(d,!d->full);message(d,d->full?"Full speed (sound muted)":"100% speed");}return 1;}
+    if(!strcmp(bare,"PRINTSCREEN")||!strcmp(bare,"PRINT SCREEN")){
+        if(down){char path[RC_HOST_PATH];rc_host_make_folders("work/screenshots");snprintf(path,sizeof path,"work/screenshots/rec64-%llu.png",(unsigned long long)d->frames);if(shot(d,path,error,sizeof error))message(d,path);else message(d,error);}return 1;
+    }
     if(alt&&(!strcmp(bare,"F")||!strcmp(bare,"S")||!strcmp(bare,"T"))){
         if(!down)return 1;
         const int tape=!strcmp(bare,"T"),toggle_fast=!strcmp(bare,"F");
@@ -603,6 +634,7 @@ static int shell_key(void *ctx,const char *name,int down){
         if(d->slot_picker){slot_key(d,"F12");return 1;}
         if(d->browser.active){close_browser(d);return 1;}
         if(d->transport){d->transport=0;input_config(d);return 1;}
+        if(d->setup.active&&d->setup.delete_confirm){d->setup.delete_confirm=0;return 1;}
         if(!d->setup.active){release_keys(d);d->osd.text[0]=0;d->setup.active=1;d->setup.row=d->setup.page==RC_SETUP_STATES?(unsigned)d->config->state_slot-1u:0;d->states_dirty=1;}
         else {d->setup.active=0;if(d->restart_pending){if(!restart(d,error,sizeof error)){restore_machine_config(d);message(d,error);}d->restart_pending=0;}if(!store_config(d,error,sizeof error))message(d,error);}
         d->pace_dirty=1;input_config(d);return 1;
@@ -651,9 +683,6 @@ static int shell_key(void *ctx,const char *name,int down){
     }
     if(!strcmp(bare,"PAUSE")){if(down){d->paused=!d->paused;d->pace_dirty=1;release_keys(d);message(d,d->paused?"Paused":"Running");input_config(d);}return 1;}
     if(alt&&(!strcmp(bare,"F")||!strcmp(bare,"S"))){if(down)message(d,"Control unavailable");return 1;}
-    if(!strcmp(bare,"PRINTSCREEN")||!strcmp(bare,"PRINT SCREEN")){
-        if(down){char path[RC_HOST_PATH];rc_host_make_folders("work/screenshots");snprintf(path,sizeof path,"work/screenshots/rec64-%llu.png",(unsigned long long)d->frames);if(shot(d,path,error,sizeof error))message(d,path);else message(d,error);}return 1;
-    }
     /* Headless host-key commands use the same configurable physical map. */
     if(down&&rc_typist_busy(&d->typist))release_keys(d);
     const SDL_Scancode sc=SDL_GetScancodeFromName(name);
@@ -750,9 +779,9 @@ int rc_desktop_run(rc_machine **owner,rc_config *c,const rc_rom_index *roms,cons
                 if(e.type==SDL_QUIT) { status=0;goto done; }
                 rc_pad_key pad=RC_PAD_NONE;const rc_pads_result change=rc_pads_event(&d.pads,&e,&pad);
                 if(change==RC_PADS_CHANGED){if(!rc_pads_any(&d.pads))d.config->keyboard_joystick=1;input_config(&d);input_poll(&d);message(&d,rc_pads_any(&d.pads)?"Controller connected: keyboard joystick off":"Controller disconnected: keyboard joystick on");}
-                if(change==RC_PADS_KEY){controller_key(&d,pad,1);continue;}
+                if(change==RC_PADS_KEY){controller_key(&d,pad,1);if(d.quit)break;continue;}
                 if(e.type==SDL_CONTROLLERBUTTONUP&&e.cbutton.button==SDL_CONTROLLER_BUTTON_A){controller_key(&d,RC_PAD_A,0);continue;}
-                if(e.type==SDL_WINDOWEVENT&&e.window.event==SDL_WINDOWEVENT_FOCUS_LOST)release_keys(&d);
+                if(e.type==SDL_WINDOWEVENT&&e.window.event==SDL_WINDOWEVENT_FOCUS_LOST){memset(d.pads.start,0,sizeof d.pads.start);release_keys(&d);}
                 else if(e.type==SDL_DROPFILE){if(!drop(&d,e.drop.file,error,cap))message(&d,error);SDL_free(e.drop.file);}
                 else if(e.type==SDL_TEXTINPUT){d.freeze_pending=0;if(d.browser.active){if(!d.suppress_text)rc_browser_input(&d.browser,e.text.text);}
                     else if(!d.setup.active&&!d.transport&&!d.slot_picker&&!d.paused&&!d.suppress_text){rc_typist_cancel(&d.typist);if(!rc_keymap_text(&d.keymap,e.text.text))message(&d,"Character unavailable on C64 keyboard");}}
@@ -790,7 +819,7 @@ int rc_desktop_run(rc_machine **owner,rc_config *c,const rc_rom_index *roms,cons
 
             }
         }
-        if(!o->hidden){rc_pad_key pad;if((d.setup.active||d.browser.active||d.transport||d.osk.visible||d.slot_picker)&&rc_pads_repeat(&d.pads,SDL_GetTicks(),&pad))controller_key(&d,pad,1);input_poll(&d);}
+        if(!o->hidden){rc_pad_key pad;if((d.setup.active||d.browser.active||d.transport||d.osk.visible||d.slot_picker||d.player.active)&&rc_pads_repeat(&d.pads,SDL_GetTicks(),&pad))controller_key(&d,pad,1);input_poll(&d);}
         m=d.machine;
         if(d.pace_dirty){rc_pace_init(&pace,SDL_GetPerformanceFrequency(),rc_machine_clock(m),100);rc_pace_reset(&pace,SDL_GetPerformanceCounter(),rc_machine_time(m));d.pace_dirty=0;}
         uint64_t ticks=rc_machine_frame_period(m);int present=1,input_frame=1,racing=0;

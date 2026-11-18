@@ -64,6 +64,8 @@ Controller d-pad/left stick moves and A fires. B opens F12, X opens Load,
 Y opens controls, LB swaps ports, RB toggles full speed, and LT/RT quick
 save/load. Connecting a controller disables the keyboard joystick;
 disconnecting the last controller enables it again.
+Hold Start and press Y for a cold boot or X to exit. The file browser
+supports controller file management and name entry with the D-pad or left stick.
 
 SID files open in the music player with title, author, release, elapsed time
 and sub-tune selection. Left/Right changes tune, Space pauses, and Escape

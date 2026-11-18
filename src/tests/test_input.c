@@ -20,6 +20,20 @@ int main(void){
     CHECK(!SDL_JoystickSetVirtualButton(virtual,SDL_CONTROLLER_BUTTON_B,1));SDL_JoystickUpdate();CHECK(!(rc_pads_joystick(&pads,0)&RC_JOY_FIRE2));
     rc_pad_key key;event=(SDL_Event){0};event.type=SDL_CONTROLLERBUTTONDOWN;event.cbutton.which=SDL_JoystickInstanceID(virtual);event.cbutton.button=SDL_CONTROLLER_BUTTON_Y;
     CHECK(rc_pads_event(&pads,&event,&key)==RC_PADS_KEY&&key==RC_PAD_Y);
+    const SDL_GameControllerButton shortcuts[]={SDL_CONTROLLER_BUTTON_Y,SDL_CONTROLLER_BUTTON_X};
+    const rc_pad_key actions[]={RC_PAD_COLD_BOOT,RC_PAD_EXIT};
+    for(unsigned i=0;i<2;++i){
+        event.type=SDL_CONTROLLERBUTTONDOWN;event.cbutton.button=SDL_CONTROLLER_BUTTON_START;
+        CHECK(rc_pads_event(&pads,&event,&key)==RC_PADS_NONE);
+        event.cbutton.button=(Uint8)shortcuts[i];
+        CHECK(rc_pads_event(&pads,&event,&key)==RC_PADS_KEY&&key==actions[i]);
+        event.type=SDL_CONTROLLERBUTTONUP;event.cbutton.button=SDL_CONTROLLER_BUTTON_START;
+        CHECK(rc_pads_event(&pads,&event,&key)==RC_PADS_NONE);
+    }
+    event.type=SDL_CONTROLLERBUTTONDOWN;
+    CHECK(rc_pads_event(&pads,&event,&key)==RC_PADS_NONE);
+    event.type=SDL_CONTROLLERBUTTONUP;
+    CHECK(rc_pads_event(&pads,&event,&key)==RC_PADS_KEY&&key==RC_PAD_START);
     event.type=SDL_CONTROLLERAXISMOTION;event.caxis.which=SDL_JoystickInstanceID(virtual);event.caxis.axis=SDL_CONTROLLER_AXIS_TRIGGERRIGHT;event.caxis.value=25000;
     CHECK(rc_pads_event(&pads,&event,&key)==RC_PADS_KEY&&key==RC_PAD_TRIGGER_RIGHT);CHECK(rc_pads_event(&pads,&event,&key)==RC_PADS_NONE);
     event.caxis.value=0;CHECK(rc_pads_event(&pads,&event,&key)==RC_PADS_NONE);event.caxis.value=25000;CHECK(rc_pads_event(&pads,&event,&key)==RC_PADS_KEY);

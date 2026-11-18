@@ -13,6 +13,9 @@ def main():
     parser.add_argument('--binary', type=Path, default=ROOT/'work/build-x64/rec64.exe')
     args = parser.parse_args()
     work = ROOT/'work/verify-controls'; work.mkdir(parents=True, exist_ok=True)
+    media = work/'pad-media'; media.mkdir(exist_ok=True)
+    for name in ('AB.PRG', 'BA.PRG', 'AB.TAP'):
+        (media/name).unlink(missing_ok=True)
     config = work/'rec64.yaml'
     config.write_text(json.dumps({'machine': {'model': 'c64-pal', 'options': {'sid': 'default'}}, 'video': {'border': 'none'},
                                  'controllers': {'keyboard_joystick': True}, 'ui': {'state_slot': 3}}))
@@ -32,6 +35,9 @@ def main():
         for _ in range(count): call('key '+name)
 
     def text(): return call('text')['text']
+
+    def pad(*buttons):
+        for button in buttons: key('Pad '+button)
 
     def shot(name, size=(320, 200)):
         path = work/f'{name}.png'; call('shot '+path.as_posix())
@@ -65,7 +71,45 @@ def main():
         # A live border change keeps settings and the guest at the same dimensions.
         key('Pad B'); key('LEFT', 3); key('DOWN', 2); key('Pad A'); shot('full-border-settings', (384, 272))
         key('Pad A'); shot('minimal-border-settings', (352, 232)); key('Pad B'); shot('minimal-border-guest', (352, 232))
-        print('Settings/controls separation, borders, F11, controller actions and session slot picker passed')
+
+        # Folder, save format, filename, search and file actions use the controller.
+        pad('B', 'Left', 'Up', 'A', 'Down', 'A')
+        call('expect X USE CURRENT FOLDER')
+        pad('X', 'B')
+        call('type 10 PRINT 42'); call('enter'); call('frames 4')
+        pad('Y','Down','A','RB','Right','Left','RB','Y','Up','Right','Up','Up')
+        call('expect NAME: AB.PRG')
+        shot('pad-filename', (352, 232))
+        pad('A'); assert (media/'AB.PRG').exists()
+
+        pad('Y','Down','A','Back','Up','A','X','Y','Up','Up','Right','Up')
+        call('expect RENAME SELECTED FILE')
+        shot('pad-rename', (352, 232))
+        pad('A'); assert (media/'BA.PRG').exists() and not (media/'AB.PRG').exists()
+        pad('Y','B'); assert (media/'BA.PRG').exists()
+        pad('Y','A'); assert not (media/'BA.PRG').exists()
+        pad('RB','Right','RB','Y','Up','Right','Up','Up','A')
+        assert (media/'AB.TAP').exists()
+        pad('X','Down','X','Y','Right'); call('expect AB.TAP'); pad('B')
+
+        # Delete the active snapshot directly and cancel without leaving States.
+        pad('B','Left','Left','Left')
+        call('expect STATES')
+        pad('Y'); call('expect DELETE CURRENT SNAPSHOT?')
+        pad('B'); call('expect STATES'); assert (work/'states/c64-pal/slot-4.rcs').exists()
+        pad('Y','A'); assert not (work/'states/c64-pal/slot-4.rcs').exists()
+
+        call('poke 3000 42')
+        pad('Start+Y'); call('expect Cold boot')
+        assert call('peek 3000')['data'] != '42'
+        call('frames 150'); call('expect READY.')
+        pad('L3'); call('expect Paused'); pad('L3'); call('expect Running')
+        call('frames 130')
+        pad('R3'); call('expect D8:'); pad('R3')
+        pad('Start+R3'); call('expect work/screenshots/rec64-')
+        pad('Start+X')
+        assert proc.wait(timeout=10)==0
+        print('Controller menus, file and snapshot management, cold boot and exit passed')
     finally:
         if proc.poll() is None: call('quit')
         proc.wait(timeout=10); log.close()

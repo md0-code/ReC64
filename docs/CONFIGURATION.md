@@ -145,17 +145,21 @@ Controller mapping:
 | --- | --- |
 | D-pad / left stick | Movement on the assigned C64 port; menu navigation |
 | A | Fire; accept in menus |
-| B | F12 menu; close the current dialog |
-| X | Open the Load browser (Ctrl+F1) |
-| Y | Open/close the media control OSD |
-| LB | Swap control ports (Shift+F11) |
-| RB | Full speed on/off (F10) |
+| B | Open Setup or go back from the current dialog |
+| X | Open Load, insert media from Load, use the current folder, or rename a file in Save |
+| Y | Open or close media controls, delete a file in Save, or delete the selected snapshot in States |
+| LB / RB | Swap ports / toggle full speed. In Load, page the list. In Save, switch fields |
 | LT | Quick save (Ctrl+F5) |
 | RT | Quick load (Ctrl+F6) |
-| Start / Back | F12 menu / on-screen keyboard |
+| Start or Guide | Open or close Setup. Start acts on release |
+| Hold Start + Y / X | Cold boot / exit |
+| Back | On-screen keyboard, or Find by name in a browser list |
+| L3 / R3 | Pause or resume / toggle live status |
+| Hold Start + R3 | Save a screenshot |
 
 Each trigger acts once per squeeze. In the on-screen keyboard, A holds
-the selected key and B closes it.
+the selected key and B closes it. In the SID player, Left/Right selects a
+sub-tune, A pauses or resumes, and B returns to the file list.
 
 Each port's `type` is `joystick`, `mouse1351`, `paddles`, or `none`; its
 `device` is `none`, `controller 1`, `controller 2`, or
@@ -213,6 +217,11 @@ after confirmation. In the name field, Ctrl+A selects the whole name for replace
 Backspace edits it and Enter saves. The matching extension is added when
 missing. Replacing an existing file requires a separate Enter/Y confirmation;
 Escape/N cancels that replacement. Escape closes either browser.
+On a controller, LB/RB switches fields and Left/Right changes the selected
+format. In the Name, Rename and Find fields, Up/Down cycles a character
+and Left/Right moves the cursor. Move right past the last character to
+append another one. X erases a character, Y clears the text, A confirms
+and B goes back. Save and Rename retain the file extension.
 
 Ctrl+F1 opens Load and Ctrl+F2 opens Save, including from setup. Dropped
 PRG/P00 files load and run; dropped D64/T64/TAP files open their contents.
@@ -229,7 +238,7 @@ Play, Stop, Rewind, Record and Eject actions. Unavailable actions are hidden.
 The Machine settings page selects the drive type (1541 or 1541-II).
 The Media settings page selects device 8–11, disk/tape fast loading,
 sounds and auto-load. **Default media folder** opens a folder selector:
-Enter opens a folder, Space selects the current folder, and Escape cancels.
+Enter/A opens a folder, Space/X selects the current folder, and Escape/B cancels.
 `ui.media_folder` stores it for the first browser opened after startup;
 later browsers remember the last visited folder. Relative paths are relative
 to the configuration file. Alt+F toggles drive fast loading, Alt+S drive sounds, and Alt+T
@@ -266,7 +275,7 @@ That selection serves both quick actions for the rest of the session.
 The previous slot remains highlighted at the next launch and needs confirmation.
 The States page has ten slots per model, a guest-screen preview, save time,
 and Save/Load/Delete actions. Up/Down chooses a slot; Enter on a slot selects it.
-Delete or the Delete row removes the current snapshot after confirmation;
+Delete, controller Y, or the Delete row removes the current snapshot after confirmation;
 Escape/N cancels. An invalid snapshot can also be deleted.
 `ui.state_slot` remembers the selection (1–10). Files are stored atomically
 at `states/<model>/slot-N.rcs` beside the configuration file. The Load browser
@@ -282,7 +291,8 @@ from full speed reanchors pacing immediately.
 
 The headless `drop FILE` command takes the same path as a native drop;
 `insert SLOT FILE` mounts only, for explicit LOAD or tape-control commands.
-Headless `key Pad A|B|X|Y|LB|RB|LT|RT|Start|Back` invokes the same controller
-actions; `key Pad Up|Down|Left|Right` navigates open menus.
+Headless `key Pad A|B|X|Y|LB|RB|LT|RT|Start|Back|L3|R3` invokes the same controller
+actions. `key Pad Up|Down|Left|Right` navigates open menus. Use `key Pad Start+Y`,
+`key Pad Start+X` or `key Pad Start+R3` for the Start shortcuts.
 Typing while a file dialog is active edits its search/name field, and
 `enter` activates the current dialog selection.

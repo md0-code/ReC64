@@ -2,6 +2,7 @@
 #ifndef RC_BROWSER_H
 #define RC_BROWSER_H
 #include "tui.h"
+#include "pads.h"
 #include "../core/media.h"
 #define RC_BROWSER_NAME 256
 enum {RC_BROWSER_NONE,RC_BROWSER_CLOSE,RC_BROWSER_LOAD,RC_BROWSER_INSERT,RC_BROWSER_SAVE_PRG,RC_BROWSER_SAVE_TAP,RC_BROWSER_SAVE_D64,RC_BROWSER_FOLDER,RC_BROWSER_RENAME,RC_BROWSER_DELETE};
@@ -18,6 +19,8 @@ typedef struct rc_browser {
     rc_browser_result result;
     rc_browser_tape_list_fn tape_list;void *tape_ctx;
     int folders_only,renaming;
+    int pad_ui,finding;
+    size_t name_cursor;
     char edit_name[RC_BROWSER_NAME],original_name[RC_BROWSER_NAME];
 } rc_browser;
 void rc_browser_init(rc_browser *b);
@@ -29,6 +32,7 @@ int rc_browser_refresh(rc_browser *b,char *error,size_t cap);
 /* Enters image contents, or returns LOAD for a direct program. */
 unsigned rc_browser_file(rc_browser *b,const char *path,char *error,size_t cap);
 unsigned rc_browser_key(rc_browser *b,const char *key);
+unsigned rc_browser_pad(rc_browser *b,rc_pad_key key);
 void rc_browser_input(rc_browser *b,const char *utf8);
 void rc_browser_error(rc_browser *b,const char *message);
 /* Puts the cursor on a listed name; no effect when it is not listed. */

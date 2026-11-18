@@ -22,7 +22,7 @@ void rc_sidplayer_draw(rc_sidplayer *p,unsigned song,uint64_t cycles,uint32_t hz
     metadata(t,4,"TITLE",p->file.title);metadata(t,7,"AUTHOR",p->file.author);metadata(t,10,"RELEASE",p->file.released);
     snprintf(line,sizeof line,"%s  SUB-TUNE %u / %u",p->file.rsid?"RSID":"PSID",song+1,p->file.songs);rc_tui_put(t,14,4,line,1,6);
     const uint64_t seconds=hz?cycles/hz:0;snprintf(line,sizeof line,"%02llu:%02llu  %s",(unsigned long long)(seconds/60),(unsigned long long)(seconds%60),paused?"PAUSED":"PLAYING");rc_tui_put(t,16,4,line,1,6);
-    rc_tui_put(t,19,4,"SPACE PAUSE  ESC FILE LIST",14,6);if(p->file.songs>1)rc_tui_put(t,23,4,"LEFT / RIGHT  SUB-TUNE",14,6);
+    rc_tui_put(t,19,4,"SPACE/A PAUSE  ESC/B FILE LIST",14,6);if(p->file.songs>1)rc_tui_put(t,23,4,"LEFT / RIGHT  SUB-TUNE",14,6);
     rc_tui_frame(t,palette,frame);
 }
 size_t rc_sidplayer_text(rc_sidplayer *p,char *out,size_t cap){return rc_tui_text(&p->tui,out,cap);}

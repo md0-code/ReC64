@@ -15,10 +15,10 @@ static SDL_GameController *controller(const rc_pads *p, unsigned index) {
     return index < RC_PADS_MAX ? (SDL_GameController *)p->pad[index] : NULL;
 }
 
-static int known(const rc_pads *p, SDL_JoystickID id) {
+static int slot_for(const rc_pads *p, SDL_JoystickID id) {
     for (unsigned i = 0; i < RC_PADS_MAX; ++i)
-        if (controller(p, i) && SDL_JoystickInstanceID(SDL_GameControllerGetJoystick(controller(p, i))) == id) return 1;
-    return 0;
+        if (controller(p, i) && SDL_JoystickInstanceID(SDL_GameControllerGetJoystick(controller(p, i))) == id) return (int)i;
+    return -1;
 }
 
 /* The host's device `device_index` into the first free number; 1 when a controller was added. */
@@ -29,7 +29,7 @@ static int add(rc_pads *p, int device_index) {
     if (free_number == RC_PADS_MAX) return 0;
     SDL_GameController *c = SDL_GameControllerOpen(device_index);
     if (!c) return 0;
-    if (known(p, SDL_JoystickInstanceID(SDL_GameControllerGetJoystick(c)))) { SDL_GameControllerClose(c); return 0; }
+    if (slot_for(p, SDL_JoystickInstanceID(SDL_GameControllerGetJoystick(c))) >= 0) { SDL_GameControllerClose(c); return 0; }
     p->pad[free_number] = c;
     return 1;
 }
@@ -61,6 +61,7 @@ rc_pads_result rc_pads_event(rc_pads *p, const union SDL_Event *e, rc_pad_key *k
             SDL_GameControllerClose(controller(p, i));
             p->pad[i] = NULL;
             memset(p->trigger[i],0,sizeof p->trigger[i]);
+            p->start[i]=0;
             p->held = RC_PAD_NONE;
             return RC_PADS_CHANGED;
         }
@@ -73,7 +74,26 @@ rc_pads_result rc_pads_event(rc_pads *p, const union SDL_Event *e, rc_pad_key *k
             if(edge){*key=trigger?RC_PAD_TRIGGER_RIGHT:RC_PAD_TRIGGER_LEFT;return RC_PADS_KEY;}break;
         }return RC_PADS_NONE;
     }
-    if (e->type != SDL_CONTROLLERBUTTONDOWN||!known(p,e->cbutton.which)) return RC_PADS_NONE;
+    if(e->type!=SDL_CONTROLLERBUTTONDOWN&&e->type!=SDL_CONTROLLERBUTTONUP)return RC_PADS_NONE;
+    const int slot=slot_for(p,e->cbutton.which);
+    if(slot<0)return RC_PADS_NONE;
+    if(e->cbutton.button==SDL_CONTROLLER_BUTTON_START){
+        if(e->type==SDL_CONTROLLERBUTTONDOWN){if(!p->start[slot])p->start[slot]=1;return RC_PADS_NONE;}
+        const int tap=p->start[slot]==1;
+        p->start[slot]=0;
+        if(!tap)return RC_PADS_NONE;
+        *key=RC_PAD_START;
+        return RC_PADS_KEY;
+    }
+    if(e->type==SDL_CONTROLLERBUTTONUP)return RC_PADS_NONE;
+    if(p->start[slot]&&(e->cbutton.button==SDL_CONTROLLER_BUTTON_X||
+        e->cbutton.button==SDL_CONTROLLER_BUTTON_Y||e->cbutton.button==SDL_CONTROLLER_BUTTON_RIGHTSTICK)){
+        if(p->start[slot]==2)return RC_PADS_NONE;
+        p->start[slot]=2;
+        *key=e->cbutton.button==SDL_CONTROLLER_BUTTON_X?RC_PAD_EXIT:
+            e->cbutton.button==SDL_CONTROLLER_BUTTON_Y?RC_PAD_COLD_BOOT:RC_PAD_SCREENSHOT;
+        return RC_PADS_KEY;
+    }
     switch (e->cbutton.button) {
     case SDL_CONTROLLER_BUTTON_A: *key = RC_PAD_A; break;
     case SDL_CONTROLLER_BUTTON_B: *key = RC_PAD_B; break;
@@ -81,9 +101,10 @@ rc_pads_result rc_pads_event(rc_pads *p, const union SDL_Event *e, rc_pad_key *k
     case SDL_CONTROLLER_BUTTON_Y: *key = RC_PAD_Y; break;
     case SDL_CONTROLLER_BUTTON_LEFTSHOULDER: *key = RC_PAD_SHOULDER_LEFT; break;
     case SDL_CONTROLLER_BUTTON_RIGHTSHOULDER: *key = RC_PAD_SHOULDER_RIGHT; break;
-    case SDL_CONTROLLER_BUTTON_START:
     case SDL_CONTROLLER_BUTTON_GUIDE: *key = RC_PAD_START; break;
     case SDL_CONTROLLER_BUTTON_BACK: *key = RC_PAD_BACK; break;
+    case SDL_CONTROLLER_BUTTON_LEFTSTICK: *key=RC_PAD_L3; break;
+    case SDL_CONTROLLER_BUTTON_RIGHTSTICK: *key=RC_PAD_R3; break;
     default: return RC_PADS_NONE;       /* the d-pad repeats through rc_pads_repeat */
     }
     return RC_PADS_KEY;
