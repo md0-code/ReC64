@@ -22,6 +22,8 @@ typedef struct rc_browser {
     int pad_ui,finding;
     size_t name_cursor;
     char edit_name[RC_BROWSER_NAME],original_name[RC_BROWSER_NAME];
+    /* The file last loaded or inserted: the load list starts on it in its folder, until the program ends. */
+    char last[RC_MEDIA_PATH];
 } rc_browser;
 void rc_browser_init(rc_browser *b);
 void rc_browser_close(rc_browser *b);

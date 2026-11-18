@@ -80,6 +80,7 @@ Load (Ctrl+F1, or drag and drop) is one browser for every file type:
 | SID | Opens the music player |
 | RCS | Snapshot restored |
 
+The list opens on the file loaded last, until ReC64 is closed.
 Typing a name searches the list, Left or Backspace goes up a folder, and
 Space inserts a disk or tape without loading it, for disk swaps. With
 auto-load on (Media page), ReC64 types the `LOAD` and `RUN` commands for you.

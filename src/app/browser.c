@@ -34,13 +34,23 @@ static int append_item(rc_browser *b,const rc_browser_item *item){
 static int join(char *out,size_t cap,const char *folder,const char *name){const size_t n=strlen(folder);const int length=snprintf(out,cap,"%s%s%s",folder,n&&folder[n-1]!='/'&&folder[n-1]!='\\'?"/":"",name);return length>=0&&(size_t)length<cap;}
 static int parent(const char *folder,char *out,size_t cap){char path[RC_MEDIA_PATH];if(!rc_host_full_path(folder,path,sizeof path))return 0;size_t n=strlen(path);while(n>1&&(path[n-1]=='/'||path[n-1]=='\\'))path[--n]=0;char *slash=strrchr(path,'/'),*back=strrchr(path,'\\');if(back&&(!slash||back>slash))slash=back;if(!slash)return 0;slash[1]=0;if(rc_host_same_folder(path,folder))return 0;return snprintf(out,cap,"%s",path)>0;}
 static int list_entry(void *ctx,const char *name,int folder,uint64_t size){rc_browser *b=ctx;const unsigned kind=folder?RC_BROWSER_UNKNOWN:format(name);const unsigned saves[]={RC_BROWSER_PRG,RC_BROWSER_TAP,RC_BROWSER_D64};if(!folder&&(kind==RC_BROWSER_UNKNOWN||b->folders_only||(b->save&&kind!=saves[b->save_type])))return 1;rc_browser_item item={0};if(strlen(name)>=sizeof item.name)return 1;snprintf(item.name,sizeof item.name,"%s",name);item.folder=(unsigned)folder;item.format=kind;item.bytes=size;item.disabled=!folder&&kind>=RC_BROWSER_CRT&&kind!=RC_BROWSER_G64&&!(kind==RC_BROWSER_STATE&&b->states_enabled)&&!(kind==RC_BROWSER_CRT&&b->cartridges_enabled)&&!(kind==RC_BROWSER_SID&&b->sid_enabled);return append_item(b,&item);}
+/* In the folder of the file last loaded, the cursor starts on that file. */
+static void select_last(rc_browser *b){
+    if(b->save||b->folders_only||b->roots||!b->last[0])return;
+    char folder[RC_MEDIA_PATH];snprintf(folder,sizeof folder,"%s",b->last);
+    char *slash=strrchr(folder,'/'),*back=strrchr(folder,'\\');if(back&&(!slash||back>slash))slash=back;if(!slash)return;
+    const char *name=b->last+(slash-folder)+1;slash[1]=0;
+    if(!rc_host_same_folder(folder,b->path))return;
+    for(size_t i=0;i<b->count;++i)if(!b->items[i].folder&&!b->items[i].disabled&&!strcmp(b->items[i].name,name)){
+        b->selected=i;b->top=i>=LIST_ROWS/2?i-LIST_ROWS/2:0;if(b->count>LIST_ROWS&&b->top>b->count-LIST_ROWS)b->top=b->count-LIST_ROWS;return;}
+}
 static int refresh(rc_browser *b,char *error,size_t cap){clear_items(b);b->contents=0;b->image[0]=0;b->confirm=0;b->listing_failed=0;b->message[0]=0;
     if(b->roots){if(!rc_host_list_roots(list_entry,b)){snprintf(error,cap,"Cannot list filesystem roots");return 0;}}
     else {char up[RC_MEDIA_PATH];if(parent(b->path,up,sizeof up)){rc_browser_item item={0};snprintf(item.name,sizeof item.name,"..");item.folder=1;if(!append_item(b,&item)){snprintf(error,cap,"Out of memory");return 0;}}
         if(!rc_host_list_folder(b->path,list_entry,b)){snprintf(error,cap,"Cannot read folder");return 0;}}
     if(b->listing_failed){snprintf(error,cap,"Out of memory");return 0;}
     if(b->count>1)qsort(b->items,b->count,sizeof *b->items,compare);
-    select_enabled(b,0,1);
+    select_enabled(b,0,1);select_last(b);
     return 1;
 }
 void rc_browser_init(rc_browser *b){memset(b,0,sizeof *b);rc_tui_init(&b->tui);snprintf(b->filename,sizeof b->filename,"program.prg");}
@@ -67,7 +77,9 @@ static int image_items(rc_browser *b,const rc_browser_content *entries,size_t co
     return 1;
 }
 static unsigned result(rc_browser *b,unsigned action,const char *path,uint32_t entry,int overwrite){
-    b->result=(rc_browser_result){0};snprintf(b->result.path,sizeof b->result.path,"%s",path);b->result.entry=entry;b->result.action=action;b->result.overwrite=overwrite;return action;
+    b->result=(rc_browser_result){0};snprintf(b->result.path,sizeof b->result.path,"%s",path);b->result.entry=entry;b->result.action=action;b->result.overwrite=overwrite;
+    if(action==RC_BROWSER_LOAD||action==RC_BROWSER_INSERT)snprintf(b->last,sizeof b->last,"%s",path);
+    return action;
 }
 unsigned rc_browser_file(rc_browser *b,const char *path,char *error,size_t cap){
     if(cap)error[0]=0;
