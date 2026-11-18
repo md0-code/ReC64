@@ -1,11 +1,13 @@
-/* Run the unmodified test programs on the booted board. No ROM traps. */
+/* Run the unmodified test programs on the booted board. No ROM traps.
+ * A test that passes loads its successor through BASIC ($E16F); one that
+ * fails waits for a key (GETIN, $FFE4). */
 #include "../core/machines/c64.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 typedef struct monitor {rc_c64 *c;int status;} monitor;
 static void trace(void *ctx,int kind,uint32_t address,uint32_t value){monitor *m=ctx;
-    if(kind==RC_TRACE_WRITE&&address==0xd7ff&&(rc_pla_decode(m->c->pla.inputs)&RC_PLA_I_O))m->status=(int)value;}
+    (void)value;if(kind==RC_TRACE_FETCH&&m->status<0&&(address==0xe16f||address==0xffe4)&&(rc_pla_decode(m->c->pla.inputs)&RC_PLA_KERNAL))m->status=address==0xffe4;}
 static int run(rc_c64 *c,const rc_c64 *boot,const char *path){
     FILE *f=fopen(path,"rb");if(!f){fprintf(stderr,"Cannot read %s\n",path);return 0;}
     uint8_t bytes[65538];const size_t n=fread(bytes,1,sizeof bytes,f);fclose(f);if(n<16)return 0;

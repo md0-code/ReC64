@@ -139,8 +139,8 @@ In a name field, Up/Down cycles the character and Left/Right moves the cursor.
 Opening a SID file (PSID or RSID, single SID) starts the player, with title,
 author, release and elapsed time. Left/Right changes the sub-tune, Space
 pauses and Esc returns to the file list. The clock and SID chip follow the
-file, or a PAL 6581 when it names none. The SID is ReC64's own engine; see
-[its limitations](docs/LIMITATIONS.md).
+file, or a PAL 6581 when it names none. The SID is ReC64's own engine,
+described in the [design notes](docs/DESIGN.md).
 
 ## Status line and on-screen keyboard
 

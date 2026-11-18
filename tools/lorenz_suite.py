@@ -1,72 +1,80 @@
-"""Fetch pinned public-domain Lorenz programs and run them on the C64 board.
+"""Fetch Wolfgang Lorenz's public-domain test suite and run it on the C64 board.
 
 python tools/lorenz_suite.py fetch
-python tools/lorenz_suite.py run [--jobs 8] [--only cia1ta,irq] [--new-cia]
+python tools/lorenz_suite.py run [--jobs 8] [--only cia1ta,irq]
 Outputs, downloaded programs and logs stay in work/testprogs.
 """
 from __future__ import annotations
 import argparse
 import concurrent.futures
 import hashlib
+import io
 import json
 from pathlib import Path
 import re
 import subprocess
 import sys
 import urllib.request
+import zipfile
 
 ROOT = Path(__file__).resolve().parents[1]
 WORK = ROOT / "work/testprogs"
-REVISION = 46417
-URL = f"https://svn.code.sf.net/p/vice-emu/code/!svn/bc/{REVISION}/testprogs/general/Lorenz-2.15/"
-NEW = {"cia1ta", "cia1tb", "cia1tab", "cia2ta", "cia2tb", "icr01", "imr", "irq", "nmi"}
+SECTORS = [21 if t <= 17 else 19 if t <= 24 else 18 if t <= 30 else 17 for t in range(1, 36)]
+LOAD_NEXT = bytes((0x4C, 0x6F, 0xE1))  # every test ends by loading its successor
+
+def programs(disk: bytes) -> dict[str, bytes]:
+    """The PRG files of a D64 image, by lower-case name."""
+    def block(track: int, sector: int) -> bytes:
+        offset = (sum(SECTORS[:track-1]) + sector) * 256
+        return disk[offset:offset+256]
+    found = {}
+    track, sector = 18, 1
+    while track:
+        directory = block(track, sector)
+        for i in range(8):
+            entry = directory[i*32:(i+1)*32]
+            if entry[2] & 7 != 2:
+                continue
+            name = entry[5:21].rstrip(bytes([0xA0])).decode("ascii").lower()
+            body, (at, s) = b"", entry[3:5]
+            while at:
+                data = block(at, s)
+                at, s = data[:2]
+                body += data[2:] if at else data[2:s+1]
+            if LOAD_NEXT in body:  # skips the start, finish and change-disk programs
+                found[name] = body
+        track, sector = directory[:2]
+    return found
 
 def fetch() -> None:
+    pin = json.loads((ROOT / "docs/sources.lock.json").read_text(encoding="utf8"))["test_suites"]["lorenz"]
+    archive = urllib.request.urlopen(pin["url"], timeout=45).read()
+    assert len(archive) == pin["bytes"] and hashlib.sha256(archive).hexdigest() == pin["sha256"], "archive differs from the lock"
     WORK.mkdir(parents=True, exist_ok=True)
-    lock = {"revision": REVISION, "url": URL, "sha256": {}}
-    def get(name: str) -> bytes:
-        data = urllib.request.urlopen(URL + name, timeout=45).read()
-        (WORK / Path(name).name).write_bytes(data)
-        lock["sha256"][Path(name).name] = hashlib.sha256(data).hexdigest()
-        return data
-    names = set()
-    for disk in range(1, 5):
-        data = get(f"Disk{disk}.d64")
-        sectors = [21 if t <= 17 else 19 if t <= 24 else 18 if t <= 30 else 17 for t in range(1, 36)]
-        track, sector = 18, 1
-        seen = set()
-        while track:
-            assert (track, sector) not in seen
-            seen.add((track, sector))
-            offset = (sum(sectors[:track-1]) + sector) * 256
-            block = data[offset:offset+256]
-            for i in range(8):
-                entry = block[i*32:(i+1)*32]
-                if entry[2] & 7 == 2:
-                    names.add(entry[5:21].rstrip(b"\xa0").decode("ascii").lower())
-            track, sector = block[:2]
-    names -= {"nextdisk", "nextdisk1", "nextdisk2", "nextdisk3"}
-    names |= {"cia1tab", "cia1tb123", "cia2tb123"}
-    files = [f"src/{name}.prg" for name in sorted(names)] + [f"src/{name}new.prg" for name in sorted(NEW)]
-    with concurrent.futures.ThreadPoolExecutor(8) as pool:
-        list(pool.map(get, files))
-    get("readme.txt")
-    lock["programs"] = sorted(names)
+    for old in WORK.glob("*.prg"):
+        old.unlink()
+    lock = {"sha256": {}}
+    with zipfile.ZipFile(io.BytesIO(archive)) as z:
+        for disk in ("Disk1.d64", "Disk2.d64", "Disk3.d64"):
+            for name, body in programs(z.read(disk)).items():
+                (WORK / f"{name}.prg").write_bytes(body)
+                lock["sha256"][f"{name}.prg"] = hashlib.sha256(body).hexdigest()
+    lock["programs"] = sorted(name[:-4] for name in lock["sha256"])
     (WORK / "lock.json").write_text(json.dumps(lock, indent=2) + "\n", encoding="utf8")
-    print(f"Fetched {len(names)} C64 tests and {len(NEW)} new-CIA variants at r{REVISION}")
+    print(f"Fetched {len(lock['programs'])} C64 tests")
 
 def run(args: argparse.Namespace) -> int:
     lock = json.loads((WORK / "lock.json").read_text(encoding="utf8"))
-    names = sorted(NEW) if args.new_cia else lock["programs"]
+    names = lock["programs"]
     if args.only:
         wanted = set(args.only.split(","))
         assert wanted <= set(names), wanted - set(names)
         names = [name for name in names if name in wanted]
-    files = [WORK / f"{name}{'new' if args.new_cia else ''}.prg" for name in names]
+    files = [WORK / f"{name}.prg" for name in names]
     for file in files:
         assert hashlib.sha256(file.read_bytes()).hexdigest() == lock["sha256"][file.name], file
     jobs = min(args.jobs, len(files))
-    label = "new" if args.new_cia else "old"
+    label = "all"
     if args.only:
         label += "-" + hashlib.sha256(",".join(names).encode()).hexdigest()[:8]
     def worker(job: int) -> dict:
@@ -75,7 +83,7 @@ def run(args: argparse.Namespace) -> int:
         listing.write_text("".join(str(p.resolve()) + "\n" for p in batch), encoding="utf8")
         log = WORK / f"result-{label}-{job}.log"
         with log.open("w", encoding="utf8") as output:
-            result = subprocess.run([str(args.runner.resolve()), str(listing), str(int(args.new_cia))],
+            result = subprocess.run([str(args.runner.resolve()), str(listing), "0"],
                                     cwd=ROOT, text=True, stdout=output, stderr=output)
         text = log.read_text(encoding="utf8")
         passed = len(re.findall(r"^PASS ", text, re.M))
@@ -85,7 +93,7 @@ def run(args: argparse.Namespace) -> int:
         return {"passed": passed, "total": len(batch), "status": result.returncode, "log": str(log)}
     with concurrent.futures.ThreadPoolExecutor(jobs) as pool:
         batches = list(pool.map(worker, range(jobs)))
-    result = {"revision": REVISION, "new_cia": args.new_cia, "passed": sum(b["passed"] for b in batches),
+    result = {"passed": sum(b["passed"] for b in batches),
               "total": len(files), "batches": batches}
     (WORK / f"result-{label}.json").write_text(json.dumps(result, indent=2) + "\n", encoding="utf8")
     print(f"Lorenz {label}: {result['passed']}/{result['total']} passed")
@@ -97,7 +105,6 @@ def main() -> int:
     p.add_argument("--runner", type=Path, default=ROOT / "work/build-x64" / ("lorenz_suite.exe" if sys.platform == "win32" else "lorenz_suite"))
     p.add_argument("--jobs", type=int, default=8)
     p.add_argument("--only")
-    p.add_argument("--new-cia", action="store_true")
     args = p.parse_args()
     if args.action == "fetch":
         fetch()

@@ -47,17 +47,7 @@ foreach ($arch in @('x64', 'arm64')) {
     if (-not (Test-Path -LiteralPath "$target/rec64.yaml")) {
         Copy-Item -LiteralPath "$repo/src/app/rec64.yaml" -Destination "$target/rec64.yaml"
     }
-    # Remove only obsolete release palette files; user-owned files stay intact.
-    foreach ($name in @('cjam.vpl', 'colodore.vpl', 'pepto-pal.vpl', 'pepto-ntsc.vpl')) {
-        $obsolete = Join-Path $target "palettes/$name"
-        if (Test-Path -LiteralPath $obsolete -PathType Leaf) { Remove-Item -LiteralPath $obsolete -Force }
-    }
-    $paletteFolder = Join-Path $target 'palettes'
-    if ((Test-Path -LiteralPath $paletteFolder -PathType Container) -and
-        -not (Get-ChildItem -LiteralPath $paletteFolder -Force | Select-Object -First 1)) {
-        Remove-Item -LiteralPath $paletteFolder
-    }
-    foreach ($name in @('DESIGN.md', 'THIRD_PARTY.md', 'LIMITATIONS.md', 'LICENSE', 'sources.lock.json')) {
+    foreach ($name in @('DESIGN.md', 'THIRD_PARTY.md', 'LICENSE', 'sources.lock.json')) {
         Copy-Item -LiteralPath "$repo/docs/$name" -Destination "$target/docs/$name" -Force
     }
     Copy-Item -LiteralPath "$repo/README.md" -Destination "$target/README.md" -Force

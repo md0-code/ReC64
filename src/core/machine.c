@@ -8,7 +8,7 @@
 #include <stdlib.h>
 #include <string.h>
 
-/* PLAN.md section 5: fixed-width types and 8-bit bytes. */
+/* Fixed-width types and 8-bit bytes. */
 _Static_assert(CHAR_BIT == 8, "ReC64 needs 8-bit bytes");
 _Static_assert(sizeof(uint16_t) == 2 && sizeof(uint32_t) == 4 && sizeof(uint64_t) == 8, "fixed-width types");
 

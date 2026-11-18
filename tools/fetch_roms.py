@@ -1,7 +1,8 @@
-"""Fetch hash-identified firmware data from the pinned VICE release.
+"""Fetch the hash-identified firmware images.
 
-Only the five firmware URLs in docs/sources.lock.json are requested. No
-emulator source is fetched. --check verifies installed files without writing.
+Only the firmware URLs in docs/sources.lock.json are requested; an image
+listed with several URLs is joined from those parts in order. --check
+verifies installed files without writing.
 --from-dir DIR imports matching images by content, whatever their filenames.
 """
 from __future__ import annotations
@@ -41,9 +42,10 @@ def main() -> int:
             if args.from_dir:
                 data = local[rom["sha256"]]
             else:
-                request = urllib.request.Request(rom["url"], headers={"User-Agent": "rec64-fetch-roms"})
-                with urllib.request.urlopen(request, timeout=30) as reply:
-                    data = reply.read(rom["bytes"] + 1)
+                data = b""
+                for url in rom["urls"]:
+                    with urllib.request.urlopen(url, timeout=30) as reply:
+                        data += reply.read(rom["bytes"] + 1)
             if not valid(data):
                 raise ValueError("firmware size or SHA-256 differs from the lock")
             path.parent.mkdir(exist_ok=True)

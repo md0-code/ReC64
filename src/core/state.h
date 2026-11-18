@@ -1,4 +1,4 @@
-/* Saved states (PLAN.md sections 4 and 5): ReC64's own format, the same for
+/* Saved states: ReC64's own format, the same for
  * every machine. A state is a header and a list of chunks:
  *
  *   "REC64ST1"                      magic

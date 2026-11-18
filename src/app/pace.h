@@ -1,4 +1,4 @@
-/* The desktop loop's timing (PLAN.md section 6, phase 6): what to do next
+/* The desktop loop's timing: what to do next
  * to keep guest time in step with wall time. No SDL, no OS call and no clock
  * of its own: the shell passes the monotonic clock's ticks in, so a test
  * drives it with a fake clock. 

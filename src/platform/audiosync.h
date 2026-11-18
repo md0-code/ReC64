@@ -1,5 +1,4 @@
-/* Keeping the sound output in step with the machine (PLAN.md section 6,
- * phase 6): the machine makes sound at the rate of guest time, which the
+/* Keeping the sound output in step with the machine: the machine makes sound at the rate of guest time, which the
  * shell paces to the host's monotonic clock; the sound device consumes at
  * its own clock. The two differ by some parts in ten thousand, so a queue
  * between them would grow until it overflows or run dry and crackle. The

@@ -1,5 +1,5 @@
 /* ReC64 - everything that depends on the operating system, behind one
- * portable header (PLAN.md section 3). One implementation per OS:
+ * portable header. One implementation per OS:
  * host_win32.c (built and tested) and host_posix.c (Linux; compiled from
  * the release phase on). Callers include only this header, never an OS
  * header.  */

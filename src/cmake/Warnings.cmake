@@ -2,7 +2,7 @@
 # pinned upstream code and its diagnostics are not ours to fix.
 
 function(rc_set_warnings target)
-    # Standard C11 without compiler extensions (PLAN.md section 3).
+    # Standard C11 without compiler extensions.
     set_target_properties(${target} PROPERTIES C_EXTENSIONS OFF)
     if(MSVC)
         target_compile_options(${target} PRIVATE
