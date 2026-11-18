@@ -62,7 +62,7 @@ unsigned rc_setup_key(rc_setup *s,const char *key){
         const unsigned field=s->row<4?s->row-1:s->row-4;
         if(field==0){media->fast=!effective.fast;media->explicit_flags|=RC_MEDIA_SETTING_FAST;}
         else if(field==1){
-            if(effective.fast)return 0;
+            if(effective.fast&&s->row>=4)return 0;
             media->sound=!effective.sound;media->explicit_flags|=RC_MEDIA_SETTING_SOUND;
         }
         else {media->autoload=!effective.autoload;media->explicit_flags|=RC_MEDIA_SETTING_AUTOLOAD;}
@@ -100,7 +100,7 @@ void rc_setup_draw(rc_setup *s,const uint32_t palette[16],rc_frame *f){
     case RC_SETUP_MEDIA:{rc_config_media disk,tape;rc_config_media_settings(c,"disk",&disk);rc_config_media_settings(c,"tape",&tape);const char *device=rc_config_option_value(c,"drive_device");
         rc_tui_put(&s->tui,4,3,"DRIVE",1,6);rc_tui_put(&s->tui,10,3,"TAPE",1,6);
         media_row(s,0,"DEVICE",device?device:"8",s->media_available);media_row(s,1,"FAST LOAD",disk.fast?"ON":"OFF",s->media_available);
-        media_row(s,2,"SOUNDS",disk.sound&&!disk.fast?"ON":"OFF",s->media_available&&!disk.fast);media_row(s,3,"AUTO-LOAD",disk.autoload?"ON":"OFF",s->media_available);
+        media_row(s,2,"SOUNDS",disk.sound?(disk.fast?"STARTUP ONLY":"ON"):"OFF",s->media_available);media_row(s,3,"AUTO-LOAD",disk.autoload?"ON":"OFF",s->media_available);
         media_row(s,4,"FAST LOAD",tape.fast?"ON":"OFF",s->media_available);media_row(s,5,"SOUND",tape.sound&&!tape.fast?"ON":"OFF",s->media_available&&!tape.fast);media_row(s,6,"AUTO-LOAD",tape.autoload?"ON":"OFF",s->media_available);
         rc_tui_put(&s->tui,16,3,"DEFAULT MEDIA FOLDER",s->row==7?6:14,s->row==7?14:6);rc_tui_put(&s->tui,16,32,"ENTER",s->row==7?6:14,s->row==7?14:6);const char *folder=c->media_folder[0]?c->media_folder:"PROGRAM FOLDER";const size_t length=strlen(folder);rc_tui_put(&s->tui,18,3,length>34?folder+length-34:folder,14,6);break;}
 
@@ -132,9 +132,9 @@ void rc_setup_draw(rc_setup *s,const uint32_t palette[16],rc_frame *f){
         rc_tui_put(&s->tui,20,3,"DELETE CURRENT SLOT  DEL",(uint8_t)(can_delete?(s->row==12?6:14):12),(uint8_t)(can_delete&&s->row==12?14:6));break;}
     case RC_SETUP_ABOUT:
         rc_tui_put(&s->tui,10,3,"NEW IN " RC_VERSION,1,6);
-        rc_tui_put(&s->tui,11,3,"FAST LOAD MUTES DRIVE OR TAPE",14,6);
-        rc_tui_put(&s->tui,12,3,"DISKS PLAY 1541 SOUNDS",14,6);
-        rc_tui_put(&s->tui,13,3,"TAP PLAYS THE TAPE SIGNAL",14,6);
+        rc_tui_put(&s->tui,11,3,"1541 SELF-TEST SOUND AT STARTUP",14,6);
+        rc_tui_put(&s->tui,12,3,"FAST LOAD MUTES LOADING SOUNDS",14,6);
+        rc_tui_put(&s->tui,13,3,"1541 DISK SOUNDS / TAP SIGNAL",14,6);
         rc_tui_put(&s->tui,14,3,"PRG, P00 AND T64 LOAD SILENTLY",14,6);
         rc_tui_put(&s->tui,16,3,"ALSO IN 0.20",1,6);
         rc_tui_put(&s->tui,17,3,"PALETTE, MODEL, VIDEO AND SID TYPE",14,6);

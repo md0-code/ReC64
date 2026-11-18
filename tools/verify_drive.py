@@ -55,9 +55,10 @@ def main() -> None:
         f'audio {(work/"drive.wav").as_posix()}', 'enter', 'until 40 SERIAL SAVE',
         'frames 100', 'audio off', f'shot {(work/"loaded.png").as_posix()}',
         'key Alt+F', 'expect Drive fast loading on',
-        'key Alt+S', 'expect Drive sounds muted by fast load', 'frames 5',
+        'frames 5',
         f'audio {(work/"muted.wav").as_posix()}',
         'type LOAD"SECOND",11', 'enter', 'frames 200', 'audio off',
+        'key Alt+S', 'expect Drive sounds off', 'key Alt+S', 'expect Drive startup sound on',
         'key Alt+F', 'expect Drive fast loading off',
         'key Alt+S', 'expect Drive sounds off', 'key Alt+S', 'expect Drive sounds on',
         'key F12', 'expect DEVICE',
@@ -69,8 +70,11 @@ def main() -> None:
             samples = wav.readframes(wav.getnframes())
         assert samples
         return max(abs(v[0]) for v in struct.iter_unpack('<h', samples))
-    audible, muted = peak(work/'drive.wav'), peak(work/'muted.wav')
-    assert audible > 0 and muted == 0, (audible, muted)
+    startup = work/'startup.wav'
+    run('startup', 'media: {disk: {fast: true}}\n',
+        [f'audio {startup.as_posix()}', 'frames 150', 'audio off', 'expect READY.'])
+    audible, muted, self_test = peak(work/'drive.wav'), peak(work/'muted.wav'), peak(startup)
+    assert audible > 0 and muted == 0 and self_test > 0, (audible, muted, self_test)
     for fast in (False, True):
         name = f'loader-{int(fast)}'
         config = ('machine: {model: c64-pal}\nmedia:\n  disk: {fast: '+str(fast).lower()+', write_protect: true}\n')
@@ -83,9 +87,9 @@ def main() -> None:
         assert len(image.getcolors(image.width*image.height)) >= 4, 'Custom-loader bitmap was not reached'
     result = {'status':'passed', 'version':subprocess.check_output([str(binary), '--version'], text=True).strip(),
               'checks':['device 11 serial SAVE', 'same-image flush and browser reload', 'disk entry auto-load/RUN',
-                        'Alt+F and Alt+S', 'audible drive and silent muted capture',
+                        'Alt+F and Alt+S', 'audible self-test with fast load and empty drive', 'fast disk load muted',
                         'Krill custom-loader bitmap identical with fast off/on'],
-              'drive_audio_peak':audible, 'muted_audio_peak':muted,
+              'drive_audio_peak':audible, 'muted_audio_peak':muted, 'self_test_audio_peak':self_test,
               'custom_loader_png_sha256':hashlib.sha256(off.read_bytes()).hexdigest()}
     (work/'result.json').write_text(json.dumps(result, indent=2)+'\n')
     print('Drive release passed: serial SAVE/browser reload, sound switch and identical custom-loader bitmap')

@@ -118,7 +118,7 @@ static void reset(void *self,int power){
     if(power){rc_vic2_reset(&c->vic);latch_picture(c);c->bus.pot_phase=0;memset(c->bus.pot_value,255,2);memset(c->bus.pot_charge,255,2);for(unsigned p=0;p<2;++p)rc_mouse1351_init(&c->bus.mouse[p]);}rc_cia6526_reset(&c->cia[0]);rc_cia6526_reset(&c->cia[1]);if(power)rc_sid_power(&c->sid);else rc_sid_reset(&c->sid);
     c->keyboard.dev.ops->reset(&c->keyboard);c->restore=0;c->bus.data=c->bus.vic_data=255;c->bus.game=c->bus.exrom=1;
     rc_c1541_reset(&c->drive);c->drive_phase=0;rc_iec_init(&c->iec);rc_c64_iec_lines(c);
-    c->disk_audio_engaged=0;
+    c->drive_audio_mode=power==RC_RESET_AUTOLOAD?RC_DRIVE_AUDIO_IDLE:RC_DRIVE_AUDIO_SELF_TEST;
     rc_fastload_reset(&c->fastload,c->sched.now,c->iec.edges);
     rc_c64_media_lines(c);rc_c64_expansion_reset(c);rc_c64_sid_reset(c);
 }

@@ -180,7 +180,7 @@ static void input_poll(desktop *d){
         }else if(st->type==RC_CONTROL_NONE)rc_machine_pointer(d->machine,p,st->type,0,0,0);
     }
 }
-static void reset(void *ctx,int power) { desktop *d=ctx;release_keys(d);if(power!=2){d->setup.active=0;d->transport=0;d->slot_picker=0;rc_browser_close(&d->browser);rc_machine_reset(d->machine,power==1);d->pace_dirty=1;input_config(d);} }
+static void reset(void *ctx,int power) { desktop *d=ctx;release_keys(d);if(power!=2){d->setup.active=0;d->transport=0;d->slot_picker=0;rc_browser_close(&d->browser);rc_machine_reset(d->machine,power==1?RC_RESET_COLD:RC_RESET_WARM);d->pace_dirty=1;input_config(d);} }
 static void speed(void *ctx,int full) { desktop *d=ctx;d->full=full!=0;d->pace_dirty=1; }
 static int audio_capture(void *ctx,const char *path,char *error,size_t cap) {
     desktop *d=ctx;
@@ -307,7 +307,7 @@ static int autoload(desktop *d,unsigned slot,char *error,size_t cap){
     const rc_family *f=rc_machine_family(d->machine);if(slot>=f->media_count)return 0;if(f->media[slot].kind==RC_MEDIA_CART||f->media[slot].kind==RC_MEDIA_SID)return 1;
     rc_config_media effective;rc_config_media_settings(d->config,f->media[slot].key,&effective);if(!effective.autoload)return 1;
     int power=0;const char *commands=rc_machine_autoload(d->machine,slot,&power);if(!commands||!*commands)return 1;
-    char text[512];snprintf(text,sizeof text,"%s",commands);release_keys(d);if(power)rc_machine_reset(d->machine,1);d->pace_dirty=1;
+    char text[512];snprintf(text,sizeof text,"%s",commands);release_keys(d);if(power)rc_machine_reset(d->machine,RC_RESET_AUTOLOAD);d->pace_dirty=1;
     return rc_typist_start(&d->typist,text,error,cap);
 }
 static int tape_directory(void *ctx,const rc_media *image,rc_browser_content *out,size_t capacity,size_t *count,char *error,size_t cap){
@@ -569,8 +569,8 @@ static int shell_key(void *ctx,const char *name,int down){
         const char *kind=tape?"tape":"disk";
         rc_config_media effective;
         rc_config_media_settings(d->config,kind,&effective);
-        if(!toggle_fast&&effective.fast){
-            message(d,tape?"Tape sound muted by fast load":"Drive sounds muted by fast load");
+        if(tape&&effective.fast){
+            message(d,"Tape sound muted by fast load");
             return 1;
         }
         rc_config_media *media=rc_config_media_slot(d->config,kind);
@@ -584,6 +584,7 @@ static int shell_key(void *ctx,const char *name,int down){
             media->sound=!effective.sound;
             media->explicit_flags|=RC_MEDIA_SETTING_SOUND;
             if(tape)message(d,media->sound?"Tape sound on":"Tape sound off");
+            else if(effective.fast)message(d,media->sound?"Drive startup sound on":"Drive sounds off");
             else message(d,media->sound?"Drive sounds on":"Drive sounds off");
         }
         media_options(d);

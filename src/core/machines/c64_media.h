@@ -1,6 +1,7 @@
 #ifndef RC_C64_MEDIA_H
 #define RC_C64_MEDIA_H
 #include "c64.h"
+enum { RC_DRIVE_AUDIO_IDLE, RC_DRIVE_AUDIO_DISK, RC_DRIVE_AUDIO_SELF_TEST };
 void rc_c64_media_init(rc_c64 *c);
 void rc_c64_media_release(rc_c64 *c);
 void rc_c64_media_lines(rc_c64 *c);

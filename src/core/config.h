@@ -71,7 +71,8 @@ typedef struct rc_config_media {
 } rc_config_media;
 /* Media options applied to the machine. Fast loading mutes media sound.
  * NULL uses the default fast settings. */
-enum { RC_TAPE_SOUND = 1, RC_TAPE_TRAPS = 2, RC_TAPE_SAVE_TRAPS = 4, RC_TAPE_ACCELERATE = 8 };
+enum { RC_TAPE_SOUND = 1, RC_TAPE_TRAPS = 2, RC_TAPE_SAVE_TRAPS = 4, RC_TAPE_ACCELERATE = 8,
+       RC_DRIVE_START_SOUND = 16 };
 #define RC_TAPE_QUERY 0x80000000u       /* instead of settings: nothing changes, the machine only says which it has */
 unsigned rc_config_tape_bits(const rc_config_media *media);
 

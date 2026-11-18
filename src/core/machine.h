@@ -183,9 +183,10 @@ int rc_machine_has_port(const rc_machine *m, unsigned port);
 /* What runs, in words ("C64, Interface 1"). */
 const char *rc_machine_description(const rc_machine *m);
 const char *rc_machine_error(const rc_machine *m);
-/* Power cycle (power_on 1: the state at switching on, memory cleared) or
- * the board's RESET line (power_on 0: memory kept). */
-void rc_machine_reset(rc_machine *m, int power_on);
+/* A warm reset keeps memory. Both cold modes clear it; an auto-load
+ * reset suppresses the drive self-test audio before loading the file. */
+enum { RC_RESET_WARM, RC_RESET_COLD, RC_RESET_AUTOLOAD };
+void rc_machine_reset(rc_machine *m, int mode);
 /* The NMI button, where the board has one (else nothing). */
 void rc_machine_nmi(rc_machine *m);
 
@@ -257,7 +258,8 @@ int rc_machine_insert(rc_machine *m, unsigned slot, rc_media *media, char *error
 rc_media *rc_machine_media(const rc_machine *m, unsigned slot);
 /* Takes the file out (the caller may close it then); 0 when empty. */
 int rc_machine_eject(rc_machine *m, unsigned slot);
-/* Bit n set while slot n works (a drive's motor turns, the tape runs). */
+/* Bit n set while slot n transfers media (including the drive motor
+ * and serial activity during access). Drive startup is a separate event. */
 unsigned rc_machine_activity(const rc_machine *m);
 /* The transport of a slot: the tape recorder's keys. `value` is the block
  * for RC_MEDIA_SEEK. Returns 0 when the slot has no such control. */
@@ -273,9 +275,8 @@ int rc_machine_control(rc_machine *m, unsigned slot, unsigned command, uint32_t 
  * runs), for the tape browser; NULL when the slot is not a tape or holds none. */
 struct rc_tape_deck;
 struct rc_tape_deck *rc_machine_tape_deck(rc_machine *m, unsigned slot);
-/* A tape slot's settings (config.h, RC_TAPE_* bits), taken at once: whether the tape is heard, whether the ROM's load and
- * save routines are done by the emulator and whether the waits of loaders are skipped. Returns the bits this machine has
- * a use for (0: the slot is not a tape recorder's, or the machine has none of them); with RC_TAPE_QUERY nothing changes. */
+/* Media sound and tape loading options (config.h). Returns the bits
+ * supported by the slot. With RC_TAPE_QUERY nothing changes. */
 unsigned rc_machine_tape_options(rc_machine *m, unsigned slot, unsigned bits);
 /* What auto-load does for a tape just put into tape slot `slot` (typist.h): the text to type, in the harness's notation for
  * `type`, or NULL when there is none (no auto-load); *power_cycle says whether the machine is power cycled before it is

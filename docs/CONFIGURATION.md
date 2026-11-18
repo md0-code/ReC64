@@ -245,9 +245,11 @@ A model restart retains mounted images and selected entries.
 save_traps and accelerate settings for `media.program` as well. An explicit
 program setting overrides that one default; storing an image path alone
 preserves inheritance. `media.disk` has independent fast, sound, autoload
-and full_speed settings. Fast loading mutes the corresponding media sound.
-Turn fast loading off to restore that sound preference. D64 and G64 use the
-1541 recordings during disk access. TAP uses only the tape signal during
+and full_speed settings. Fast loading mutes the corresponding loading sound.
+The drive's startup self-test remains audible when drive sounds are enabled,
+even with Fast Load on and no disk inserted. Auto-load omits the self-test sound
+from its preparatory reset. D64 and G64 use the 1541 recordings during disk
+access. TAP uses only the tape signal during
 playback or recording. PRG, P00 and T64 loads are silent, including when
 they use the synthesized tape path with fast loading off.
 D64 and G64 loading and saving always use the selected emulated drive.

@@ -231,7 +231,7 @@ int rc_machine_has_media(const rc_machine *m, unsigned slot) { return rc_family_
 int rc_machine_has_port(const rc_machine *m, unsigned port) { return rc_family_has_port(m->family, m->model, m->options, port); }
 const char *rc_machine_description(const rc_machine *m) { return m->impl->description(m->self); }
 const char *rc_machine_error(const rc_machine *m) { return m->impl->error(m->self); }
-void rc_machine_reset(rc_machine *m, int power_on) { m->impl->reset(m->self, power_on); }
+void rc_machine_reset(rc_machine *m, int mode) { m->impl->reset(m->self, mode); }
 void rc_machine_nmi(rc_machine *m) { if (m->impl->nmi) m->impl->nmi(m->self); }
 uint32_t rc_machine_clock(const rc_machine *m) { return m->impl->clock(m->self); }
 rc_run_status rc_machine_run(rc_machine *m, uint64_t ticks) { return m->impl->run(m->self, ticks); }

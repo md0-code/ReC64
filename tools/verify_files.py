@@ -69,7 +69,7 @@ def main() -> None:
             tag, _, length = struct.unpack_from("<4sII", data, at); at += 12
             if tag == b"CMED":
                 version = struct.unpack_from("<I", data, at)[0]
-                assert version in (1, 2, 3, 4, 5)
+                assert version in (1, 2, 3, 4, 5, 6)
                 slots = at + 6 + (26 if version >= 2 else 0)
                 assert data[slots+8] == 0  # no tape image precedes program
                 return struct.unpack_from("<I", data, slots+13)[0]
