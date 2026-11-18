@@ -18,8 +18,3 @@ The test screen does not require firmware.
 SingleStepTests/65x02 test vectors are MIT-licensed, downloaded only into
 `work/cpu/` at the commit in the source lock. Their full notice is downloaded
 with them. They are not program source and are not distributed with ReC64.
-
-Built-in RGB tables use Christopher Jam's published colors for the
-color-corrected profile and Pepto's published PAL/NTSC colors for the
-automatic default profile. Their pinned data references remain in
-`sources.lock.json`. No external VPL files or palette generator are shipped.

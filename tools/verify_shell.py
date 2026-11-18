@@ -53,13 +53,9 @@ def main() -> int:
         key('RIGHT'); screen = text(); assert screen.index('DRIVE') < screen.index('TAPE') and 'FAST LOAD' in screen and 'EJECT' not in screen
         shot('media')
         key('RIGHT'); key('DOWN'); key('RETURN'); call('expect COLOR-CORRECTED')
-        key('RETURN'); call('expect TUNED')
-        key('RETURN'); call('expect TUNED-STRONG')
         key('RETURN'); call('expect DEFAULT')
         key('LEFT', 2); key('DOWN'); key('RETURN'); key('F12'); call('frames 200')
-        key('F12'); ntsc = shot('ntsc')
-        with Image.open(pal) as a, Image.open(ntsc) as b:
-            assert a.getpixel((40,55)) != b.getpixel((40,55)), 'Automatic PAL/NTSC palette did not change'
+        key('F12'); shot('ntsc')
         key('DOWN', 4); key('RETURN'); assert 'MACHINE' not in text(); call('frames 200'); call('expect READY.')
         key('F12'); key('DOWN', 5); key('RETURN'); assert 'MACHINE' not in text(); call('frames 200'); call('expect READY.')
         key('F12'); key('RIGHT', 4); key('DOWN'); sources=[]
@@ -99,7 +95,7 @@ def main() -> int:
         call('frames 200'); call('expect READY.'); assert 'SHELL OK' not in text()
         assert config.read_text().startswith('# Keep this comment')
         call('quit'); _,error = proc.communicate(timeout=10); assert proc.returncode == 0, error
-        (work/'result.json').write_text(json.dumps({'status':'passed','version':version,'checks':['built-in palettes and automatic PAL/NTSC', 'version/page header', 'drive-first media settings', 'two controller sources and independent keyboard joystick', 'reset closes menus', 'drive/tape live widgets and recording/eject', 'instant LOAD/RUN', 'session-only media and configuration reload']},indent=2)+'\n')
+        (work/'result.json').write_text(json.dumps({'status':'passed','version':version,'checks':['built-in palettes', 'version/page header', 'drive-first media settings', 'two controller sources and independent keyboard joystick', 'reset closes menus', 'drive/tape live widgets and recording/eject', 'instant LOAD/RUN', 'session-only media and configuration reload']},indent=2)+'\n')
         print('Shell controls, palettes, session media, instant loading and transport widgets passed')
     finally:
         if proc.poll() is None:

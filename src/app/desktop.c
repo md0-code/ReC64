@@ -207,8 +207,7 @@ static size_t screen_text(void *ctx,char *out,size_t cap){desktop *d=ctx;size_t 
     return n;
 }
 static int load_palette(desktop *d,char *error,size_t cap){
-    const int ntsc=rc_machine_clock(d->machine)>1000000;
-    const uint32_t *built=rc_palette_profile(d->config->palette,ntsc);
+    const uint32_t *built=rc_palette_builtin(d->config->palette);
     if(!built){snprintf(error,cap,"Unknown color profile");return 0;}
     memcpy(d->palette,built,sizeof d->palette);return 1;
 }

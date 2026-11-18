@@ -135,7 +135,7 @@ static int frame(void *self,rc_frame *f){
     const unsigned top=c->border==RC_BORDER_NONE?51u:c->border==RC_BORDER_MINIMAL?35u:c->model>=2?8u:16u;
     const unsigned left=c->border==RC_BORDER_NONE?132u:c->border==RC_BORDER_MINIMAL?116u:100u;
     for(unsigned y=0;y<h;++y)for(unsigned x=0;x<w;++x)c->frame[y*w+x]=c->shown[((y+top)%raw_h)*raw+(x+left)%raw];
-    *f=(rc_frame){w,h,w,c->frame,rc_palette_profile("default",c->model>=2),16,w*4u*full_h,h*3u*384u,c->vic.frames};return 1;
+    *f=(rc_frame){w,h,w,c->frame,rc_palette_builtin("default"),16,w*4u*full_h,h*3u*384u,c->vic.frames};return 1;
 }
 static size_t text(void *self,char *out,size_t capacity){
     rc_c64 *c=self;size_t n=0;const unsigned bank=(rc_cia6526_port_output(&c->cia[1],0)^3u)&3u;

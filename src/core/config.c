@@ -450,7 +450,7 @@ static int video_section(reader *r, yaml_node_t *v, rc_config *c) {
         else if (!strcmp(name, "scale")) ok = choice(r, x, "video.scale", scales, &c->scale);
         else if (!strcmp(name, "filter")) ok = choice(r, x, "video.filter", filters, &c->filter);
         else if (!strcmp(name, "border")) {static const named borders[]={{"full",RC_BORDER_FULL},{"minimal",RC_BORDER_MINIMAL},{"none",RC_BORDER_NONE},{NULL,0}};ok=choice(r,x,"video.border",borders,&c->border);}
-        else if (!strcmp(name, "palette")) {const char *s=scalar(r,x);ok=s&&*s&&strlen(s)<sizeof c->palette&&!strpbrk(s,"/\\:\r\n");if(ok)snprintf(c->palette,sizeof c->palette,"%s",!strcmp(s,"tuned")||!strcmp(s,"tuned-strong")?s:!strcmp(s,"color-corrected")||!strcmp(s,"cjam")||!strcmp(s,"cjam.vpl")||!strcmp(s,"colodore")||!strcmp(s,"colodore.vpl")?"color-corrected":"default");else fail(r,"video.palette needs default or color-corrected");}
+        else if (!strcmp(name, "palette")) {const char *s=scalar(r,x);ok=s&&*s&&strlen(s)<sizeof c->palette&&!strpbrk(s,"/\\:\r\n");if(ok)snprintf(c->palette,sizeof c->palette,"%s",!strcmp(s,"color-corrected")?"color-corrected":"default");else fail(r,"video.palette needs default or color-corrected");}
         else if (!strcmp(name, "fullscreen")) ok = boolean(r, x, &c->fullscreen);
         else if (!strcmp(name, "vsync")) ok = boolean(r, x, &c->vsync);
         else ok = fail(r, "Unknown video key; expected look, aspect, scale, filter, border, palette, fullscreen or vsync");

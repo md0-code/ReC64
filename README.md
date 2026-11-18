@@ -181,7 +181,7 @@ rejected with a line number.
 | `machine.options.georam` | `off`, `512k`, `1m`, `2m`, `4m` |
 | `video.look`, `video.filter` | `crt`, `plain`; `nearest`, `linear` |
 | `video.border` | `full`, `minimal`, `none` |
-| `video.palette` | `default` (follows PAL or NTSC), `color-corrected`, `tuned`, `tuned-strong` |
+| `video.palette` | `default`, or `color-corrected` for a truer blue and more saturation |
 | `media.cartridge.startup` | `true` keeps the cartridge between launches |
 | `ui.media_folder` | Folder the first file browser opens |
 
