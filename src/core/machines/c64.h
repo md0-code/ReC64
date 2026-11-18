@@ -23,6 +23,7 @@ typedef struct rc_c64 {
     /* The last raster the VIC completed: the picture never shows one in progress. */
     uint8_t shown[RC_VIC_MAX_PIXELS];uint64_t shown_frames;
     rc_c1541 drive;rc_iec iec;rc_fastload fastload;rc_drivesnd drive_sound;uint64_t drive_phase;
+    uint8_t disk_audio_engaged; /* IEC attention has requested the mounted drive since reset. */
     rc_datasette tape;rc_traps traps;rc_cpu_hooks hooks;uint8_t fetch_watch[8192];
     rc_cart cart;rc_freezer freezer;rc_easyflash easyflash;rc_gmod2 gmod2;rc_media *cart_eeprom;rc_reu reu;rc_georam georam;uint32_t freeze_cycles;
     rc_sid_session sid_session;

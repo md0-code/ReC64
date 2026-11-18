@@ -61,7 +61,10 @@ unsigned rc_setup_key(rc_setup *s,const char *key){
         const char *kind=s->row<4?"disk":"tape";rc_config_media effective;rc_config_media_settings(c,kind,&effective);rc_config_media *media=rc_config_media_slot(c,kind);if(!media)return 0;
         const unsigned field=s->row<4?s->row-1:s->row-4;
         if(field==0){media->fast=!effective.fast;media->explicit_flags|=RC_MEDIA_SETTING_FAST;}
-        else if(field==1){media->sound=!effective.sound;media->explicit_flags|=RC_MEDIA_SETTING_SOUND;}
+        else if(field==1){
+            if(effective.fast)return 0;
+            media->sound=!effective.sound;media->explicit_flags|=RC_MEDIA_SETTING_SOUND;
+        }
         else {media->autoload=!effective.autoload;media->explicit_flags|=RC_MEDIA_SETTING_AUTOLOAD;}
         return RC_SETUP_MEDIA_OPTIONS;
     }
@@ -97,8 +100,8 @@ void rc_setup_draw(rc_setup *s,const uint32_t palette[16],rc_frame *f){
     case RC_SETUP_MEDIA:{rc_config_media disk,tape;rc_config_media_settings(c,"disk",&disk);rc_config_media_settings(c,"tape",&tape);const char *device=rc_config_option_value(c,"drive_device");
         rc_tui_put(&s->tui,4,3,"DRIVE",1,6);rc_tui_put(&s->tui,10,3,"TAPE",1,6);
         media_row(s,0,"DEVICE",device?device:"8",s->media_available);media_row(s,1,"FAST LOAD",disk.fast?"ON":"OFF",s->media_available);
-        media_row(s,2,"SOUNDS",disk.sound?"ON":"OFF",s->media_available);media_row(s,3,"AUTO-LOAD",disk.autoload?"ON":"OFF",s->media_available);
-        media_row(s,4,"FAST LOAD",tape.fast?"ON":"OFF",s->media_available);media_row(s,5,"SOUND",tape.sound?"ON":"OFF",s->media_available);media_row(s,6,"AUTO-LOAD",tape.autoload?"ON":"OFF",s->media_available);
+        media_row(s,2,"SOUNDS",disk.sound&&!disk.fast?"ON":"OFF",s->media_available&&!disk.fast);media_row(s,3,"AUTO-LOAD",disk.autoload?"ON":"OFF",s->media_available);
+        media_row(s,4,"FAST LOAD",tape.fast?"ON":"OFF",s->media_available);media_row(s,5,"SOUND",tape.sound&&!tape.fast?"ON":"OFF",s->media_available&&!tape.fast);media_row(s,6,"AUTO-LOAD",tape.autoload?"ON":"OFF",s->media_available);
         rc_tui_put(&s->tui,16,3,"DEFAULT MEDIA FOLDER",s->row==7?6:14,s->row==7?14:6);rc_tui_put(&s->tui,16,32,"ENTER",s->row==7?6:14,s->row==7?14:6);const char *folder=c->media_folder[0]?c->media_folder:"PROGRAM FOLDER";const size_t length=strlen(folder);rc_tui_put(&s->tui,18,3,length>34?folder+length-34:folder,14,6);break;}
 
     case RC_SETUP_CONTROLLERS:{const char *types[]={"JOYSTICK","1351 MOUSE","PADDLES","NONE"};char source[32];
@@ -127,16 +130,32 @@ void rc_setup_draw(rc_setup *s,const uint32_t palette[16],rc_frame *f){
         const int can_load=s->state_status[c->state_slot-1]==1;
         rc_tui_put(&s->tui,19,3,"LOAD CURRENT SLOT  CTRL+F6",(uint8_t)(can_load?(s->row==11?6:14):12),(uint8_t)(can_load&&s->row==11?14:6));const int can_delete=s->state_status[c->state_slot-1]!=0;
         rc_tui_put(&s->tui,20,3,"DELETE CURRENT SLOT  DEL",(uint8_t)(can_delete?(s->row==12?6:14):12),(uint8_t)(can_delete&&s->row==12?14:6));break;}
-    case RC_SETUP_ABOUT:rc_tui_put(&s->tui,15,3,"NEW IN " RC_VERSION,14,6);
-        rc_tui_put(&s->tui,16,3,"PALETTE; MODEL / VIDEO; SID TYPE",14,6);rc_tui_put(&s->tui,17,3,"SMART CONTROLS; BASIC PRG/TAP/D64",14,6);
-        rc_tui_put(&s->tui,18,3,"FILTERED FILES; RENAME AND DELETE",14,6);rc_tui_put(&s->tui,19,3,"DELETE STATES; DEFAULT FOLDER",14,6);
-        rc_tui_put(&s->tui,20,3,"FIXED SAVE SPEED / CURSOR BLINK",14,6);break;
+    case RC_SETUP_ABOUT:
+        rc_tui_put(&s->tui,10,3,"NEW IN " RC_VERSION,1,6);
+        rc_tui_put(&s->tui,11,3,"FAST LOAD MUTES DRIVE OR TAPE",14,6);
+        rc_tui_put(&s->tui,12,3,"DISKS PLAY 1541 SOUNDS",14,6);
+        rc_tui_put(&s->tui,13,3,"TAP PLAYS THE TAPE SIGNAL",14,6);
+        rc_tui_put(&s->tui,14,3,"PRG, P00 AND T64 LOAD SILENTLY",14,6);
+        rc_tui_put(&s->tui,16,3,"ALSO IN 0.20",1,6);
+        rc_tui_put(&s->tui,17,3,"PALETTE, MODEL, VIDEO AND SID TYPE",14,6);
+        rc_tui_put(&s->tui,18,3,"BASIC SAVES TO PRG, TAP AND D64",14,6);
+        rc_tui_put(&s->tui,19,3,"RENAME FILES, DELETE FILES & STATES",14,6);
+        rc_tui_put(&s->tui,20,3,"DEFAULT MEDIA FOLDER",14,6);
+        break;
     }
-    rc_tui_put(&s->tui,22,1,"LEFT/RIGHT PAGE  UP/DOWN SELECT",14,6);rc_tui_put(&s->tui,24,1,"ENTER CHANGE  +/- VALUE  F12 CLOSE",14,6);
+    if(s->page==RC_SETUP_ABOUT)rc_tui_put(&s->tui,24,1,"LEFT/RIGHT PAGE  F12 CLOSE",14,6);
+    else {
+        rc_tui_put(&s->tui,22,1,"LEFT/RIGHT PAGE  UP/DOWN SELECT",14,6);
+        rc_tui_put(&s->tui,24,1,"ENTER CHANGE  +/- VALUE  F12 CLOSE",14,6);
+    }
     if(s->delete_confirm){rc_tui_box(&s->tui,9,3,6,34);for(unsigned y=10;y<14;++y)rc_tui_put(&s->tui,y,4,"                                ",14,6);rc_tui_put(&s->tui,10,5,"DELETE CURRENT SNAPSHOT?",14,6);rc_tui_put(&s->tui,13,5,"ENTER/Y DELETE  ESC/N CANCEL",14,6);}
     rc_tui_frame(&s->tui,palette,f);
     if(s->page==RC_SETUP_ABOUT&&palette){memcpy(s->about_palette,palette,16*sizeof *palette);for(unsigned i=0;i<240;++i){const uint32_t color=RC_ABOUT_COLORS[i],a=color>>24;uint32_t blended=0;for(unsigned shift=0;shift<=16;shift+=8)blended|=((((color>>shift)&255u)*a+((palette[6]>>shift)&255u)*(255u-a)+127u)/255u)<<shift;s->about_palette[16+i]=blended;}
-        for(unsigned y=0;y<RC_ABOUT_H;++y)for(unsigned x=0;x<RC_ABOUT_W;++x)s->tui.pixels[(68u+y)*RC_TUI_W+64u+x]=(uint8_t)(16u+RC_ABOUT_PIXELS[y*RC_ABOUT_W+x]);f->palette=s->about_palette;f->colors=256;
+        const unsigned left=(RC_TUI_W-RC_ABOUT_W)/2;
+        for(unsigned y=0;y<RC_ABOUT_H;++y)
+            for(unsigned x=0;x<RC_ABOUT_W;++x)
+                s->tui.pixels[(68u+y)*RC_TUI_W+left+x]=(uint8_t)(16u+RC_ABOUT_PIXELS[y*RC_ABOUT_W+x]);
+        f->palette=s->about_palette;f->colors=256;
     }
     if(s->page==RC_SETUP_STATES&&s->state_thumb.width&&!s->delete_confirm){const rc_states_thumb *t=&s->state_thumb;uint8_t map[256];
         for(unsigned i=0;i<t->colors;++i){uint32_t best=UINT32_MAX;map[i]=0;for(unsigned j=0;j<16;++j){const int r=(int)(t->palette[i]>>16&255u)-(int)(palette[j]>>16&255u),g=(int)(t->palette[i]>>8&255u)-(int)(palette[j]>>8&255u),b=(int)(t->palette[i]&255u)-(int)(palette[j]&255u);const uint32_t delta=(uint32_t)(r*r+g*g+b*b);if(delta<best){best=delta;map[i]=(uint8_t)j;}}}

@@ -562,11 +562,34 @@ static int shell_key(void *ctx,const char *name,int down){
         return 1;
     }
     if(!strcmp(bare,"F10")){if(down){speed(d,!d->full);message(d,d->full?"Full speed (sound muted)":"100% speed");}return 1;}
-    if(alt&&(!strcmp(bare,"F")||!strcmp(bare,"S"))){if(!media_available(d)){if(down)message(d,"No drive available");return 1;}if(down){rc_config_media effective;rc_config_media_settings(d->config,"disk",&effective);rc_config_media *disk=rc_config_media_slot(d->config,"disk");if(disk){
-        if(!strcmp(bare,"F")){disk->fast=!effective.fast;disk->explicit_flags|=RC_MEDIA_SETTING_FAST;message(d,disk->fast?"Drive fast loading on":"Drive fast loading off");d->pace_dirty=1;}
-        else {disk->sound=!effective.sound;disk->explicit_flags|=RC_MEDIA_SETTING_SOUND;message(d,disk->sound?"Drive sounds on":"Drive sounds off");}
-        media_options(d);if(!store_config(d,error,sizeof error))message(d,error);}}return 1;}
-    if(alt&&!strcmp(bare,"T")){if(!media_available(d)){if(down)message(d,"No tape available");return 1;}if(down){rc_config_media *tape=rc_config_media_slot(d->config,"tape");if(tape){tape->sound=!tape->sound;tape->explicit_flags|=RC_MEDIA_SETTING_SOUND;media_options(d);message(d,tape->sound?"Tape sound on":"Tape sound off");if(!store_config(d,error,sizeof error))message(d,error);}}return 1;}
+    if(alt&&(!strcmp(bare,"F")||!strcmp(bare,"S")||!strcmp(bare,"T"))){
+        if(!down)return 1;
+        const int tape=!strcmp(bare,"T"),toggle_fast=!strcmp(bare,"F");
+        if(!media_available(d)){message(d,tape?"No tape available":"No drive available");return 1;}
+        const char *kind=tape?"tape":"disk";
+        rc_config_media effective;
+        rc_config_media_settings(d->config,kind,&effective);
+        if(!toggle_fast&&effective.fast){
+            message(d,tape?"Tape sound muted by fast load":"Drive sounds muted by fast load");
+            return 1;
+        }
+        rc_config_media *media=rc_config_media_slot(d->config,kind);
+        if(!media)return 1;
+        if(toggle_fast){
+            media->fast=!effective.fast;
+            media->explicit_flags|=RC_MEDIA_SETTING_FAST;
+            d->pace_dirty=1;
+            message(d,media->fast?"Drive fast loading on":"Drive fast loading off");
+        }else{
+            media->sound=!effective.sound;
+            media->explicit_flags|=RC_MEDIA_SETTING_SOUND;
+            if(tape)message(d,media->sound?"Tape sound on":"Tape sound off");
+            else message(d,media->sound?"Drive sounds on":"Drive sounds off");
+        }
+        media_options(d);
+        if(!store_config(d,error,sizeof error))message(d,error);
+        return 1;
+    }
     if(d->browser.active&&strcmp(bare,"F12")){
         if(!down)return 1;const int confirm=d->browser.confirm;const unsigned action=rc_browser_key(&d->browser,ctrl?key:bare);
         const int suppress=confirm||action!=RC_BROWSER_NONE||(ctrl&&!alt);

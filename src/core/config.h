@@ -69,8 +69,8 @@ typedef struct rc_config_media {
     int full_speed, traps, save_traps, accelerate;
     unsigned explicit_flags;            /* keys actually supplied, for shared tape defaults */
 } rc_config_media;
-/* What a tape slot's settings ask of the machine, for rc_machine_tape_options (machine.h). NULL: a slot the configuration
- * does not mention (all on). */
+/* Media options applied to the machine. Fast loading mutes media sound.
+ * NULL uses the default fast settings. */
 enum { RC_TAPE_SOUND = 1, RC_TAPE_TRAPS = 2, RC_TAPE_SAVE_TRAPS = 4, RC_TAPE_ACCELERATE = 8 };
 #define RC_TAPE_QUERY 0x80000000u       /* instead of settings: nothing changes, the machine only says which it has */
 unsigned rc_config_tape_bits(const rc_config_media *media);

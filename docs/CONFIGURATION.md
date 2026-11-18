@@ -245,7 +245,12 @@ A model restart retains mounted images and selected entries.
 save_traps and accelerate settings for `media.program` as well. An explicit
 program setting overrides that one default; storing an image path alone
 preserves inheritance. `media.disk` has independent fast, sound, autoload
-and full_speed settings. D64 and G64 loading and saving always use the selected emulated drive;
+and full_speed settings. Fast loading mutes the corresponding media sound.
+Turn fast loading off to restore that sound preference. D64 and G64 use the
+1541 recordings during disk access. TAP uses only the tape signal during
+playback or recording. PRG, P00 and T64 loads are silent, including when
+they use the synthesized tape path with fast loading off.
+D64 and G64 loading and saving always use the selected emulated drive.
 KERNAL traps and skipped loader instructions never apply to disks.
 Automatic full speed runs while the configured media is active, with every
 guest cycle still executed. Manual F10 full speed continues to mute sound.
@@ -271,8 +276,7 @@ SHA-256; modified media are flushed when saving. Loading checks integrity,
 model, ROMs, machine options and media before replacing the running machine.
 Missing or changed media and incompatible snapshots are refused. Display,
 sound, manual speed and host input preferences remain current. Returning
-from full speed reanchors pacing immediately; sound played during automatic
-full speed never lengthens the output queue.
+from full speed reanchors pacing immediately.
 
 The headless `drop FILE` command takes the same path as a native drop;
 `insert SLOT FILE` mounts only, for explicit LOAD or tape-control commands.

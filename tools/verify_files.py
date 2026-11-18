@@ -52,7 +52,7 @@ def main() -> None:
         offset += len(data)
     (work / "programs.t64").write_bytes(tape)
     run("load-and-save", ["drop work/verify-files/programs.t64", "expect SECOND", "shot work/verify-files/contents.png", "key DOWN", "enter", "until 20 43", "expect 43", "shot work/verify-files/loaded.png"] +
-        save_name("recording.tap", 1) + ["enter", "key Ctrl+F4", "expect RECORD", "key ESCAPE", "key Alt+T", "expect Tape sound off", "key Alt+T"] +
+        save_name("recording.tap", 1) + ["enter", "key Ctrl+F4", "expect RECORD", "key ESCAPE", "key Alt+T", "expect Tape sound muted by fast load"] +
         save_name("blank.d64", 1) + ["enter"] + save_name("saved.prg", 1) + ["enter", "expect REPLACE EXISTING FILE?", "shot work/verify-files/overwrite.png", "key ESCAPE", "key ESCAPE"])
     assert (work / "saved.prg").read_bytes() == original, "Cancel overwrote the program"
     assert (work / "recording.tap").read_bytes()[:13] == b"C64-TAPE-RAW\x01"
@@ -69,7 +69,7 @@ def main() -> None:
             tag, _, length = struct.unpack_from("<4sII", data, at); at += 12
             if tag == b"CMED":
                 version = struct.unpack_from("<I", data, at)[0]
-                assert version in (1, 2, 3, 4)
+                assert version in (1, 2, 3, 4, 5)
                 slots = at + 6 + (26 if version >= 2 else 0)
                 assert data[slots+8] == 0  # no tape image precedes program
                 return struct.unpack_from("<I", data, slots+13)[0]

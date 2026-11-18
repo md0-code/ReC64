@@ -262,8 +262,8 @@ void rc_config_media_settings(const rc_config *c,const char *key,rc_config_media
     }
 }
 unsigned rc_config_tape_bits(const rc_config_media *m) {
-    if (!m) return RC_TAPE_SOUND | RC_TAPE_TRAPS | RC_TAPE_SAVE_TRAPS | RC_TAPE_ACCELERATE;
-    return (m->sound ? RC_TAPE_SOUND : 0u) | (m->fast && m->traps ? RC_TAPE_TRAPS : 0u) | (m->fast && m->save_traps ? RC_TAPE_SAVE_TRAPS : 0u) |
+    if (!m) return RC_TAPE_TRAPS | RC_TAPE_SAVE_TRAPS | RC_TAPE_ACCELERATE;
+    return (m->sound && !m->fast ? RC_TAPE_SOUND : 0u) | (m->fast && m->traps ? RC_TAPE_TRAPS : 0u) | (m->fast && m->save_traps ? RC_TAPE_SAVE_TRAPS : 0u) |
            (m->fast && m->accelerate ? RC_TAPE_ACCELERATE : 0u);
 }
 

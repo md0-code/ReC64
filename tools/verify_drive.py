@@ -39,14 +39,14 @@ def main() -> None:
         script = work/f'{name}.script'
         script.write_text('\n'.join(commands)+'\n', encoding='utf8')
         result = subprocess.run([str(binary), '--hidden', '--config', str(cfg), '--script', str(script)],
-                                cwd=work, capture_output=True, text=True, timeout=240)
+                                cwd=ROOT, capture_output=True, text=True, timeout=240)
         (work/f'{name}.stdout').write_text(result.stdout, encoding='utf8')
         (work/f'{name}.stderr').write_text(result.stderr, encoding='utf8')
         assert result.returncode == 0, (name, result.stdout, result.stderr)
 
     serial = work/'serial.d64'
     shutil.copyfile(fixture, serial)
-    config = 'machine: {model: c64-pal, options: {drive_device: "11"}}\nui: {setup_page: media}\n'
+    config = 'machine: {model: c64-pal, options: {drive_device: "11"}}\nui: {setup_page: media}\nmedia: {disk: {fast: false}}\n'
     run('serial', config, [
         'frames 200', 'expect READY.', f'insert disk {serial.as_posix()}',
         'type 10PRINT"SERIAL SAVE"', 'enter', 'type SAVE"SECOND",11', 'enter',
@@ -54,11 +54,13 @@ def main() -> None:
         'expect IMAGE CONTENTS', 'type SECOND', 'expect SECOND',
         f'audio {(work/"drive.wav").as_posix()}', 'enter', 'until 40 SERIAL SAVE',
         'frames 100', 'audio off', f'shot {(work/"loaded.png").as_posix()}',
-        'key Alt+F', 'expect Drive fast loading off', 'key Alt+F',
-        'key Alt+S', 'expect Drive sounds off', 'frames 5',
+        'key Alt+F', 'expect Drive fast loading on',
+        'key Alt+S', 'expect Drive sounds muted by fast load', 'frames 5',
         f'audio {(work/"muted.wav").as_posix()}',
         'type LOAD"SECOND",11', 'enter', 'frames 200', 'audio off',
-        'key Alt+S', 'expect Drive sounds on', 'key F12', 'expect DEVICE',
+        'key Alt+F', 'expect Drive fast loading off',
+        'key Alt+S', 'expect Drive sounds off', 'key Alt+S', 'expect Drive sounds on',
+        'key F12', 'expect DEVICE',
         'expect FAST LOAD', f'shot {(work/"media.png").as_posix()}', 'key F12'
     ])
     def peak(path: Path) -> int:
