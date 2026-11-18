@@ -21,6 +21,8 @@ static void outputs(rc_cia6526 *c){
     c->announced=1;
 }
 static int timer_tick(rc_cia_timer *t,int source) {
+    /* A stopped timer with nothing in its pipelines only drops its pulse. */
+    if(!(t->control&1u)&&!t->count_pipe&&!t->load_pipe&&!t->force){t->pulse=0;t->oneshot=(uint8_t)(t->control&8u);return 0;}
     t->pulse=0;
     t->count_pipe=(uint8_t)(((t->count_pipe<<1)|((t->control&1u)&&source))&7u);
     t->load_pipe=(uint8_t)(((t->load_pipe<<1)|t->force)&3u);t->force=0;

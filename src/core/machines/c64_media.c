@@ -100,6 +100,9 @@ void rc_c64_iec_lines(rc_c64 *c){
      * their pull-ups then pull the corresponding IEC line low. */
     const unsigned pa=rc_cia6526_port_output(&c->cia[1],0);
     const unsigned output=RC_IEC_RESET|(!(pa&8u)?RC_IEC_ATN:0u)|(!(pa&16u)?RC_IEC_CLK:0u)|(!(pa&32u)?RC_IEC_DATA:0u);
+    /* Neither end moved since the lines were last resolved and passed on. */
+    if(output==c->iec.output[0]&&rc_c1541_iec_output(&c->drive)==c->iec.output[1]&&c->drive.iec_in==c->iec.lines&&
+       c->cia[1].input[0]==(uint8_t)(63u|((c->iec.lines&RC_IEC_CLK)?64u:0u)|((c->iec.lines&RC_IEC_DATA)?128u:0u)))return;
     /* A new ATN assertion addresses the drive. The low line left by reset
      * is not a disk request, even when a disk is already mounted. */
     if((c->iec.output[0]&RC_IEC_ATN)&&!(output&RC_IEC_ATN))

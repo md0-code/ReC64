@@ -25,7 +25,7 @@ function Publish-Program([string]$source, [string]$destination) {
     }
 }
 if (-not $NoBuild) {
-    & "$repo/src/build.ps1" -NoTest -StaticRuntime
+    & "$repo/src/build.ps1" -NoTest -StaticRuntime -Pgo
     & "$repo/src/build.ps1" -Arch arm64 -NoTest -StaticRuntime
 }
 $version = (Get-Content -LiteralPath "$repo/src/VERSION" -Raw).Trim()

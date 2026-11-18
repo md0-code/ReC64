@@ -865,6 +865,8 @@ int rc_desktop_run(rc_machine **owner,rc_config *c,rc_rom_index *roms,const rc_d
             input_frame=free_running?step.action==RC_PACE_RUN:present;
         }
         if(d.quit){status=0;break;}m=d.machine;
+        /* At full speed nobody follows the picture or the sound; a recording keeps both. */
+        rc_machine_economy(m,(racing||(o->hidden&&d.full))&&!d.wav.file);
         if(!d.setup.active&&!d.browser.active&&!d.slot_picker&&!d.paused&&input_frame&&rc_typist_frame(&d.typist,m,&d.keymap)<0)message(&d,d.typist.error);
         if(!d.setup.active&&!d.browser.active&&!d.slot_picker&&!d.paused&&rc_machine_run(m,ticks)!=RC_RUN_OK) { snprintf(error,cap,"%s",rc_machine_error(m));goto done; }
         if(present)++d.frames;if(input_frame&&!d.setup.active&&!d.browser.active&&!d.slot_picker&&!d.paused)rc_keymap_frame(&d.keymap);

@@ -94,10 +94,11 @@ that image. Changed images are written back on eject and exit.
 Disks always run through the emulated drive and its own firmware, so custom
 loaders work. With both drive ROMs present the Machine page selects the 1541
 or 1541-II; the Media page holds the device number (8 to 11), fast loading,
-loading sounds and the default media folder. Fast loading runs the machine at full speed while the
-drive or tape is busy, without changing what the C64 sees; loading sounds
-play only with fast loading off. Ctrl+F3 and Ctrl+F4 open the drive and tape
-controls: load, save, eject, and for tape also play, stop, rewind and record.
+loading sounds and the default media folder. Fast loading runs the machine at
+full speed while the drive or tape is busy, without changing what the C64
+sees. Sound is off at full speed, and loading sounds play only with fast
+loading off. Ctrl+F3 and Ctrl+F4 open the drive and tape controls: load,
+save, eject, and for tape also play, stop, rewind and record.
 
 ## Cartridges and memory expansions
 
@@ -204,6 +205,7 @@ Windows needs Visual Studio's C++ tools, CMake 3.24 or later and Ninja:
 
 ```powershell
 ./src/build.ps1                # x64, into work/build-x64
+./src/build.ps1 -Pgo           # the same, profile-guided: about a third faster
 ./src/build.ps1 -Arch arm64    # needs the ARM64 compiler tools
 python tools/fetch_roms.py     # firmware for the checks, into roms/
 ./work/build-x64/rec64.exe
@@ -215,6 +217,10 @@ On Linux:
 ```sh
 cmake -S src -B work/build && cmake --build work/build
 ```
+
+For a profile-guided Linux build, configure with `-DRC_PGO=generate`, build,
+run `python3 tools/pgo_train.py work/build/rec64`, then configure with
+`-DRC_PGO=use` and build again. The training run needs the firmware.
 
 SDL 2 is downloaded during configuration. `python tools/verify.py` runs the
 checks without opening a window. The [design notes](docs/DESIGN.md) describe

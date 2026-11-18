@@ -52,6 +52,9 @@ typedef struct rc_sid_own {
     float cutoff_curve[RC_SID_OWN_CURVE+2];
     uint16_t combined[6][4096];   /* triangle+saw, pulse+triangle, pulse+saw and all three */
     uint32_t kernel_span;
+    /* Host policy, never saved: while quiet the analogue path rests and silence is queued. */
+    uint8_t quiet, settle;
+    double quiet_level;
 } rc_sid_own;
 int rc_sid_own_init(rc_sid_own *s,unsigned model,uint32_t clock_hz,uint32_t sample_rate);
 void rc_sid_own_reset(rc_sid_own *s);
@@ -64,6 +67,8 @@ int rc_sid_own_clock(rc_sid_own *s,uint32_t cycles);
 size_t rc_sid_own_audio_pull(rc_sid_own *s,int16_t *mono,size_t frames);
 void rc_sid_own_get_probe(const rc_sid_own *s,unsigned voice,rc_sid_own_probe *out);
 void rc_sid_own_set_external_filter(rc_sid_own *s,int enabled);
+/* Nobody listens: the registers, OSC3 and ENV3 stay exact, the output is silence at the usual rate. */
+void rc_sid_own_set_quiet(rc_sid_own *s,int quiet);
 int32_t rc_sid_own_output_cycle(const rc_sid_own *s);
 /* Writes payload to an already open chunk. Load commits atomically. */
 void rc_sid_own_save(const rc_sid_own *s,rc_state_writer *w);

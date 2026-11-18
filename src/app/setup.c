@@ -202,14 +202,14 @@ void rc_setup_draw(rc_setup *s,const uint32_t palette[16],rc_frame *f){
         option_text(s,12,20,3,"DELETE CURRENT SLOT  DEL/Y");break;}
     case RC_SETUP_ABOUT:
         rc_tui_put(&s->tui,10,3,"NEW IN " RC_VERSION,1,6);
-        rc_tui_put(&s->tui,11,3,"FIRMWARE SCREEN LISTS MISSING ROMS",14,6);
-        rc_tui_put(&s->tui,12,3,"ONE DRIVE ROM IS ENOUGH",14,6);
-        rc_tui_put(&s->tui,13,3,"COLOR-CORRECTED HAS A TRUE BLUE",14,6);
-        rc_tui_put(&s->tui,16,3,"ALSO IN 0.20",1,6);
-        rc_tui_put(&s->tui,17,3,"DRIVE AND TAPE SOUNDS MATCH",14,6);
-        rc_tui_put(&s->tui,18,3,"BASIC SAVES TO PRG, TAP AND D64",14,6);
-        rc_tui_put(&s->tui,19,3,"RENAME FILES, DELETE FILES & STATES",14,6);
-        rc_tui_put(&s->tui,20,3,"CONTROLLER FILE / FOLDER ACTIONS",14,6);
+        rc_tui_put(&s->tui,11,3,"FULL SPEED RUNS TWICE AS FAST",14,6);
+        rc_tui_put(&s->tui,12,3,"SPRITES ON MULTICOLOUR TEXT FIXED",14,6);
+        rc_tui_put(&s->tui,13,3,"QUICK SAVE KEEPS A PENDING RUN",14,6);
+        rc_tui_put(&s->tui,16,3,"ALSO IN 0.21",1,6);
+        rc_tui_put(&s->tui,17,3,"FIRMWARE SCREEN LISTS MISSING ROMS",14,6);
+        rc_tui_put(&s->tui,18,3,"ONE DRIVE ROM IS ENOUGH",14,6);
+        rc_tui_put(&s->tui,19,3,"COLOR-CORRECTED HAS A TRUE BLUE",14,6);
+        rc_tui_put(&s->tui,20,3,"DRIVE AND TAPE SOUNDS MATCH",14,6);
         break;
     }
     if(s->page==RC_SETUP_ABOUT)rc_tui_put(&s->tui,24,1,"LEFT/RIGHT PAGE  F12 CLOSE",14,6);

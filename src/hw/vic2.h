@@ -26,6 +26,9 @@ typedef struct rc_vic2 {
     uint8_t main_border,vertical_border,delay[8],delay_at,last_background;
     rc_vic_access bus[2];
     uint8_t sprite_slot[2],sprite_byte[2];
+    /* Host policy, never saved. With economy on only one frame in four is drawn; `published` tells whether
+     * the frame that just ended was. Collisions, interrupts and bus timing do not depend on it. */
+    uint8_t economy,skip,published;
     uint8_t pixels[RC_VIC_MAX_PIXELS];
 } rc_vic2;
 void rc_vic2_init(rc_vic2 *v,const rc_hw_host *host,unsigned model);

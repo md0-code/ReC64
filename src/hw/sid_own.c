@@ -520,6 +520,23 @@ uint8_t rc_sid_own_pot_read(rc_sid_own *s,unsigned reg,uint8_t value) {
     s->pot[(reg-25)&1]=value;s->bus_value=value;s->bus_cycles=profile(s)->bus_cycles;
     return value;
 }
+/* The sample clock without the sound: the last level fades out within a millisecond. */
+static void quiet_clock(rc_sid_own *s) {
+    if(s->cycles&3u)return;
+    s->sample_phase+=4u*s->sample_rate;
+    if(s->sample_phase<s->clock_hz)return;
+    s->sample_phase-=s->clock_hz;
+    s->quiet_level*=0.9;audio_push(s,s->quiet_level);
+}
+void rc_sid_own_set_quiet(rc_sid_own *s,int quiet) {
+    quiet=quiet!=0;if(s->quiet==quiet)return;
+    s->quiet=(uint8_t)quiet;
+    if(quiet)s->quiet_level=s->audio_count?s->audio[(s->audio_head+s->audio_count-1u)%RC_SID_OWN_AUDIO_CAPACITY]:0;
+    else {
+        /* The sound returns from silence: an empty resampler and an output stage that has settled. */
+        memset(s->recent,0,sizeof s->recent);memset(s->history,0,sizeof s->history);s->settle=255;
+    }
+}
 void rc_sid_own_tick(rc_sid_own *s) {
     const chip_profile *p=profile(s);
     ++s->cycles;
@@ -550,8 +567,12 @@ void rc_sid_own_tick(rc_sid_own *s) {
             !((source->control&2) && upstream->msb_rising))v->phase=0;
     }
     for(unsigned i=0;i<3;++i)waveform_clock(s,i,1);
-    analog_clock(s);
-    resample_clock(s);
+    if(s->quiet)quiet_clock(s);
+    else {
+        analog_clock(s);
+        if(s->settle){--s->settle;s->external_high=s->external_low;if(s->external_filter)s->cycle_output=0;}
+        resample_clock(s);
+    }
     if(s->write_pending) {
         s->write_pending=0;write_register(s,s->write_reg,s->write_value);
         /* The selector is combinational: OSC3 follows a new control value

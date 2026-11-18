@@ -34,6 +34,7 @@ void rc_sid_write(rc_sid *s,unsigned reg,uint8_t v){if(s->engine){if((reg&31u)==
 int rc_sid_volume_written(const rc_sid *s){return s->volume_written;}
 int rc_sid_clock(rc_sid *s,uint32_t cycles){return s->engine&&rc_sid_own_clock(s->engine,cycles);}
 size_t rc_sid_audio_pull(rc_sid *s,int16_t *mono,size_t frames){return s->engine?rc_sid_own_audio_pull(s->engine,mono,frames):0;}
+void rc_sid_quiet(rc_sid *s,int quiet){if(s->engine)rc_sid_own_set_quiet(s->engine,quiet);}
 int rc_sid_ok(const rc_sid *s){const rc_sid_own *e=s->engine;return e&&!e->failed;}
 void rc_sid_save(const rc_sid *s,rc_state_writer *w){
     const rc_sid_own *e=s->engine;if(!e||e->failed){w->failed=1;return;}

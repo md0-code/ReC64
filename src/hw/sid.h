@@ -19,6 +19,8 @@ int rc_sid_volume_written(const rc_sid *s);
 int rc_sid_clock(rc_sid *s,uint32_t cycles);
 size_t rc_sid_audio_pull(rc_sid *s,int16_t *mono,size_t frames);
 int rc_sid_ok(const rc_sid *s);
+/* Nobody listens: only what a program can read is kept exact. */
+void rc_sid_quiet(rc_sid *s,int quiet);
 void rc_sid_save(const rc_sid *s,rc_state_writer *w);
 int rc_sid_load(rc_sid *s,rc_state_reader *r);
 #endif

@@ -243,6 +243,7 @@ uint64_t rc_machine_frames(const rc_machine *m) {
     return period ? m->impl->time(m->self) / period : 0;
 }
 int rc_machine_frame(rc_machine *m, rc_frame *frame) { return m->impl->frame(m->self, frame); }
+void rc_machine_economy(rc_machine *m,int on){if(m->impl->economy)m->impl->economy(m->self,on);}
 void rc_machine_border(rc_machine *m,unsigned border){if(m->impl->border)m->impl->border(m->self,border);}
 size_t rc_machine_text(rc_machine *m, char *out, size_t capacity) {
     if (capacity) out[0] = 0;

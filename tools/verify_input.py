@@ -21,7 +21,7 @@ def main() -> None:
         "key Shift+F11", "expect Joystick port 1", "key Up", "peek DC01", "release Up", "peek DC01",
         "key F11", "expect Keyboard joystick off", "key F12", "key RIGHT", "key RIGHT", "key RIGHT", "key RIGHT",
         "expect CONTROLLERS", "expect JOYSTICK", "shot work/verify-input/controllers.png", "key RETURN",
-        "expect 1351 MOUSE", "key DOWN", "key DOWN", "key RETURN", "key RETURN", "expect PADDLES", "key F12", ""
+        "expect 1351 MOUSE", "key DOWN", "key RETURN", "key RETURN", "expect PADDLES", "key F12", ""
     ]), encoding="ascii")
     run = subprocess.run([str(args.binary.resolve()), "--hidden", "--config", str(config), "--script", str(script)],
                          cwd=ROOT, capture_output=True, text=True, timeout=30)

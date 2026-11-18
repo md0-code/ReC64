@@ -25,6 +25,8 @@ function(rc_set_warnings target)
             # The tables leave their last fields to C's zero fill, and every message is formatted into a buffer of its own
             # size with snprintf, which cuts it by design.
             -Wno-missing-field-initializers -Wno-format-truncation
+            # The sources put several short statements on a line and rely on operator precedence.
+            -Wno-misleading-indentation -Wno-parentheses
         )
     endif()
 endfunction()

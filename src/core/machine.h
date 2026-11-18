@@ -220,6 +220,9 @@ typedef struct rc_frame {
 int rc_machine_frame(rc_machine *m, rc_frame *frame);
 enum {RC_BORDER_FULL,RC_BORDER_MINIMAL,RC_BORDER_NONE};
 void rc_machine_border(rc_machine *m,unsigned border);
+/* Nobody watches or listens, as at full speed: the machine may leave pictures undrawn and sound
+ * unsynthesised. Everything a program can observe stays exact. */
+void rc_machine_economy(rc_machine *m,int on);
 /* The frame as ARGB8888 into out (width x height). */
 void rc_frame_argb(const rc_frame *frame, uint32_t *out);
 /* The characters on the screen as text, a line of the screen a line of the

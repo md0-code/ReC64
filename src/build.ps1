@@ -28,6 +28,7 @@
     ./build.ps1 -Clean          # wipe the build directory first
     ./build.ps1 -NoTest         # build only
     ./build.ps1 -Arch arm64     # cross-compile for ARM64 (no tests)
+    ./build.ps1 -Pgo            # profile-guided: build, train, build again (x64, needs the firmware)
 #>
 [CmdletBinding()]
 param(
@@ -40,6 +41,9 @@ param(
     # Link the C runtime statically (/MT), so the binary needs no Visual C++
     # redistributable.
     [switch]$StaticRuntime,
+    # Profile-guided optimisation: an instrumented build runs tools/pgo_train.py,
+    # then the program is linked again with what that run recorded.
+    [switch]$Pgo,
     # Optional focused targets (for example the separate SID comparison).
     [string[]]$Target = @(),
     # Tests run side by side (ctest -j): default the physical cores - 1.
@@ -106,6 +110,18 @@ if ($Clean -and (Test-Path $BuildDir)) {
     Remove-Item -LiteralPath $target -Recurse -Force
 }
 
+if ($Pgo -and $Arch -ne "x64") {
+    Write-Host "Profile-guided optimisation needs a program this host can run: building $Arch without it." -ForegroundColor Yellow
+    $Pgo = $false
+}
+if ($Pgo) {
+    python "$PSScriptRoot/../tools/fetch_roms.py" --check | Out-Null
+    if ($LASTEXITCODE -ne 0) {
+        Write-Host "The training run needs the firmware in roms/: building without profile-guided optimisation." -ForegroundColor Yellow
+        $Pgo = $false
+    }
+}
+$pgoFlag = if ($Pgo) { "-DRC_PGO=generate" } else { "-DRC_PGO=" }
 $runtimeFlag = if ($StaticRuntime) { "-DCMAKE_MSVC_RUNTIME_LIBRARY=MultiThreaded" } else { "" }
 $devArch = if ($Arch -eq "x64") { "amd64" } else { "arm64" }
 # Cross-compiling: CMake must not try to run what it builds.
@@ -126,9 +142,18 @@ $script = @"
 @echo off
 set "PATH=$($vs.InstallerDir);%PATH%"
 call "$devcmd" -arch=$devArch -host_arch=amd64 -vcvars_ver=$toolset -no_logo || exit /b 1
-cmake -S "$src" -B "$BuildDir" -G Ninja -DCMAKE_BUILD_TYPE=$Config $runtimeFlag $crossFlags || exit /b 1
+cmake -S "$src" -B "$BuildDir" -G Ninja -DCMAKE_BUILD_TYPE=$Config $pgoFlag $runtimeFlag $crossFlags || exit /b 1
 cmake --build "$BuildDir"$targetFlags || exit /b 1
 "@
+if ($Pgo) {
+    $script = $script.Replace("cmake -S", "del /q `"$BuildDir\*.pgc`" `"$BuildDir\rec64.pgd`" 2>nul`r`ncmake -S")
+    $script += @"
+
+python "$src/../tools/pgo_train.py" "$BuildDir/rec64.exe" || exit /b 1
+cmake -S "$src" -B "$BuildDir" -DRC_PGO=use || exit /b 1
+cmake --build "$BuildDir"$targetFlags || exit /b 1
+"@
+}
 if ($test) {
     $script += @"
 
