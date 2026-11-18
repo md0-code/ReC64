@@ -46,7 +46,7 @@ foreach ($arch in @('x64', 'arm64')) {
     if (-not (Test-Path -LiteralPath "$target/rec64.yaml")) {
         Copy-Item -LiteralPath "$repo/src/app/rec64.yaml" -Destination "$target/rec64.yaml"
     }
-    foreach ($name in @('DESIGN.md', 'THIRD_PARTY.md', 'LICENSE', 'sources.lock.json')) {
+    foreach ($name in @('DESIGN.md', 'THIRD_PARTY.md', 'LICENSE')) {
         Copy-Item -LiteralPath "$repo/docs/$name" -Destination "$target/docs/$name" -Force
     }
     Copy-Item -LiteralPath "$repo/README.md" -Destination "$target/README.md" -Force

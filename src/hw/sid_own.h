@@ -1,4 +1,4 @@
-/* Original SID engine; hardware sources are pinned in docs/sources.lock.json. */
+/* Original SID engine. */
 #ifndef RC_SID_OWN_H
 #define RC_SID_OWN_H
 #include <stddef.h>

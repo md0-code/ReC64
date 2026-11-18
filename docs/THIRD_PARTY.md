@@ -5,8 +5,8 @@
 | SDL 2.32.10 | zlib | Downloaded at build time; its `LICENSE.txt` is retained in the dependency tree |
 | libyaml 0.2.5 | MIT, Copyright (c) 2006-2016 Kirill Simonov | `src/third_party/libyaml/LICENSE` |
 
-The source locks are in `sources.lock.json`. The CRT presenter uses the
-project's M-CRT shader. Program source is GPL-3.0-or-later (`LICENSE`).
+The CRT presenter uses the project's M-CRT shader. Program source is
+GPL-3.0-or-later (`LICENSE`).
 
 ReC64 includes no firmware: none is committed to this repository and none is
 part of a build. The Commodore images a user supplies retain their owners'
@@ -16,5 +16,5 @@ README; the 1541 image is joined from the 325302-01 lower half and the
 The test screen does not require firmware.
 
 SingleStepTests/65x02 test vectors are MIT-licensed, downloaded only into
-`work/cpu/` at the commit in the source lock. Their full notice is downloaded
+`work/cpu/` at a pinned commit. Their full notice is downloaded
 with them. They are not program source and are not distributed with ReC64.

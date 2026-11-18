@@ -10,6 +10,7 @@ import shutil
 import struct
 import subprocess
 import wave
+import pins as PINS
 from verify_states import machine_bytes
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -55,7 +56,7 @@ def main() -> None:
             'subsong and pause across model restart','live player overlays','controller accept/release','close to BASIC']},indent=2)+'\n')
         print('SID session load, model restart and packaged overlay controls passed')
         return
-    pins = json.loads((root/'docs/sources.lock.json').read_text())['sid_test_tunes']
+    pins = PINS.SID_TUNES
     for name in ('Commando.sid', 'Arkanoid.sid'):
         source = root/'work/p8'/name
         assert hashlib.sha256(source.read_bytes()).hexdigest() == pins[name]['sha256']

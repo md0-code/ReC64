@@ -4,6 +4,7 @@ import argparse
 import hashlib
 import json
 from pathlib import Path
+import pins
 import re
 import struct
 import subprocess
@@ -96,7 +97,7 @@ def main() -> None:
         print('Native OSK input, multitouch, sticky snapshot and combined crop passed', flush=True)
 
         # The pinned disk executes its original loader while F9 keeps showing live state.
-        pin = json.loads((ROOT/'docs/sources.lock.json').read_text())['test_programs']['krill-loader-v164']
+        pin = pins.KRILL_LOADER
         archive = ROOT/'work/p5/loader-v164.zip'
         assert hashlib.sha256(archive.read_bytes()).hexdigest() == pin['sha256']
         with zipfile.ZipFile(archive) as z: original = z.read(pin['file'])

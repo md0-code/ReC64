@@ -4,6 +4,7 @@ import argparse
 import hashlib
 import json
 from pathlib import Path
+import pins
 import struct
 import subprocess
 import urllib.request
@@ -36,7 +37,7 @@ def main() -> None:
     parser.add_argument('--restart-only', action='store_true', help='reuse verified continuation artifacts for restart/slot checks')
     args = parser.parse_args(); binary = args.binary.resolve()
     work = ROOT/'work/verify-states'; work.mkdir(parents=True, exist_ok=True)
-    pin = json.loads((ROOT/'docs/sources.lock.json').read_text())['test_programs']['krill-loader-v164']
+    pin = pins.KRILL_LOADER
     archive = ROOT/'work/p5/loader-v164.zip'; archive.parent.mkdir(parents=True, exist_ok=True)
     if not archive.exists(): archive.write_bytes(urllib.request.urlopen(pin['url'], timeout=45).read())
     assert hashlib.sha256(archive.read_bytes()).hexdigest() == pin['sha256']

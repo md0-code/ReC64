@@ -1,6 +1,6 @@
 """Fetch the hash-identified firmware images.
 
-Only the firmware URLs in docs/sources.lock.json are requested; an image
+Only the firmware URLs in tools/pins.py are requested; an image
 listed with several URLs is joined from those parts in order. --check
 verifies installed files without writing.
 --from-dir DIR imports matching images by content, whatever their filenames.
@@ -8,10 +8,10 @@ verifies installed files without writing.
 from __future__ import annotations
 import argparse
 import hashlib
-import json
 import sys
 import urllib.request
 from pathlib import Path
+import pins
 ROOT = Path(__file__).resolve().parents[1]
 
 def main() -> int:
@@ -19,7 +19,6 @@ def main() -> int:
     parser.add_argument("--check", action="store_true")
     parser.add_argument("--from-dir", type=Path)
     args = parser.parse_args()
-    manifest = json.loads((ROOT / "docs/sources.lock.json").read_text())
     local = {}
     if args.from_dir and not args.check:
         for path in args.from_dir.iterdir():
@@ -27,7 +26,7 @@ def main() -> int:
                 data = path.read_bytes()
                 local[hashlib.sha256(data).hexdigest()] = data
     failures = 0
-    for rom in manifest["roms"]:
+    for rom in pins.ROMS:
         name = rom["key"] + ".bin"   # any name works: ROMs are recognised by content
         path = ROOT / "roms" / name
         def valid(data: bytes) -> bool:
@@ -48,7 +47,7 @@ def main() -> int:
                     with urllib.request.urlopen(url, timeout=30) as reply:
                         data += reply.read(rom["bytes"] + 1)
             if not valid(data):
-                raise ValueError("firmware size or SHA-256 differs from the lock")
+                raise ValueError("firmware size or SHA-256 differs from the pin")
             path.parent.mkdir(exist_ok=True)
             path.write_bytes(data)
             print(f'{name}: installed')

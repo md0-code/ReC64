@@ -1,5 +1,5 @@
 /* The 1541 sounds, cut from recordings of the drive: 16-bit samples at 24 kHz, at the level of the mixer.
- * Written by the cutting script; the recordings and the cuts are named in docs/sources.lock.json. */
+ * Written by the cutting script. */
 #define DRIVESND_DATA_RATE 24000u
 static const int16_t MOTOR_UP[6240]={
     0,0,0,0,-1,-1,0,0,-1,0,-1,-2,-2,0,1,0,0,1,1,2,

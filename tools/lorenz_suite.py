@@ -16,6 +16,7 @@ import subprocess
 import sys
 import urllib.request
 import zipfile
+import pins
 
 ROOT = Path(__file__).resolve().parents[1]
 WORK = ROOT / "work/testprogs"
@@ -47,9 +48,9 @@ def programs(disk: bytes) -> dict[str, bytes]:
     return found
 
 def fetch() -> None:
-    pin = json.loads((ROOT / "docs/sources.lock.json").read_text(encoding="utf8"))["test_suites"]["lorenz"]
+    pin = pins.LORENZ
     archive = urllib.request.urlopen(pin["url"], timeout=45).read()
-    assert len(archive) == pin["bytes"] and hashlib.sha256(archive).hexdigest() == pin["sha256"], "archive differs from the lock"
+    assert len(archive) == pin["bytes"] and hashlib.sha256(archive).hexdigest() == pin["sha256"], "archive differs from the pin"
     WORK.mkdir(parents=True, exist_ok=True)
     for old in WORK.glob("*.prg"):
         old.unlink()

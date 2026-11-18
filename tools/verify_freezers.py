@@ -1,10 +1,11 @@
-"""Run unpatched freezer firmware from work/p7/freezers/fixtures (pins in sources.lock.json)."""
+"""Run unpatched freezer firmware from work/p7/freezers/fixtures (hashes in pins.py)."""
 from pathlib import Path
 import argparse
 import hashlib
 import json
 import struct
 import subprocess
+import pins as PINS
 from verify_states import chunks, machine_bytes
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -21,7 +22,7 @@ def main():
     parser.add_argument('--case', choices=NAMES, action='append')
     args = parser.parse_args()
     work = ROOT/'work/p7/freezers'; work.mkdir(parents=True, exist_ok=True)
-    pins = json.loads((ROOT/'docs/sources.lock.json').read_text())['test_suites']['freezer_firmware']
+    pins = PINS.FREEZER_FIRMWARE
     for name in args.case or NAMES:
         fixture = work/'fixtures'/f'{name}.crt'
         data = fixture.read_bytes()

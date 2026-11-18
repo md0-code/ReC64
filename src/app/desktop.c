@@ -398,7 +398,10 @@ static int drop(void *ctx,const char *path,char *error,size_t cap){
     if(action)return browser_action(d,action,error,cap);release_keys(d);input_config(d);d->pace_dirty=1;return 1;
 }
 static int text_input(void *ctx,const char *text){
-    desktop *d=ctx;d->freeze_pending=0;if(!d->browser.active){if(rc_typist_busy(&d->typist))release_keys(d);return 0;}
+    desktop *d=ctx;d->freeze_pending=0;
+    /* In a picker, Enter confirms the selection and other text is dropped. */
+    if(!d->browser.active&&(d->firmware||d->slot_picker||d->transport)){for(;*text;++text)if(*text=='\n'||*text=='\r')shell_key(d,"RETURN",1);return 1;}
+    if(!d->browser.active){if(rc_typist_busy(&d->typist))release_keys(d);return 0;}
     for(;*text&&d->browser.active;++text){char error[128]="";unsigned action=0;
         if(*text=='\n'||*text=='\r')action=rc_browser_key(&d->browser,"RETURN");
         else if(*text=='\b')action=rc_browser_key(&d->browser,"BACKSPACE");
@@ -435,11 +438,13 @@ static int needs_restart(desktop *d){
     for(unsigned i=0;i<f->option_count;++i)if((f->options[i].flags&RC_OPTION_RESET)&&values[i]!=current[i])return 1;
     return 0;
 }
+/* The slot picker keeps a pending auto-load, which a snapshot records. */
+static void picker_input(desktop *d){const rc_typist typist=d->typist;input_config(d);d->typist=typist;}
 static int quick_state(desktop *d,int save,char *error,size_t cap){
     if(!d->slot_selected){
         if(d->restart_pending){if(!restart(d,error,cap))return 0;d->restart_pending=0;}
-        release_keys(d);d->setup.active=0;d->transport=0;rc_browser_close(&d->browser);rc_osk_open(&d->osk,0);
-        d->slot_picker=save?1u:2u;d->slot_row=(unsigned)d->config->state_slot-1u;d->osd.text[0]=0;d->states_dirty=d->pace_dirty=1;states_status(d);input_config(d);return 1;
+        d->setup.active=0;d->transport=0;rc_browser_close(&d->browser);rc_osk_open(&d->osk,0);
+        d->slot_picker=save?1u:2u;d->slot_row=(unsigned)d->config->state_slot-1u;d->osd.text[0]=0;d->states_dirty=d->pace_dirty=1;states_status(d);picker_input(d);return 1;
     }
     const rc_family *f=rc_machine_family(d->machine);char path[RC_HOST_PATH];const unsigned slot=(unsigned)d->config->state_slot;
     rc_states_slot_path(d->config->source,f->models[rc_machine_model(d->machine)].id,slot,path,sizeof path);
@@ -453,11 +458,11 @@ static void slot_draw(desktop *d,rc_frame *frame){
     rc_tui_put(t,14,1,"UP/DOWN SELECT  A/ENTER CONFIRM",14,6);rc_tui_put(t,15,1,"B/ESC CANCEL",14,6);rc_tui_overlay(t,16,frame,frame);
 }
 static void slot_key(desktop *d,const char *key){
-    if(!strcmp(key,"ESCAPE")||!strcmp(key,"F12")){d->slot_picker=0;input_config(d);d->pace_dirty=1;return;}
+    if(!strcmp(key,"ESCAPE")||!strcmp(key,"F12")){d->slot_picker=0;picker_input(d);d->pace_dirty=1;return;}
     if(!strcmp(key,"UP")||!strcmp(key,"DOWN")){d->slot_row=(d->slot_row+(!strcmp(key,"UP")?RC_STATES_SLOTS-1u:1u))%RC_STATES_SLOTS;return;}
     if(strcmp(key,"RETURN")&&strcmp(key,"ENTER")&&strcmp(key,"SPACE"))return;
     if(d->slot_picker==2&&d->setup.state_status[d->slot_row]!=1){message(d,"No snapshot in this slot");return;}
-    const int save=d->slot_picker==1;d->config->state_slot=(int)d->slot_row+1;d->slot_selected=1;d->slot_picker=0;input_config(d);d->pace_dirty=1;
+    const int save=d->slot_picker==1;d->config->state_slot=(int)d->slot_row+1;d->slot_selected=1;d->slot_picker=0;picker_input(d);d->pace_dirty=1;
     char error[256];if(!quick_state(d,save,error,sizeof error))message(d,error);
 }
 static void keyboard_switch(desktop *d,int swap){

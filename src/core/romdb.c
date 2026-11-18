@@ -8,9 +8,7 @@
 #include <stdlib.h>
 #include <string.h>
 
-/* The images tools/fetch_roms.
- * cores' lock files record. */
-/* Filled from the pinned firmware data in docs/sources.lock.json. */
+/* The known images. */
 static const rc_known_rom ROMS[] = {
     {"kernal", "C64 KERNAL 901227-03", 8192u, "83c60d47047d7beab8e5b7bf6f67f80daa088b7a6a27de0d7e016f6484042721"},
     {"basic", "C64 BASIC 901226-01", 8192u, "89878cea0a268734696de11c4bae593eaaa506465d2029d619c0e0cbccdfa62d"},
