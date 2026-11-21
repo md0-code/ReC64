@@ -106,6 +106,12 @@ static int word(reader *r, const char *s, const char *what, char *out) {
 static int path_value(reader *r, const char *s, const char *base, char *out) {
     const int absolute = s[0] == '/' || s[0] == '\\' || (s[0] && s[1] == ':');
     const int length = absolute ? snprintf(out, RC_CONFIG_PATH, "%s", s) : snprintf(out, RC_CONFIG_PATH, "%s%s", base, s);
+    /* A file written on another system names its folders with that system's separator. */
+#ifdef _WIN32
+    for (char *p = out; *p; ++p) if (*p == '/') *p = '\\';
+#else
+    for (char *p = out; *p; ++p) if (*p == '\\') *p = '/';
+#endif
     return length >= 0 && length < RC_CONFIG_PATH ? 1 : fail(r, "Path is too long");
 }
 
@@ -596,6 +602,7 @@ static int ui_section(reader *r, yaml_node_t *v, const char *base, rc_config *c)
         int ok;
         if (!strcmp(name, "language")) ok = choice(r, x, "ui.language", languages, &c->language);
         else if (!strcmp(name, "state_slot")) ok = integer(r, x, "ui.state_slot", 1, 10, &c->state_slot);
+        else if (!strcmp(name, "status_line")) ok = boolean(r, x, &c->status_line);
         else if (!strcmp(name, "media_folder")) {const char *value=scalar(r,x);ok=value!=NULL;if(ok){c->media_folder[0]=0;if(*value)ok=path_value(r,value,base,c->media_folder);}}
         else if (!strcmp(name, "setup_page")) {
             const char *word = scalar(r, x);
@@ -605,7 +612,7 @@ static int ui_section(reader *r, yaml_node_t *v, const char *base, rc_config *c)
             ok = n && !word[n] && n < sizeof c->setup_page;
             if (ok) snprintf(c->setup_page, sizeof c->setup_page, "%s", word);
             else ok = fail(r, "ui.setup_page is the name of a page of the setup screen (media, machine...)");
-        } else ok = fail(r, "Unknown ui key; expected language, state_slot, setup_page or media_folder");
+        } else ok = fail(r, "Unknown ui key; expected language, state_slot, status_line, setup_page or media_folder");
         if (!ok) return 0;
     }
     return 1;
@@ -874,6 +881,10 @@ int rc_config_store(const rc_config *c, struct rc_ydoc *doc) {
         char number[16];
         snprintf(number, sizeof number, "%d", c->state_slot);
         ok = set_unless_default(doc, path, 2, number, 2, c->state_slot == 1);
+    }
+    if (ok) {
+        const char *path[2] = {"ui", "status_line"};
+        ok = set_unless_default(doc, path, 2, c->status_line ? "true" : "false", 2, !c->status_line);
     }
     if (ok) {
         const char *path[2] = {"ui", "setup_page"};

@@ -39,7 +39,7 @@ typedef struct desktop {
     rc_media *media[RC_CONFIG_MEDIA];uint32_t media_entry[RC_CONFIG_MEDIA];
     rc_browser browser;rc_typist typist;
     rc_setup setup;rc_osd osd;uint32_t palette[16];
-    rc_panel panel;rc_sidplayer player;rc_osk osk;int panel_visible;unsigned transport,transport_row;
+    rc_panel panel;rc_sidplayer player;rc_osk osk;unsigned transport,transport_row;
     int hidden,paused,quit,restart_pending,pace_dirty,deferred;uint64_t frames,pictured;rc_config running_config;
     uint32_t *pixels;
     size_t pixel_count;
@@ -63,7 +63,7 @@ static void slot_draw(desktop *d,rc_frame *frame);
 static int program_range(desktop *d,unsigned *start,unsigned *end);
 static void virtual_key(void *ctx,unsigned key,int down){desktop *d=ctx;rc_keymap_virtual(&d->keymap,key,down);}
 static void panel_draw(desktop *d,rc_frame *frame){
-    rc_machine_status s;if(!d->panel_visible||!rc_machine_get_status(d->machine,&s))return;
+    rc_machine_status s;if(!d->config->status_line||!rc_machine_get_status(d->machine,&s))return;
     const rc_panel_status p={s.drive_present,s.drive_device,s.drive_halftrack,s.drive_led,s.drive_motor,s.tape_counter,s.tape_motor,s.tape_play,s.tape_record,rc_joykeys_on(&d->joykeys)?(unsigned)d->config->keyboard_port+1u:0};
     rc_panel_draw(&d->panel,frame,&p,frame);
 }
@@ -200,7 +200,7 @@ static size_t screen_text(void *ctx,char *out,size_t cap){desktop *d=ctx;size_t 
     else {rc_frame f;char error[128];if(!picture(d,&f,error,sizeof error))return 0;
         if(d->transport||d->slot_picker)n=rc_tui_text(&d->setup.tui,out,cap);
         else if(d->player.active)n=rc_sidplayer_text(&d->player,out,cap);else n=rc_machine_text(d->machine,out,cap);
-        if(d->panel_visible&&!d->transport&&!d->osk.visible&&!message_active(d)&&n<cap)n+=rc_panel_text(&d->panel,out+n,cap-n);
+        if(d->config->status_line&&!d->transport&&!d->osk.visible&&!message_active(d)&&n<cap)n+=rc_panel_text(&d->panel,out+n,cap-n);
         if(d->osk.visible&&n<cap)n+=rc_osk_text(&d->osk,out+n,cap-n);
     }
     if(message_active(d)&&!d->osk.visible&&n<cap){const int added=snprintf(out+n,cap-n,"%s\n",d->osd.text);if(added>0)n+=(size_t)added<cap-n?(size_t)added:cap-n-1;}
@@ -472,48 +472,51 @@ static void keyboard_switch(desktop *d,int swap){
     else {d->config->keyboard_joystick=!d->config->keyboard_joystick;message(d,d->config->keyboard_joystick?"Keyboard joystick on":"Keyboard joystick off");}
     input_config(d);if(!store_config(d,error,sizeof error))message(d,error);
 }
-/* Controls act on media; persistent preferences belong to setup. */
-enum {TRANSPORT_LOAD,TRANSPORT_SAVE,TRANSPORT_PLAY,TRANSPORT_STOP,TRANSPORT_REWIND,TRANSPORT_RECORD,TRANSPORT_EJECT};
-static unsigned transport_actions(desktop *d,unsigned actions[7]){
-    unsigned count=0,start,end;actions[count++]=TRANSPORT_LOAD;if(program_range(d,&start,&end))actions[count++]=TRANSPORT_SAVE;
+/* Controls act on the inserted disk or tape; loading and saving belong to
+ * Ctrl+F1 and Ctrl+F2, persistent preferences to setup. */
+enum {TRANSPORT_PLAY,TRANSPORT_STOP,TRANSPORT_REWIND,TRANSPORT_RECORD,TRANSPORT_EJECT};
+static int transport_media(desktop *d,unsigned kind){return media_available(d)&&rc_machine_media(d->machine,kind==1?2u:0u)!=NULL;}
+static unsigned transport_actions(desktop *d,unsigned actions[5]){
+    unsigned count=0;
     rc_media *media=rc_machine_media(d->machine,d->transport==1?2u:0u);
     if(media&&d->transport==2){rc_tape_deck *deck=rc_machine_tape_deck(d->machine,0);
         if(deck){if(!deck->play&&deck->tape.position<deck->tape.image->size)actions[count++]=TRANSPORT_PLAY;if(deck->play)actions[count++]=TRANSPORT_STOP;if(deck->tape.position>20||deck->eof)actions[count++]=TRANSPORT_REWIND;if(media->writable&&!deck->record)actions[count++]=TRANSPORT_RECORD;}
     }
-    if(media)actions[count++]=TRANSPORT_EJECT;if(d->transport_row>=count)d->transport_row=count-1;return count;
+    if(media)actions[count++]=TRANSPORT_EJECT;if(d->transport_row>=count)d->transport_row=count?count-1:0;return count;
 }
 static void transport_draw(desktop *d,rc_frame *frame){
-    rc_tui *t=&d->setup.tui;rc_tui_clear(t);rc_tui_bar(t,0,d->transport==1?"DRIVE 1/2":"TAPE 2/2");rc_tui_box(t,1,0,12,40);
+    const int both=transport_media(d,1)&&transport_media(d,2);
+    rc_tui *t=&d->setup.tui;rc_tui_clear(t);rc_tui_bar(t,0,d->transport==1?(both?"DRIVE 1/2":"DRIVE"):(both?"TAPE 2/2":"TAPE"));rc_tui_box(t,1,0,12,40);
     rc_machine_status status={0};rc_machine_get_status(d->machine,&status);
     rc_media *media=rc_machine_media(d->machine,d->transport==1?2u:0u);const char *name=media?media->path:"NO IMAGE INSERTED";const char *slash=strrchr(name,'/'),*back=strrchr(name,'\\');if(back&&(!slash||back>slash))slash=back;if(slash)name=slash+1;
     char line[64];snprintf(line,sizeof line,"%.36s",name);rc_tui_put(t,2,2,line,1,6);
     if(d->transport==1)snprintf(line,sizeof line,"#%u TRACK %u.%u LED %s MOTOR %s",status.drive_device,status.drive_halftrack/2,(status.drive_halftrack&1)?5u:0u,status.drive_led?"ON":"OFF",status.drive_motor?"ON":"OFF");
     else snprintf(line,sizeof line,"POS %llu  %s  MOTOR %s",(unsigned long long)status.tape_counter,status.tape_record?"RECORD":status.tape_play?"PLAY":"STOP",status.tape_motor?"ON":"OFF");
     rc_tui_put(t,3,2,line,14,6);
-    static const char *const labels[]={"LOAD IMAGE","SAVE FILE","PLAY","STOP","REWIND","RECORD","EJECT"};unsigned actions[7];const unsigned count=transport_actions(d,actions);
+    static const char *const labels[]={"PLAY","STOP","REWIND","RECORD","EJECT"};unsigned actions[5];const unsigned count=transport_actions(d,actions);
     for(unsigned i=0;i<count;++i){
         const int selected=i==d->transport_row;const char *value="ENTER";
         snprintf(line,sizeof line," %-20s %12s ",labels[actions[i]],value);
         rc_tui_put(t,5+i,2,line,(uint8_t)(selected?6:14),(uint8_t)(selected?14:6));
     }
     rc_tui_put(t,13,1,"UP/DOWN SELECT  ENTER ACT  ESC CLOSE",14,6);
-    rc_tui_put(t,14,1,"LEFT/RIGHT DRIVE/TAPE",14,6);rc_tui_overlay(t,15,frame,frame);
+    if(both)rc_tui_put(t,14,1,"LEFT/RIGHT DRIVE/TAPE",14,6);rc_tui_overlay(t,15,frame,frame);
 }
 static void transport_open(desktop *d,unsigned kind){
     char error[256];
     if(d->restart_pending){if(!restart(d,error,sizeof error)){restore_machine_config(d);message(d,error);}d->restart_pending=0;}
+    if(d->transport!=kind&&!transport_media(d,kind)){message(d,kind==1?"No disk inserted":"No tape inserted");return;}
     release_keys(d);d->setup.active=0;d->slot_picker=0;rc_browser_close(&d->browser);rc_osk_open(&d->osk,0);
     d->transport=d->transport==kind?0:kind;d->transport_row=0;input_config(d);
 }
 static void transport_key(desktop *d,const char *key){
     if(!strcmp(key,"ESCAPE")){d->transport=0;input_config(d);return;}
-    if(!strcmp(key,"LEFT")||!strcmp(key,"RIGHT")){d->transport=3u-d->transport;d->transport_row=0;return;}
-    unsigned actions[7];const unsigned count=transport_actions(d,actions);
+    if(!strcmp(key,"LEFT")||!strcmp(key,"RIGHT")){if(transport_media(d,3u-d->transport)){d->transport=3u-d->transport;d->transport_row=0;}return;}
+    unsigned actions[5];const unsigned count=transport_actions(d,actions);if(!count){d->transport=0;input_config(d);return;}
     if(!strcmp(key,"UP")||!strcmp(key,"DOWN")){d->transport_row=(d->transport_row+(!strcmp(key,"UP")?count-1u:1u))%count;return;}
     if(strcmp(key,"RETURN")&&strcmp(key,"ENTER")&&strcmp(key,"SPACE"))return;
-    char error[256];const unsigned action=actions[d->transport_row];media_status(d);
-    if(action==TRANSPORT_LOAD||action==TRANSPORT_SAVE){if(!browser_open(d,action==TRANSPORT_SAVE,error,sizeof error))message(d,error);return;}
-    if(action==TRANSPORT_EJECT){eject(d,d->transport==1?2u:0u);return;}
+    const unsigned action=actions[d->transport_row];media_status(d);
+    if(action==TRANSPORT_EJECT){if(eject(d,d->transport==1?2u:0u)){d->transport=0;input_config(d);}return;}
     const unsigned commands[]={RC_MEDIA_PLAY,RC_MEDIA_STOP,RC_MEDIA_REWIND,RC_MEDIA_RECORD};
     if(!rc_machine_control(d->machine,0,commands[action-TRANSPORT_PLAY],0))message(d,"Tape control unavailable");
 }
@@ -543,7 +546,7 @@ static void controller_key(desktop *d,rc_pad_key key,int down){
     case RC_PAD_X:shell_key(d,"Ctrl+F1",1);break;
     case RC_PAD_Y:
         if(d->setup.active&&d->setup.page==RC_SETUP_STATES)shell_key(d,"DELETE",1);
-        else if(media_available(d))transport_open(d,d->transport?d->transport:1u);
+        else if(media_available(d)){if(d->transport||transport_media(d,1)||transport_media(d,2))transport_open(d,d->transport?d->transport:transport_media(d,1)?1u:2u);else message(d,"No disk or tape inserted");}
         break;
     case RC_PAD_SHOULDER_LEFT:shell_key(d,"Shift+F11",1);break;
     case RC_PAD_SHOULDER_RIGHT:shell_key(d,"F10",1);break;
@@ -614,12 +617,16 @@ static int shell_key(void *ctx,const char *name,int down){
     if(ctrl&&(!strcmp(bare,"F3")||!strcmp(bare,"F4"))){if(down&&media_available(d))transport_open(d,!strcmp(bare,"F3")?1u:2u);return 1;}
     if(ctrl&&(!strcmp(bare,"F5")||!strcmp(bare,"F6"))){if(down&&!quick_state(d,!strcmp(bare,"F5"),error,sizeof error))message(d,error);return 1;}
     if(!strcmp(bare,"F9")){
-        if(down&&media_available(d)){if(shifted){const int visible=!d->osk.visible;d->transport=0;d->slot_picker=0;release_keys(d);rc_osk_open(&d->osk,visible);input_config(d);}else d->panel_visible=!d->panel_visible;}
+        if(down&&media_available(d)){if(shifted){const int visible=!d->osk.visible;d->transport=0;d->slot_picker=0;release_keys(d);rc_osk_open(&d->osk,visible);input_config(d);}else {d->config->status_line=!d->config->status_line;if(!store_config(d,error,sizeof error))message(d,error);}}
         return 1;
     }
     if(!strcmp(bare,"F10")){if(down){speed(d,!d->full);message(d,d->full?"Full speed (sound muted)":"100% speed");}return 1;}
     if(!strcmp(bare,"PRINTSCREEN")||!strcmp(bare,"PRINT SCREEN")){
-        if(down){char path[RC_HOST_PATH];rc_host_make_folders("work/screenshots");snprintf(path,sizeof path,"work/screenshots/rec64-%llu.png",(unsigned long long)d->frames);if(shot(d,path,error,sizeof error))message(d,path);else message(d,error);}return 1;
+        /* Beside the configuration, as the snapshots are: the working folder may be anywhere. */
+        if(down){char folder[RC_HOST_PATH],path[RC_HOST_PATH];const char sep=rc_host_separator(),*source=d->config->source;size_t folder_end=0;
+            for(size_t i=0;source[i];++i)if(source[i]=='/'||source[i]=='\\')folder_end=i+1;
+            snprintf(folder,sizeof folder,"%.*swork%cscreenshots",(int)folder_end,source,sep);snprintf(path,sizeof path,"%s%crec64-%llu.png",folder,sep,(unsigned long long)d->frames);
+            if(!rc_host_make_folders(folder))message(d,"Cannot create the screenshot folder");else if(shot(d,path,error,sizeof error))message(d,path+folder_end);else message(d,error);}return 1;
     }
     if(alt&&(!strcmp(bare,"F")||!strcmp(bare,"S")||!strcmp(bare,"T"))){
         if(!down)return 1;

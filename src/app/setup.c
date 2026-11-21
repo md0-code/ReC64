@@ -10,7 +10,7 @@ void rc_setup_init(rc_setup *s,rc_config *c){memset(s,0,sizeof *s);s->config=c;s
     for(unsigned i=0;i<8;++i)if(!strcmp(c->setup_page,IDS[i]))s->page=i;
     if(s->page==RC_SETUP_STATES)s->row=(unsigned)c->state_slot-1u;
 }
-static unsigned rows(const rc_setup *s){return s->page==RC_SETUP_MACHINE?7u:s->page==RC_SETUP_DISPLAY?7u:s->page==RC_SETUP_SOUND?2u:s->page==RC_SETUP_CONTROLLERS?6u:s->page==RC_SETUP_MEDIA?8u:s->page==RC_SETUP_CARTRIDGE?6u:s->page==RC_SETUP_STATES?13u:0;}
+static unsigned rows(const rc_setup *s){return s->page==RC_SETUP_MACHINE?7u:s->page==RC_SETUP_DISPLAY?7u:s->page==RC_SETUP_SOUND?2u:s->page==RC_SETUP_CONTROLLERS?6u:s->page==RC_SETUP_MEDIA?9u:s->page==RC_SETUP_CARTRIDGE?6u:s->page==RC_SETUP_STATES?13u:0;}
 static unsigned cycle(unsigned value,unsigned count,int direction){return (value+count+(direction<0?count-1u:1u))%count;}
 
 static int row_enabled(const rc_setup *s,unsigned index){
@@ -116,7 +116,8 @@ unsigned rc_setup_key(rc_setup *s,const char *key){
         }return RC_SETUP_VIDEO;
     }
     if(s->page==RC_SETUP_MEDIA){
-        if(s->row==7)return RC_SETUP_MEDIA_FOLDER;
+        if(s->row==8)return RC_SETUP_MEDIA_FOLDER;
+        if(s->row==7){c->status_line=!c->status_line;return RC_SETUP_MEDIA_OPTIONS;}
         if(s->row==0){const char *current=rc_config_option_value(c,"drive_device");unsigned v=current?(unsigned)(current[0]=='1'?current[1]-'0'+2:current[0]-'8'):0;const char *values[]={"8","9","10","11"};rc_config_set_option(c,"drive_device",values[cycle(v,4,direction)]);return RC_SETUP_RESTART;}
         const char *kind=s->row<4?"disk":"tape";rc_config_media effective;rc_config_media_settings(c,kind,&effective);rc_config_media *media=rc_config_media_slot(c,kind);if(!media)return 0;
         const unsigned field=s->row<4?s->row-1:s->row-4;
@@ -151,7 +152,7 @@ static void row(rc_setup *s,unsigned index,const char *label,const char *value){
     snprintf(line,sizeof line," %-16.16s %15.15s ",label,value);
     /* Without a choice of drive the rows below its place move up. */
     if(s->page==RC_SETUP_MACHINE&&index==3&&!s->drive_choice)return;
-    const unsigned y=s->page==RC_SETUP_MEDIA?5+index+(index>=4?2u:0u):6+index*2-(s->page==RC_SETUP_MACHINE&&index>3&&!s->drive_choice?2u:0u);
+    const unsigned y=s->page==RC_SETUP_MEDIA?5+index+(index>=7?3u:index>=4?2u:0u):6+index*2-(s->page==RC_SETUP_MACHINE&&index>3&&!s->drive_choice?2u:0u);
     option_text(s,index,y,2,line);
 }
 void rc_setup_draw(rc_setup *s,const uint32_t palette[16],rc_frame *f){
@@ -172,8 +173,9 @@ void rc_setup_draw(rc_setup *s,const uint32_t palette[16],rc_frame *f){
         row(s,0,"DEVICE",device?device:"8");row(s,1,"FAST LOAD",disk.fast?"ON":"OFF");
         row(s,2,"SOUNDS",disk.sound&&!disk.fast?"ON":"OFF");row(s,3,"AUTO-LOAD",disk.autoload?"ON":"OFF");
         row(s,4,"FAST LOAD",tape.fast?"ON":"OFF");row(s,5,"SOUND",tape.sound&&!tape.fast?"ON":"OFF");row(s,6,"AUTO-LOAD",tape.autoload?"ON":"OFF");
-        option_text(s,7,16,3,"DEFAULT MEDIA FOLDER");option_text(s,7,16,32,"ENTER");
-        const char *folder=c->media_folder[0]?c->media_folder:"PROGRAM FOLDER";const size_t length=strlen(folder);rc_tui_put(&s->tui,18,3,length>34?folder+length-34:folder,14,6);break;}
+        row(s,7,"STATUS LINE",c->status_line?"ON":"OFF");
+        option_text(s,8,17,3,"DEFAULT MEDIA FOLDER");option_text(s,8,17,32,"ENTER");
+        const char *folder=c->media_folder[0]?c->media_folder:"PROGRAM FOLDER";const size_t length=strlen(folder);rc_tui_put(&s->tui,19,3,length>34?folder+length-34:folder,14,6);break;}
 
     case RC_SETUP_CONTROLLERS:{const char *types[]={"JOYSTICK","1351 MOUSE","PADDLES","NONE"};char source[32];
         row(s,0,"PORT 1",types[c->sticks[0].type]);rc_config_stick_device_name(&c->sticks[0],source,sizeof source);row(s,1,"INPUT 1",c->sticks[0].type==RC_CONTROL_MOUSE1351?"MOUSE":source);
@@ -202,9 +204,9 @@ void rc_setup_draw(rc_setup *s,const uint32_t palette[16],rc_frame *f){
         option_text(s,12,20,3,"DELETE CURRENT SLOT  DEL/Y");break;}
     case RC_SETUP_ABOUT:
         rc_tui_put(&s->tui,10,3,"NEW IN " RC_VERSION,1,6);
-        rc_tui_put(&s->tui,11,3,"LOAD LIST OPENS ON THE LAST FILE",14,6);
-        rc_tui_put(&s->tui,12,3,"FULL SPEED RUNS TWICE AS FAST",14,6);
-        rc_tui_put(&s->tui,13,3,"SPRITES ON MULTICOLOUR TEXT FIXED",14,6);
+        rc_tui_put(&s->tui,11,3,"DISK FAST LOADERS KEEP IN STEP",14,6);
+        rc_tui_put(&s->tui,12,3,"STATUS LINE SETTING IS KEPT",14,6);
+        rc_tui_put(&s->tui,13,3,"CTRL+F3/F4 NEED A DISK OR TAPE",14,6);
         rc_tui_put(&s->tui,16,3,"ALSO IN 0.21",1,6);
         rc_tui_put(&s->tui,17,3,"FIRMWARE SCREEN LISTS MISSING ROMS",14,6);
         rc_tui_put(&s->tui,18,3,"ONE DRIVE ROM IS ENOUGH",14,6);

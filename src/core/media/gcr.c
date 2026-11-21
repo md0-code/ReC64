@@ -6,10 +6,11 @@ void rc_gcr_encode4(const uint8_t data[4],uint8_t encoded[5]) {
     for(unsigned i=0;i<4;++i)bits=(bits<<10)|(unsigned)(CODES[data[i]>>4]<<5)|CODES[data[i]&15u];
     for(unsigned i=0;i<5;++i)encoded[i]=(uint8_t)(bits>>(32u-i*8u));
 }
-int rc_gcr_decode5(const uint8_t encoded[5],uint8_t data[4]) {
+/* The first `nibbles` five-bit codes of a group; 0 when one is not a GCR code. */
+static int decode_nibbles(const uint8_t encoded[5],uint8_t data[4],unsigned nibbles) {
     uint64_t bits=0;uint8_t decoded[4]={0};
     for(unsigned i=0;i<5;++i)bits=bits<<8|encoded[i];
-    for(unsigned n=0;n<8;++n){
+    for(unsigned n=0;n<nibbles;++n){
         const unsigned code=(unsigned)(bits>>(35u-n*5u))&31u;
         unsigned nibble=0;while(nibble<16&&CODES[nibble]!=code)++nibble;
         if(nibble==16)return 0;
@@ -17,6 +18,7 @@ int rc_gcr_decode5(const uint8_t encoded[5],uint8_t data[4]) {
     }
     memcpy(data,decoded,4);return 1;
 }
+int rc_gcr_decode5(const uint8_t encoded[5],uint8_t data[4]){return decode_nibbles(encoded,data,8);}
 void rc_gcr_header(uint8_t track,uint8_t sector,const uint8_t id[2],uint8_t encoded[10]) {
     const uint8_t data[8]={8,(uint8_t)(track^sector^id[0]^id[1]),sector,track,id[1],id[0],15,15};
     rc_gcr_encode4(data,encoded);rc_gcr_encode4(data+4,encoded+5);
@@ -34,7 +36,9 @@ void rc_gcr_data(const uint8_t data[256],uint8_t encoded[325]) {
 }
 int rc_gcr_data_read(const uint8_t encoded[325],uint8_t data[256]) {
     uint8_t block[260],checksum=0;
-    for(unsigned i=0;i<65;++i)if(!rc_gcr_decode5(encoded+i*5,block+i*4))return 0;
+    /* The two bytes after the checksum carry nothing, and a write that ends
+     * as the drive switches back to reading may leave the last one cut. */
+    for(unsigned i=0;i<65;++i)if(!decode_nibbles(encoded+i*5,block+i*4,i<64?8u:4u))return 0;
     if(block[0]!=7)return 0;for(unsigned i=1;i<257;++i)checksum^=block[i];
     if(checksum!=block[257])return 0;memcpy(data,block+1,256);return 1;
 }

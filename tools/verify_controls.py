@@ -70,9 +70,7 @@ def main():
         shot('controllers-settings'); key('Pad LB'); call('expect KEYBOARD JOYSTICK (P1)')
         key('RIGHT'); t = text(); assert 'REU' in t and 'LOAD CARTRIDGE' in t and 'FREEZE' in t, t
         shot('cartridge-settings'); key('Pad A'); call('expect FILES AND FOLDERS'); key('Pad B'); call('expect CARTRIDGE 6/8'); key('Pad B')
-        key('Pad Y'); t = text(); assert 'DRIVE 1/2' in t and 'EJECT' not in t and 'SAVE FILE' not in t and 'FAST LOAD' not in t and 'SOUNDS' not in t, t
-        shot('drive-osd'); key('RIGHT'); call('expect TAPE 2/2'); shot('tape-osd')
-        key('RIGHT'); call('expect DRIVE 1/2'); assert 'CARTRIDGE' not in text(); key('Pad Y')
+        key('Pad Y'); call('expect No disk or tape inserted')
         key('Pad X'); call('expect FILES AND FOLDERS'); shot('load-browser'); key('Pad B')
         key('Pad RB'); call('expect Full speed'); key('Pad RB'); call('expect 100% speed')
         key('Pad RT'); call('expect SELECT SNAPSHOT SLOT'); key('Pad A'); call('expect No snapshot in this slot'); shot('first-load-picker'); key('Pad B')
@@ -89,12 +87,12 @@ def main():
         call('expect X USE CURRENT FOLDER')
         pad('X', 'B')
         call('type 10 PRINT 42'); call('enter'); call('frames 4')
-        pad('Y','Down','A','RB','Right','Left','RB','Y','Up','Right','Up','Up')
+        key('Ctrl+F2'); pad('RB','Right','Left','RB','Y','Up','Right','Up','Up')
         call('expect NAME: AB.PRG')
         shot('pad-filename', (352, 232))
         pad('A'); assert (media/'AB.PRG').exists()
 
-        pad('Y','Down','A','Back','Up','A','X','Y','Up','Up','Right','Up')
+        key('Ctrl+F2'); pad('Back','Up','A','X','Y','Up','Up','Right','Up')
         call('expect RENAME SELECTED FILE')
         shot('pad-rename', (352, 232))
         pad('A'); assert (media/'BA.PRG').exists() and not (media/'AB.PRG').exists()
@@ -118,7 +116,7 @@ def main():
         pad('L3'); call('expect Paused'); pad('L3'); call('expect Running')
         call('frames 130')
         pad('R3'); call('expect D8:'); pad('R3')
-        pad('Start+R3'); call('expect work/screenshots/rec64-')
+        pad('Start+R3'); call('expect screenshots')
         pad('Start+X')
         assert proc.wait(timeout=10)==0
         print('Controller menus, file and snapshot management, cold boot and exit passed')

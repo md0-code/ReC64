@@ -47,15 +47,15 @@ Other revisions and replacement ROMs such as JiffyDOS are not accepted.
 | --- | --- |
 | F12 | Setup |
 | Ctrl+F1 / Ctrl+F2 | Load / save |
-| Ctrl+F3 / Ctrl+F4 | Drive controls / tape controls |
+| Ctrl+F3 / Ctrl+F4 | Controls of the inserted disk / tape |
 | Ctrl+F5 / Ctrl+F6 | Save / restore the current snapshot slot |
-| F9 / Shift+F9 | Status line / on-screen keyboard |
+| F9 / Shift+F9 | Status line on or off / on-screen keyboard |
 | F10 | Normal or full speed (no sound at full speed) |
 | F11 / Shift+F11 | Keyboard joystick on or off / swap the joystick ports |
 | Alt+F12 / Ctrl+F12 / Shift+F12 | Reset / cold boot / exit |
 | Alt+F / Alt+S / Alt+T | Drive fast loading / drive sounds / tape sound |
 | Alt+Enter | Full screen |
-| Pause / Print Screen | Pause / screenshot into `work/screenshots/` |
+| Pause / Print Screen | Pause / screenshot into `work/screenshots/` beside the settings |
 | Right Alt, pressed alone | Freeze button of the cartridge |
 
 Typing follows your host keyboard layout: each character presses the C64
@@ -160,7 +160,7 @@ described in the [design notes](docs/DESIGN.md).
 
 ## Status line and on-screen keyboard
 
-F9 shows one line such as `D8:18.5*M T:001234PM J:2`: drive device and track
+F9, or Status line on the Media page of setup, shows one line such as `D8:18.5*M T:001234PM J:2`: drive device and track
 with LED (`*`) and motor (`M`), the tape counter with play, stop or record
 (`P`, `S`, `R`), and the keyboard joystick port.
 
@@ -186,6 +186,7 @@ rejected with a line number.
 | `video.palette` | `default`, or `color-corrected` for a truer blue and more saturation |
 | `media.cartridge.startup` | `true` keeps the cartridge between launches |
 | `ui.media_folder` | Folder the first file browser opens |
+| `ui.status_line` | `true` shows the status line |
 
 C64 keys and the keyboard joystick can be rebound with SDL key names; F9 to
 F12, Pause and Print Screen stay reserved:

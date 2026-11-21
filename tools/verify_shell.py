@@ -68,19 +68,18 @@ def main() -> int:
         call('release Up'); assert int(call('peek DC00')['data'],16)&1 == 1
         key('Shift+F11'); call('expect Joystick port 1'); call('poke DC03 00'); key('Up'); assert int(call('peek DC01')['data'],16)&1 == 0
         call('release Up'); key('F11')
-        key('Ctrl+F3'); call('expect DRIVE 1/2'); shot('drive-widget'); assert 'FAST LOAD' not in text()
-        key('RIGHT'); call('expect TAPE 2/2'); shot('tape-empty'); key('Ctrl+F4'); assert 'TAPE 2/2' not in text()
+        key('Ctrl+F3'); call('expect No disk inserted'); key('Ctrl+F4'); call('expect No tape inserted')
         # The widget uses the actual writable Datasette transport.
         tape = work/'controls.tap'; tape.write_bytes(b'C64-TAPE-RAW'+bytes([1,0,0,0])+struct.pack('<I',64)+bytes([48])*64)
         call(f'insert tape {tape.as_posix()}')
         def tape_action(label):
-            if 'TAPE 2/2' in text(): key('ESCAPE')
+            if 'POS ' in text(): key('ESCAPE')
             key('Ctrl+F4')
             actions=[line.strip().split('  ')[0] for line in text().splitlines()[5:12] if 'ENTER' in line]
             key('DOWN',actions.index(label)); key('RETURN')
         tape_action('PLAY'); call('expect PLAY'); tape_action('STOP'); call('expect STOP')
         tape_action('RECORD'); call('expect RECORD'); shot('tape-widget')
-        tape_action('EJECT'); call('expect NO IMAGE INSERTED'); key('ESCAPE')
+        tape_action('EJECT'); assert 'POS ' not in text() and 'EJECT' not in text()
         # A real KERNAL LOAD and RUN complete using the instant command paste.
         program = work/'instant.prg'; body = b'\x99"SHELL OK"'; line = struct.pack('<H',10)+body+b'\0'
         program.write_bytes(b'\x01\x08'+struct.pack('<H',0x801+2+len(line))+line+b'\0\0')
@@ -91,7 +90,7 @@ def main() -> int:
         key('F12'); key('Ctrl+F12'); assert f'REC64 {version}' not in text()
         call('quit'); _,error = proc.communicate(timeout=10); assert proc.returncode == 0, error
         # Launch again: the program and tape must be absent.
-        proc = start(); key('Ctrl+F4'); call('expect NO IMAGE INSERTED'); key('ESCAPE')
+        proc = start(); key('Ctrl+F4'); call('expect No tape inserted')
         call('frames 200'); call('expect READY.'); assert 'SHELL OK' not in text()
         assert config.read_text().startswith('# Keep this comment')
         call('quit'); _,error = proc.communicate(timeout=10); assert proc.returncode == 0, error

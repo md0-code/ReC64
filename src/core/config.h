@@ -119,6 +119,7 @@ typedef struct rc_config {
     /* ui */
     uint32_t language;                  /* RC_LANG_*; English only */
     int state_slot;                     /* the slot Ctrl+F5 saves to and Ctrl+F6 loads from, 1 to 10 */
+    int status_line;                    /* ui.status_line: the status line is shown (F9 switches it) */
     char setup_page[RC_CONFIG_NAME];    /* the page of the setup screen that was open last ("media", "machine"...): F12 opens it again */
     /* the file this was read from (relative paths in it are relative to its folder) */
     char source[RC_CONFIG_PATH];

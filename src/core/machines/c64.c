@@ -82,7 +82,7 @@ static void phi1(void *ctx,uint64_t time){
     rc_vic2_clock(&c->vic,0,rc_bus_vic(&c->bus,a.address),c->bus.colour[a.address&1023u]);
 }
 static void phi2(void *ctx,uint64_t time){
-    (void)time;rc_c64 *c=ctx;rc_cia6526_tick(&c->cia[0]);rc_cia6526_tick(&c->cia[1]);
+    (void)time;rc_c64 *c=ctx;rc_cia6526_tick(&c->cia[0]);rc_cia6526_tick(&c->cia[1]);rc_c64_drive_before(c,c->vic.aec&&c->cpu.pins.write);
     rc_c64_expansion_tick(c);const rc_reu_pins dma=rc_reu_bus(&c->reu);int accepted=0;uint8_t dma_data=255;
     if(c->vic.aec&&dma.dma&&!c->cpu.pins.write){
         if(c->vic.ba&&dma.valid){if(dma.write)rc_bus_dma_write(&c->bus,dma.address,dma.data);else dma_data=rc_bus_dma_read(&c->bus,dma.address);accepted=1;}
@@ -101,7 +101,7 @@ static void phi2(void *ctx,uint64_t time){
     }
     rc_reu_tick(&c->reu,c->vic.ba,accepted,dma_data);interrupts(c);
     if(c->vic.frames!=c->shown_frames){if(c->vic.published)latch_picture(c);else c->shown_frames=c->vic.frames;}
-    rc_bus_pot_tick(&c->bus);rc_sid_clock(&c->sid,1);rc_c64_media_tick(c);rc_c64_sid_tick(c);
+    rc_bus_pot_tick(&c->bus);rc_sid_clock(&c->sid,1);rc_c64_drive_after(c);rc_c64_media_tick(c);rc_c64_sid_tick(c);
     /* The PAL/NTSC board's mains-derived TOD input is independent of frames. */
     c->tod_at+=c->model>=2?60u:50u;
     if(c->tod_at>=c->hz){c->tod_at-=c->hz;rc_cia6526_tod_pulse(&c->cia[0]);rc_cia6526_tod_pulse(&c->cia[1]);}

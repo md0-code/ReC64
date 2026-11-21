@@ -112,9 +112,21 @@ void rc_c64_iec_lines(rc_c64 *c){
     const unsigned lines=rc_iec_lines(&c->iec);
     rc_cia6526_port_input(&c->cia[1],0,(uint8_t)(63u|((lines&RC_IEC_CLK)?64u:0u)|((lines&RC_IEC_DATA)?128u:0u)));
 }
+/* Both processors sample their ports in mid-cycle and drive them at the
+ * cycle's end. The drive cycles are placed around each C64 bus access so
+ * that a C64 read sees the drive writes that ended before its middle, and a
+ * C64 write reaches only the drive cycles that sample after its end. A drive
+ * cycle can therefore run up to half a cycle ahead of the C64 cycle's end. */
+static void drive_run(rc_c64 *c){
+    rc_c64_iec_lines(c);
+    while(c->drive_phase>=(int64_t)c->hz){c->drive_phase-=c->hz;rc_c1541_tick(&c->drive);rc_c64_iec_lines(c);}
+}
+void rc_c64_drive_before(rc_c64 *c,int write){
+    const int64_t owed=write?1000000+(int64_t)c->hz/2:500000;
+    c->drive_phase+=owed;drive_run(c);c->drive_phase-=owed;
+}
+void rc_c64_drive_after(rc_c64 *c){c->drive_phase+=1000000;drive_run(c);}
 void rc_c64_media_tick(rc_c64 *c){
-    rc_c64_iec_lines(c);c->drive_phase+=1000000u;
-    while(c->drive_phase>=c->hz){c->drive_phase-=c->hz;rc_c1541_tick(&c->drive);rc_c64_iec_lines(c);}
     rc_fastload_observe(&c->fastload,c->sched.now,c->drive.motor,c->iec.edges);
     if((c->drive.motor!=0)!=c->drive_sound.motor||c->drive.steps!=c->drive_sound.steps||c->drive.bumps!=c->drive_sound.bumps)
         rc_drivesnd_status(&c->drive_sound,c->drive.motor,c->drive.steps,c->drive.bumps);
@@ -202,7 +214,7 @@ const char *rc_c64_autoload(const void *self,unsigned slot,int *power){rc_c64 *c
 struct rc_tape_deck *rc_c64_tape_deck(void *self,unsigned slot){rc_c64 *c=self;return (slot==0||slot==c->source)&&c->tape.deck.tape.image?&c->tape.deck:NULL;}
 void rc_c64_media_save(const rc_c64 *c,rc_state_writer *w){
     rc_sw_begin(w,"CMED",0);rc_sw_u32(w,6);rc_sw_u8(w,c->source);rc_sw_u8(w,c->physical);
-    rc_sw_u64(w,c->drive_phase);rc_sw_bytes(w,c->disk_name,16);rc_sw_u16(w,c->disk_address);
+    rc_sw_u64(w,(uint64_t)c->drive_phase);rc_sw_bytes(w,c->disk_name,16);rc_sw_u16(w,c->disk_address);
     for(unsigned i=0;i<5;++i){rc_sw_u32(w,c->selected[i]);rc_sw_u32(w,c->tape_bits[i]);rc_sw_u8(w,c->media[i]!=NULL);if(c->media[i])rc_image_save(c->media[i],w);}
     rc_sw_u16(w,c->program_address);rc_sw_bytes(w,c->program_name,16);rc_sw_packed(w,c->program,c->program_size);
     rc_sw_u8(w,c->synthetic!=NULL);if(c->synthetic)rc_image_save(c->synthetic,w);
@@ -216,7 +228,7 @@ void rc_c64_media_save(const rc_c64 *c,rc_state_writer *w){
 int rc_c64_media_load(rc_c64 *c,rc_state_reader *r){
     if(!rc_sr_chunk(r,"CMED",0))return 1;const unsigned version=rc_sr_u32(r);if(version<2||version>6)return 0;
     const unsigned source=rc_sr_u8(r),physical=rc_sr_u8(r);if((source>=3&&source!=255)||physical>1)return 0;
-    c->drive_phase=rc_sr_u64(r);rc_sr_bytes(r,c->disk_name,16);c->disk_address=rc_sr_u16(r);if(c->drive_phase>=c->hz)return 0;
+    c->drive_phase=(int64_t)rc_sr_u64(r);rc_sr_bytes(r,c->disk_name,16);c->disk_address=rc_sr_u16(r);if(c->drive_phase>=(int64_t)c->hz||c->drive_phase<=-(int64_t)c->hz)return 0;
     if(!rc_c1541_mount(&c->drive,NULL,NULL,0))return 0;
     if(!rc_c64_cart_insert(c,NULL,NULL,0))return 0;
     rc_c64_sid_eject(c);

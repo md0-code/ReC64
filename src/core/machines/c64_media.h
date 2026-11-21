@@ -5,6 +5,8 @@ enum { RC_DRIVE_AUDIO_IDLE, RC_DRIVE_AUDIO_DISK, RC_DRIVE_AUDIO_SELF_TEST };
 void rc_c64_media_init(rc_c64 *c);
 void rc_c64_media_release(rc_c64 *c);
 void rc_c64_media_lines(rc_c64 *c);
+void rc_c64_drive_before(rc_c64 *c,int write);   /* around each C64 bus access, every cycle */
+void rc_c64_drive_after(rc_c64 *c);
 void rc_c64_media_tick(rc_c64 *c);
 void rc_c64_iec_lines(rc_c64 *c);
 int rc_c64_insert(void *self,unsigned slot,rc_media *image,char *error,size_t cap);

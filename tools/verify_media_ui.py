@@ -64,14 +64,12 @@ def main():
         key('RETURN'); call('expect FOLDER'); call('type media'); key('RETURN'); shot('folder-selector'); key('SPACE')
         call('expect DEFAULT MEDIA FOLDER'); key('F12'); call('frames 180')
         assert 'media_folder' in config.read_text() and config.read_text().startswith('# Preserve this comment')
-        key('Ctrl+F3'); t=text(); assert 'LOAD IMAGE' in t and 'SAVE FILE' not in t and 'EJECT' not in t, t; shot('empty-drive')
-        key('RIGHT'); t=text(); assert not any(label in '\n'.join(t.splitlines()[5:12]) for label in ('SAVE FILE','PLAY ', 'STOP ', 'REWIND', 'RECORD', 'EJECT')), t; shot('empty-tape'); key('ESCAPE')
+        key('Ctrl+F3'); call('expect No disk inserted'); key('Ctrl+F4'); call('expect No tape inserted')
         key('Ctrl+F2'); call('expect No BASIC program to save')
         call('type 10 PRINT 42'); call('enter'); call('frames 3')
-        key('Ctrl+F4'); t=text(); assert t.index('LOAD IMAGE')<t.index('SAVE FILE') and 'EJECT' not in t, t; key('ESCAPE')
         save(0); original=(media/'program.prg').read_bytes(); assert original[:2]==b'\x01\x08' and b'42' in original
         save(1); assert (media/'program.tap').stat().st_size>1000
-        key('Ctrl+F4'); t=text(); assert t.index('LOAD IMAGE')<t.index('SAVE FILE')<t.index('PLAY ') and ' STOP ' not in '\n'.join(t.splitlines()[5:12]), t; shot('tape-controls'); key('ESCAPE')
+        key('Ctrl+F4'); t=text(); assert 'LOAD IMAGE' not in t and 'SAVE FILE' not in t and t.index('PLAY ')<t.index('EJECT') and ' STOP ' not in '\n'.join(t.splitlines()[5:12]), t; shot('tape-controls'); key('ESCAPE')
         call('frames 100'); key('F9'); call('frames 160'); assert 'S-' in text(), text(); shot('after-save-idle'); key('F9')
         save(2)
         # Extract the one actual PRG from the saved disk and compare it byte for byte.
