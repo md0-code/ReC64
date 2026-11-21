@@ -64,7 +64,7 @@ static int program_range(desktop *d,unsigned *start,unsigned *end);
 static void virtual_key(void *ctx,unsigned key,int down){desktop *d=ctx;rc_keymap_virtual(&d->keymap,key,down);}
 static void panel_draw(desktop *d,rc_frame *frame){
     rc_machine_status s;if(!d->config->status_line||!rc_machine_get_status(d->machine,&s))return;
-    const rc_panel_status p={s.drive_present,s.drive_device,s.drive_halftrack,s.drive_led,s.drive_motor,s.tape_counter,s.tape_motor,s.tape_play,s.tape_record,rc_joykeys_on(&d->joykeys)?(unsigned)d->config->keyboard_port+1u:0};
+    const rc_panel_status p={s.drive_present,s.drive_device,s.drive_halftrack,s.drive_led,s.drive_motor,s.tape_counter,s.tape_motor,s.tape_play,s.tape_record,rc_joykeys_on(&d->joykeys)&&rc_config_keyboard_socket(d->config)<RC_CONFIG_STICKS?rc_config_keyboard_socket(d->config)+1u:0};
     rc_panel_draw(&d->panel,frame,&p,frame);
 }
 static rc_machine *machine(void *ctx) { return ((desktop *)ctx)->machine; }
@@ -172,9 +172,10 @@ static void input_config(desktop *d){
 static void input_poll(desktop *d){
     if(d->setup.active||d->browser.active||d->paused||d->osk.visible||d->transport||d->slot_picker||d->player.active)return;
     const unsigned keyboard=rc_joykeys_held(&d->joykeys);
+    const unsigned socket=rc_config_keyboard_socket(d->config);
     for(unsigned p=0;p<2;++p){const rc_config_stick *st=&d->config->sticks[p];
         if(st->type==RC_CONTROL_JOYSTICK){unsigned held=st->device==RC_STICK_CONTROLLER?rc_pads_joystick(&d->pads,st->pad-1):0;
-            if(p==d->config->keyboard_port)held|=keyboard;
+            if(p==socket)held|=keyboard;
             rc_machine_pointer(d->machine,p,st->type,0,0,0);rc_machine_joystick(d->machine,p,held);
         }else if(st->type==RC_CONTROL_PADDLES){int x=255,y=255;unsigned buttons=0;
             if(st->device==RC_STICK_CONTROLLER)rc_pads_paddles(&d->pads,st->pad-1,&x,&y,&buttons);
@@ -467,7 +468,7 @@ static void slot_key(desktop *d,const char *key){
 }
 static void keyboard_switch(desktop *d,int swap){
     char error[256];release_keys(d);
-    if(swap){const rc_config_stick temp=d->config->sticks[0];d->config->sticks[0]=d->config->sticks[1];d->config->sticks[1]=temp;d->config->keyboard_port^=1u;message(d,d->config->keyboard_port?"Joystick port 2":"Joystick port 1");}
+    if(swap){const rc_config_stick temp=d->config->sticks[0];d->config->sticks[0]=d->config->sticks[1];d->config->sticks[1]=temp;d->config->keyboard_port^=1u;const unsigned socket=rc_config_keyboard_socket(d->config);message(d,socket==1?"Joystick port 2":socket==0?"Joystick port 1":"No joystick port");}
     else if(rc_pads_any(&d->pads)){message(d,"Keyboard joystick disabled: controller connected");return;}
     else {d->config->keyboard_joystick=!d->config->keyboard_joystick;message(d,d->config->keyboard_joystick?"Keyboard joystick on":"Keyboard joystick off");}
     input_config(d);if(!store_config(d,error,sizeof error))message(d,error);

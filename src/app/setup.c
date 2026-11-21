@@ -180,7 +180,7 @@ void rc_setup_draw(rc_setup *s,const uint32_t palette[16],rc_frame *f){
     case RC_SETUP_CONTROLLERS:{const char *types[]={"JOYSTICK","1351 MOUSE","PADDLES","NONE"};char source[32];
         row(s,0,"PORT 1",types[c->sticks[0].type]);rc_config_stick_device_name(&c->sticks[0],source,sizeof source);row(s,1,"INPUT 1",c->sticks[0].type==RC_CONTROL_MOUSE1351?"MOUSE":source);
         row(s,2,"PORT 2",types[c->sticks[1].type]);rc_config_stick_device_name(&c->sticks[1],source,sizeof source);row(s,3,"INPUT 2",c->sticks[1].type==RC_CONTROL_MOUSE1351?"MOUSE":source);
-        char label[37],line[37];snprintf(label,sizeof label,"KEYBOARD JOYSTICK (%s)",s->keyboard_active?(c->keyboard_port?"P2":"P1"):s->controller_present?"AUTO OFF":"OFF");snprintf(line,sizeof line," %-28.28s %3s ",label,"F11");
+        char label[37],line[37];snprintf(label,sizeof label,"KEYBOARD JOYSTICK (%s)",s->keyboard_active?(rc_config_keyboard_socket(c)==1?"P2":rc_config_keyboard_socket(c)==0?"P1":"NO PORT"):s->controller_present?"AUTO OFF":"OFF");snprintf(line,sizeof line," %-28.28s %3s ",label,"F11");
         option_text(s,4,14,2,line);
         row(s,5,"SWAP PORTS","SHIFT+F11");break;}
 
@@ -207,6 +207,7 @@ void rc_setup_draw(rc_setup *s,const uint32_t palette[16],rc_frame *f){
         rc_tui_put(&s->tui,11,3,"T64 FILES LOAD UNDER THE I/O AREA",14,6);
         rc_tui_put(&s->tui,12,3,"TAPE AUTO-LOAD RELOCATES BASIC",14,6);
         rc_tui_put(&s->tui,13,3,"OLD TAP HEADERS ACCEPTED",14,6);
+        rc_tui_put(&s->tui,14,3,"KEYBOARD JOYSTICK SKIPS MOUSE PORT",14,6);
         rc_tui_put(&s->tui,16,3,"ALSO IN 0.21",1,6);
         rc_tui_put(&s->tui,17,3,"FIRMWARE SCREEN LISTS MISSING ROMS",14,6);
         rc_tui_put(&s->tui,18,3,"ONE DRIVE ROM IS ENOUGH",14,6);

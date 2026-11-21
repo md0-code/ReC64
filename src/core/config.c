@@ -204,6 +204,11 @@ uint32_t rc_config_language_for_locale(const char *locale) { (void)locale; retur
 
 uint32_t rc_config_default_language(void) { return RC_LANG_EN; }
 
+unsigned rc_config_keyboard_socket(const rc_config *c){
+    const unsigned p=c->keyboard_port&1u;
+    if(c->sticks[p].type==RC_CONTROL_JOYSTICK)return p;
+    return c->sticks[p^1u].type==RC_CONTROL_JOYSTICK?p^1u:RC_CONFIG_STICKS;
+}
 void rc_config_defaults(rc_config *c) {
     memset(c, 0, sizeof *c);
     snprintf(c->model, sizeof c->model, "%s", RC_CONFIG_DEFAULT_MODEL);

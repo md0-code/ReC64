@@ -133,8 +133,9 @@ is refused.
 
 Controllers are detected when plugged in; the first one starts on port 2. The
 keyboard joystick (cursor keys and Left Ctrl) switches off while a controller
-is connected. Each port can be a joystick, a 1351 mouse, paddles or nothing
-(Controllers page); F12 releases the captured mouse.
+is connected, and moves to the other port when its own holds no joystick. Each
+port can be a joystick, a 1351 mouse, paddles or nothing (Controllers page);
+F12 releases the captured mouse.
 
 | Input | Action |
 | --- | --- |

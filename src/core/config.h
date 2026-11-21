@@ -129,6 +129,9 @@ typedef struct rc_config {
 #define RC_CONFIG_DEFAULT_MODEL "c64-pal"
 
 void rc_config_defaults(rc_config *config);
+/* The socket the keyboard joystick drives: keyboard_port when it holds a joystick, else the other
+ * socket when that one does; RC_CONFIG_STICKS when neither does. */
+unsigned rc_config_keyboard_socket(const rc_config *config);
 /* Reads a file; 0 with a message naming the line when it is not valid. */
 int rc_config_load(const char *path, rc_config *config, char *error, size_t capacity);
 /* The same from text; source is the file it stands for (relative paths). */
