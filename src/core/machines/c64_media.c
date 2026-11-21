@@ -34,7 +34,8 @@ static int select_entry(rc_c64 *c,unsigned slot,unsigned entry,char *error,size_
         if(entry!=UINT32_MAX&&!rc_datasette_control(&c->tape,RC_MEDIA_SEEK,entry))return rc_image_error(error,cap,"Tape entry not found");
         c->program_address=0x0801;size_t count=0;
         if(rc_tape_directory(&c->tape.deck.tape,NULL,0,&count,NULL,0)&&count){rc_tape_entry *entries=calloc(count,sizeof *entries);
-            if(entries&&rc_tape_directory(&c->tape.deck.tape,entries,count,&count,NULL,0)){const unsigned index=entry==UINT32_MAX?0:entry;if(index<count)c->program_address=entries[index].address;}free(entries);}
+            if(entries&&rc_tape_directory(&c->tape.deck.tape,entries,count,&count,NULL,0)){const unsigned index=entry==UINT32_MAX?0:entry;/* A relocatable file goes to the BASIC area when loaded without a secondary address. */
+            if(index<count)c->program_address=entries[index].type==1?0x0801:entries[index].address;}free(entries);}
         rc_media_close(c->synthetic);c->synthetic=NULL;free(c->program);c->program=NULL;c->program_size=0;
         c->source=(uint8_t)slot;c->physical=1;c->selected[slot]=entry==UINT32_MAX?0:entry;rc_c64_media_lines(c);return 1;
     }
@@ -57,6 +58,13 @@ static int select_entry(rc_c64 *c,unsigned slot,unsigned entry,char *error,size_
 }
 static uint8_t read_byte(void *self,uint16_t a){return rc_bus_read(&((rc_c64 *)self)->bus,a,1);}
 static void write_byte(void *self,uint16_t a,uint8_t v){rc_bus_write(&((rc_c64 *)self)->bus,a,v);}
+/* A program file loaded from a T64 or PRG lands in the RAM beneath the I/O
+ * area, where the turbo loaders such files come from put it, and not in the
+ * chip registers; colour RAM still takes its share, for picture files. */
+static void store_byte(void *self,uint16_t a,uint8_t v){rc_c64 *c=self;
+    if(a<0xd000||a>=0xe000){rc_bus_write(&c->bus,a,v);return;}
+    c->bus.ram[a]=v;if(a>=0xd800&&a<0xdc00)c->bus.colour[a&1023u]=v&15u;
+}
 static int trap_load(void *self,unsigned device,unsigned secondary,const uint8_t name[16],unsigned length,uint16_t *address,const uint8_t **data,size_t *size){
     (void)secondary;rc_c64 *c=self;if(c->physical||c->source>=2||!c->program||device!=1)return 0;
     if(!matches(name,length,c->program_name)){
@@ -82,7 +90,7 @@ static int before_fetch(void *self,uint16_t pc){
     if(pc==0xf817&&c->tape.deck.tape.image&&c->tape.deck.tape.image->size>20&&!c->tape.deck.record){rc_datasette_control(&c->tape,RC_MEDIA_PLAY,0);rc_c64_media_lines(c);}
     const unsigned bits=c->source<3?c->tape_bits[c->source]:0;
     rc_traps_enable(&c->traps,!c->physical&&(bits&RC_TAPE_TRAPS),!c->physical&&(bits&RC_TAPE_SAVE_TRAPS));
-    const rc_traps_io io={c,read_byte,write_byte,trap_load,trap_save};uint16_t next=pc;
+    const rc_traps_io io={c,read_byte,write_byte,trap_load,trap_save,store_byte};uint16_t next=pc;
     if(!rc_traps_fetch(&c->traps,&io,pc,c->cpu.a,&next))return 0;c->cpu.pc=next;return 1;
 }
 void rc_c64_media_init(rc_c64 *c){
@@ -209,8 +217,10 @@ const char *rc_c64_autoload(const void *self,unsigned slot,int *power){rc_c64 *c
         if(used<sizeof c->autoload_text){if(c->disk_address<=0x0801)snprintf(c->autoload_text+used,sizeof c->autoload_text-used,"RUN\n");else snprintf(c->autoload_text+used,sizeof c->autoload_text-used,"SYS%u\n",c->disk_address);}return c->autoload_text;
     }
     /* A file that starts at or below the BASIC area, as crunched programs with the
-     * zero byte of $0800 do, holds the BASIC line that starts it. */
-    if(c->program_address<=0x0801)snprintf(c->autoload_text,sizeof c->autoload_text,"LOAD\"\",1,1\nRUN\n");
+     * zero byte of $0800 do, holds the BASIC line that starts it. A plain LOAD puts
+     * a relocatable file there whatever address its header names, and an absolute
+     * file at its own address. */
+    if(c->program_address<=0x0801)snprintf(c->autoload_text,sizeof c->autoload_text,"LOAD\nRUN\n");
     else snprintf(c->autoload_text,sizeof c->autoload_text,"LOAD\"\",1,1\nSYS%u\n",c->program_address);return c->autoload_text;
 }
 struct rc_tape_deck *rc_c64_tape_deck(void *self,unsigned slot){rc_c64 *c=self;return (slot==0||slot==c->source)&&c->tape.deck.tape.image?&c->tape.deck:NULL;}

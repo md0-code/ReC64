@@ -38,7 +38,7 @@ int rc_traps_fetch(rc_traps *t,const rc_traps_io *io,uint16_t pc,uint8_t a,uint1
         if(device==1)write16(io,0xc1,target);
         uint8_t status=0;
         for(size_t i=0;i<size;++i){const uint16_t at=(uint16_t)(target+i);
-            if(!a)io->write(io->ctx,at,data[i]);
+            if(!a)(io->store?io->store:io->write)(io->ctx,at,data[i]);
             else if(io->read(io->ctx,at)!=data[i]){
                 status|=0x10;
                 /* The serial VERIFY path F516-F51C stores its mismatch

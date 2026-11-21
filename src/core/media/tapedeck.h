@@ -3,7 +3,7 @@
 #define RC_TAPEDECK_H
 #include "tap.h"
 typedef struct rc_tape_entry {
-    uint8_t name[16];uint16_t address;uint32_t length;
+    uint8_t name[16],type;uint16_t address;uint32_t length; /* type: header byte, 1 relocatable, 3 absolute */
     size_t offset,end_offset;
 } rc_tape_entry;
 int rc_tape_directory(const rc_tap *t,rc_tape_entry *entries,size_t capacity,size_t *count,char *error,size_t cap);

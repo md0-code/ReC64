@@ -58,7 +58,7 @@ static int next_program(rc_tap *t,program *p){
         const uint32_t length=end?(end>address?end-address:0):65536u-address;
         if((header[0]!=1&&header[0]!=3)||!length||length>65535)continue;
         memset(p,0,sizeof *p);memcpy(p->header,header,sizeof header);memcpy(p->entry.name,header+5,16);
-        p->entry.address=(uint16_t)address;p->entry.length=length;p->entry.offset=pilot;
+        p->entry.type=header[0];p->entry.address=(uint16_t)address;p->entry.length=length;p->entry.offset=pilot;
         *t=candidate;
         /* A first-copy header is followed by the repeated header. */
         if(copy){rc_tap repeat=*t;unsigned repeat_copy;size_t repeat_pilot;

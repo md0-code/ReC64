@@ -204,9 +204,9 @@ void rc_setup_draw(rc_setup *s,const uint32_t palette[16],rc_frame *f){
         option_text(s,12,20,3,"DELETE CURRENT SLOT  DEL/Y");break;}
     case RC_SETUP_ABOUT:
         rc_tui_put(&s->tui,10,3,"NEW IN " RC_VERSION,1,6);
-        rc_tui_put(&s->tui,11,3,"AUTO-LOAD RUNS $0800 PROGRAMS",14,6);
-        rc_tui_put(&s->tui,12,3,"AUTO-LOAD FINDS READY ANYWHERE",14,6);
-        rc_tui_put(&s->tui,13,3,"DISK FAST LOADERS KEEP IN STEP",14,6);
+        rc_tui_put(&s->tui,11,3,"T64 FILES LOAD UNDER THE I/O AREA",14,6);
+        rc_tui_put(&s->tui,12,3,"TAPE AUTO-LOAD RELOCATES BASIC",14,6);
+        rc_tui_put(&s->tui,13,3,"OLD TAP HEADERS ACCEPTED",14,6);
         rc_tui_put(&s->tui,16,3,"ALSO IN 0.21",1,6);
         rc_tui_put(&s->tui,17,3,"FIRMWARE SCREEN LISTS MISSING ROMS",14,6);
         rc_tui_put(&s->tui,18,3,"ONE DRIVE ROM IS ENOUGH",14,6);

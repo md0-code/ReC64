@@ -98,8 +98,8 @@ or 1541-II; the Media page holds the device number (8 to 11), fast loading,
 loading sounds and the default media folder. Fast loading runs the machine at
 full speed while the drive or tape is busy, without changing what the C64
 sees. Sound is off at full speed, and loading sounds play only with fast
-loading off. Ctrl+F3 and Ctrl+F4 open the drive and tape controls: load,
-save, eject, and for tape also play, stop, rewind and record.
+loading off. Ctrl+F3 and Ctrl+F4 open the controls of the inserted disk or
+tape: eject, and for tape also play, stop, rewind and record.
 
 ## Cartridges and memory expansions
 

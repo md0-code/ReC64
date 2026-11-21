@@ -14,6 +14,8 @@ typedef struct rc_traps_io {
                 uint16_t *address,const uint8_t **data,size_t *size);
     int (*save)(void *ctx,unsigned device,unsigned secondary,const uint8_t name[16],unsigned length,
                 uint16_t start,uint16_t end);
+    /* Optional: stores a loaded byte (write when absent). */
+    void (*store)(void *ctx,uint16_t address,uint8_t value);
 } rc_traps_io;
 typedef struct rc_traps {
     uint8_t watch[8192],known,load_enabled,save_enabled;
