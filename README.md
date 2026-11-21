@@ -183,7 +183,7 @@ rejected with a line number.
 | `machine.options.reu` | `off`, `128k`, `256k`, `512k`, `1m`, `2m`, `4m`, `8m`, `16m` |
 | `machine.options.georam` | `off`, `512k`, `1m`, `2m`, `4m` |
 | `video.look`, `video.filter` | `crt`, `plain`; `nearest`, `linear` |
-| `video.border` | `full`, `minimal`, `none` |
+| `video.border` | `full`, `medium` (16 pixels), `minimal` (5 pixels), `none` |
 | `video.palette` | `default`, or `color-corrected` for a truer blue and more saturation |
 | `media.cartridge.startup` | `true` keeps the cartridge between launches |
 | `ui.media_folder` | Folder the first file browser opens |

@@ -460,7 +460,7 @@ static int video_section(reader *r, yaml_node_t *v, rc_config *c) {
         else if (!strcmp(name, "aspect")) ok = choice(r, x, "video.aspect", aspects, &c->aspect);
         else if (!strcmp(name, "scale")) ok = choice(r, x, "video.scale", scales, &c->scale);
         else if (!strcmp(name, "filter")) ok = choice(r, x, "video.filter", filters, &c->filter);
-        else if (!strcmp(name, "border")) {static const named borders[]={{"full",RC_BORDER_FULL},{"minimal",RC_BORDER_MINIMAL},{"none",RC_BORDER_NONE},{NULL,0}};ok=choice(r,x,"video.border",borders,&c->border);}
+        else if (!strcmp(name, "border")) {static const named borders[]={{"full",RC_BORDER_FULL},{"medium",RC_BORDER_MEDIUM},{"minimal",RC_BORDER_MINIMAL},{"none",RC_BORDER_NONE},{NULL,0}};ok=choice(r,x,"video.border",borders,&c->border);}
         else if (!strcmp(name, "palette")) {const char *s=scalar(r,x);ok=s&&*s&&strlen(s)<sizeof c->palette&&!strpbrk(s,"/\\:\r\n");if(ok)snprintf(c->palette,sizeof c->palette,"%s",!strcmp(s,"color-corrected")?"color-corrected":"default");else fail(r,"video.palette needs default or color-corrected");}
         else if (!strcmp(name, "fullscreen")) ok = boolean(r, x, &c->fullscreen);
         else if (!strcmp(name, "vsync")) ok = boolean(r, x, &c->vsync);
@@ -840,7 +840,7 @@ int rc_config_store(const rc_config *c, struct rc_ydoc *doc) {
         }
     }
     ok = ok && set(doc, "video", "look", rc_config_look_name(c->look)) && set(doc, "video", "aspect", rc_config_aspect_name(c->aspect)) &&
-         set(doc,"video","palette",c->palette) && set(doc,"video","border",c->border==RC_BORDER_NONE?"none":c->border==RC_BORDER_MINIMAL?"minimal":"full") &&
+         set(doc,"video","palette",c->palette) && set(doc,"video","border",c->border==RC_BORDER_NONE?"none":c->border==RC_BORDER_MINIMAL?"minimal":c->border==RC_BORDER_MEDIUM?"medium":"full") &&
          set(doc, "video", "scale", rc_config_scale_name(c->scale)) && set(doc, "video", "filter", rc_config_filter_name(c->filter)) &&
          set_bool(doc, "video", "fullscreen", c->fullscreen) && set_bool(doc, "video", "vsync", c->vsync) &&
          set_bool(doc, "sound", "enabled", c->sound);

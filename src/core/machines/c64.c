@@ -131,10 +131,10 @@ static void economy(void *self,int on){rc_c64 *c=self;c->vic.economy=(uint8_t)(o
 static uint64_t frames(const void *self){return ((const rc_c64 *)self)->vic.frames;}
 static int frame(void *self,rc_frame *f){
     rc_c64 *c=self;const unsigned full_h=c->model>=2?247u:272u,raw=rc_vic2_width(&c->vic),raw_h=rc_vic2_height(&c->vic);
-    const unsigned w=c->border==RC_BORDER_NONE?320u:c->border==RC_BORDER_MINIMAL?352u:384u;
-    const unsigned h=c->border==RC_BORDER_NONE?200u:c->border==RC_BORDER_MINIMAL?232u:full_h;
-    const unsigned top=c->border==RC_BORDER_NONE?51u:c->border==RC_BORDER_MINIMAL?35u:c->model>=2?8u:16u;
-    const unsigned left=c->border==RC_BORDER_NONE?132u:c->border==RC_BORDER_MINIMAL?116u:100u;
+    /* Border kept around the 320x200 screen: none, 5 (minimal) or 16 (medium) pixels, or all shown. */
+    const unsigned edge=c->border==RC_BORDER_NONE?0u:c->border==RC_BORDER_MINIMAL?5u:16u;const int full=c->border==RC_BORDER_FULL;
+    const unsigned w=full?384u:320u+2u*edge,h=full?full_h:200u+2u*edge;
+    const unsigned top=full?(c->model>=2?8u:16u):51u-edge,left=full?100u:132u-edge;
     for(unsigned y=0;y<h;++y)for(unsigned x=0;x<w;++x)c->frame[y*w+x]=c->shown[((y+top)%raw_h)*raw+(x+left)%raw];
     *f=(rc_frame){w,h,w,c->frame,rc_palette_builtin("default"),16,w*4u*full_h,h*3u*384u,c->vic.frames};return 1;
 }

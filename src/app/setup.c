@@ -108,7 +108,7 @@ unsigned rc_setup_key(rc_setup *s,const char *key){
         switch(s->row){
         case 0:{unsigned v=c->look==RC_LOOK_CRT?0u:c->filter==RC_CONFIG_FILTER_LINEAR?2u:1u;v=cycle(v,3,direction);if(!v&&!s->crt_available)v=direction>0?1u:2u;c->look=v?RC_LOOK_PLAIN:RC_LOOK_CRT;c->filter=v==2?RC_CONFIG_FILTER_LINEAR:RC_CONFIG_FILTER_NEAREST;break;}
         case 1:{const unsigned v=!strcmp(c->palette,COLORS[1]);snprintf(c->palette,sizeof c->palette,"%s",COLORS[cycle(v,2,direction)]);break;}
-        case 2:c->border=cycle(c->border,3,direction);break;
+        case 2:c->border=cycle(c->border,4,direction);break;
         case 3:c->fullscreen=!c->fullscreen;break;
         case 4:c->scale=!c->scale;break;
         case 5:c->aspect=!c->aspect;break;
@@ -165,7 +165,7 @@ void rc_setup_draw(rc_setup *s,const uint32_t palette[16],rc_frame *f){
         const char *drive=rc_config_option_value(c,"drive_model");row(s,0,"MODEL",!strcmp(c->model,"test")?"TEST":!strncmp(c->model,"c64c-",5)?"C64C":"C64");row(s,1,"VIDEO STANDARD",strstr(c->model,"ntsc")?"NTSC":"PAL");row(s,2,"SID TYPE",sid?sid:"6581");
         row(s,3,"DRIVE TYPE",drive&&!strcmp(drive,"1541-ii")?"1541-II":"1541");row(s,4,"RESET","ENTER");row(s,5,"COLD BOOT","ENTER");row(s,6,"POWER OFF","ENTER");break;}
     case RC_SETUP_DISPLAY:row(s,0,"FILTER",c->look==RC_LOOK_CRT?"CRT":c->filter==RC_CONFIG_FILTER_LINEAR?"LINEAR":"NEAREST");
-        row(s,1,"PALETTE",c->palette);row(s,2,"BORDER",c->border==RC_BORDER_NONE?"NONE":c->border==RC_BORDER_MINIMAL?"MINIMAL":"FULL");
+        row(s,1,"PALETTE",c->palette);row(s,2,"BORDER",c->border==RC_BORDER_NONE?"NONE":c->border==RC_BORDER_MINIMAL?"MINIMAL":c->border==RC_BORDER_MEDIUM?"MEDIUM":"FULL");
         row(s,3,"FULL SCREEN",c->fullscreen?"ON":"OFF");row(s,4,"SCALE",c->scale?"INTEGER":"FIT");row(s,5,"PIXEL SHAPE",c->aspect?"SQUARE":"ORIGINAL");row(s,6,"VSYNC",c->vsync?"ON":"OFF");break;
     case RC_SETUP_SOUND:{char volume[16];snprintf(volume,sizeof volume,"%d%%",c->volume);row(s,0,"SOUND",c->sound?"ON":"OFF");row(s,1,"VOLUME",volume);break;}
     case RC_SETUP_MEDIA:{rc_config_media disk,tape;rc_config_media_settings(c,"disk",&disk);rc_config_media_settings(c,"tape",&tape);const char *device=rc_config_option_value(c,"drive_device");
@@ -208,6 +208,7 @@ void rc_setup_draw(rc_setup *s,const uint32_t palette[16],rc_frame *f){
         rc_tui_put(&s->tui,12,3,"TAPE AUTO-LOAD RELOCATES BASIC",14,6);
         rc_tui_put(&s->tui,13,3,"OLD TAP HEADERS ACCEPTED",14,6);
         rc_tui_put(&s->tui,14,3,"KEYBOARD JOYSTICK SKIPS MOUSE PORT",14,6);
+        rc_tui_put(&s->tui,15,3,"MINIMAL BORDER 5 PIXELS, NEW MEDIUM",14,6);
         rc_tui_put(&s->tui,16,3,"ALSO IN 0.21",1,6);
         rc_tui_put(&s->tui,17,3,"FIRMWARE SCREEN LISTS MISSING ROMS",14,6);
         rc_tui_put(&s->tui,18,3,"ONE DRIVE ROM IS ENOUGH",14,6);

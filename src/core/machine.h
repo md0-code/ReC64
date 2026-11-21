@@ -218,7 +218,7 @@ typedef struct rc_frame {
 } rc_frame;
 /* 0 when the machine shows nothing (the frame is then black). */
 int rc_machine_frame(rc_machine *m, rc_frame *frame);
-enum {RC_BORDER_FULL,RC_BORDER_MINIMAL,RC_BORDER_NONE};
+enum {RC_BORDER_FULL,RC_BORDER_MEDIUM,RC_BORDER_MINIMAL,RC_BORDER_NONE};
 void rc_machine_border(rc_machine *m,unsigned border);
 /* Nobody watches or listens, as at full speed: the machine may leave pictures undrawn and sound
  * unsynthesised. Everything a program can observe stays exact. */

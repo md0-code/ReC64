@@ -80,7 +80,7 @@ def main():
         assert 'SELECT SNAPSHOT SLOT' not in text()
         # A live border change keeps settings and the guest at the same dimensions.
         key('Pad B'); key('LEFT', 3); key('DOWN', 2); key('Pad A'); shot('full-border-settings', (384, 272))
-        key('Pad A'); shot('minimal-border-settings', (352, 232)); key('Pad B'); shot('minimal-border-guest', (352, 232))
+        key('Pad A'); shot('medium-border-settings', (352, 232)); key('Pad B'); shot('medium-border-guest', (352, 232))
 
         # Folder, save format, filename, search and file actions use the controller.
         pad('B', 'Left', 'Up', 'A', 'Down', 'A')
