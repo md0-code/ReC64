@@ -1,4 +1,4 @@
-/* Original freezer circuits; references and circuit pin mapping in docs/DESIGN.md. */
+/* Original freezer circuits; references and circuit pin mapping in docs/DEVELOPMENT.md. */
 #ifndef RC_CART_FREEZER_H
 #define RC_CART_FREEZER_H
 #include "cart.h"

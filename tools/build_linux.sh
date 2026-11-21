@@ -7,16 +7,16 @@
 #
 # Written for and tried in WSL Debian 12, run from the repository, which may be on a Windows drive (/mnt/c/...).
 # The sources and the git-ignored roms/ are copied to /tmp/rec64-build/repo, where the build trees and the test
-# output are too; only the archives go to the repository's dist/. Once the targets are built the build trees and
+# output are too; only the archives go to the repository's dist/releases/. Once the targets are built the build trees and
 # the copy are removed (--keep leaves them); `clean` also removes the arm64 root.
 #
 #   x64    configure and build (Release, SDL 2 built from source and linked statically), profile-guided when roms/
 #          holds the firmware (tools/pgo_train.py, as tools/build_dist.ps1 does for Windows; --no-pgo skips it),
-#          ctest on SDL's dummy drivers, and dist/ReC64-<version>-linux-x64.tar.gz through tools/package.py, which
+#          ctest on SDL's dummy drivers, and dist/releases/ReC64-<version>-linux-x64.tar.gz through tools/package.py, which
 #          also checks that a fresh extraction starts the C64 to READY.
 #   arm64  the same build with aarch64-linux-gnu-gcc against an arm64 root (Debian 12's packages, which `sysroot`
 #          unpacks into /tmp/rec64-build/sysroot-arm64); when qemu-aarch64 is installed the program's version is
-#          checked through it. dist/ReC64-<version>-linux-arm64.tar.gz.
+#          checked through it. dist/releases/ReC64-<version>-linux-arm64.tar.gz.
 #
 # Packages (Debian, root): build-essential cmake ninja-build pkg-config python3 rsync libasound2-dev libpulse-dev
 # libx11-dev libxext-dev libxrandr-dev libxcursor-dev libxfixes-dev libxi-dev libxss-dev libxkbcommon-dev
@@ -75,7 +75,7 @@ make_sysroot() {
 
 sync_sources() {
     mkdir -p "$tree"
-    rsync -a --delete --exclude /.git --exclude /work --exclude /dist --exclude '/src/build*' --exclude /rec64.yaml \
+    rsync -a --delete --exclude /.git --exclude /work --exclude /dist --exclude /build --exclude /rec64.yaml \
         --exclude /states "$root/" "$tree/"
     mkdir -p "$tree/work"
 }
@@ -131,7 +131,7 @@ EOF
     if [[ $package -eq 1 ]]; then
         local start=()
         [[ $test -eq 1 ]] || start=(--no-start)
-        python3 "$tree/tools/package.py" "linux-$arch" "$dir/rec64" --out "$root/dist" "${start[@]}"
+        python3 "$tree/tools/package.py" "linux-$arch" "$dir/rec64" --out "$root/dist/releases" "${start[@]}"
     fi
 }
 

@@ -17,30 +17,11 @@ Linux, on x64 and ARM64.
 
 ## Getting started
 
-Supply the [firmware](#firmware), then run `rec64.exe` (`rec64` on Linux). A
+Supply the [firmware](docs/NOTES.md#firmware), then run `rec64.exe` (`rec64` on Linux). A
 PAL C64 starts at the BASIC prompt. Press **Ctrl+F1** to load a program, disk,
 tape or cartridge, or drop a file on the window or on the program; `rec64 FILE`
 opens a file the same way. **F12** opens setup, where every setting can be
 changed.
-
-## Firmware
-
-ReC64 contains no Commodore firmware. Copy the ROM images below into the
-`roms` folder beside the program; until they are there, ReC64 shows which
-ones are missing. File names do not matter: each image is recognised by its
-checksum. BASIC, KERNAL and the character generator are required, and at
-least one of the two drive ROMs.
-
-| ROM | What it is | Bytes | SHA-256 |
-| --- | --- | --- | --- |
-| BASIC 901226-01 | The BASIC interpreter | 8192 | `89878cea0a268734696de11c4bae593eaaa506465d2029d619c0e0cbccdfa62d` |
-| KERNAL 901227-03 | The operating system, revision 3 | 8192 | `83c60d47047d7beab8e5b7bf6f67f80daa088b7a6a27de0d7e016f6484042721` |
-| Characters 901225-01 | The screen font | 4096 | `fd0d53b8480e86163ac98998976c72cc58d5dd8eb824ed7b829774e74213b420` |
-| 1541 DOS 325302-01 + 901229-05 | Firmware of the 1541 disk drive | 16384 | `d1d45afb46fd4e2b48d93ca367b889d75654a3b7acf73044e51f6d880c09369e` |
-| 1541-II DOS 251968-03 | Firmware of the 1541-II disk drive | 16384 | `326c289c38753323d7e8167897447cf61ef35189d82eb8d75210ece949adda7c` |
-
-The 1541 image is one file: the 325302-01 ROM followed by the 901229-05 ROM.
-Other revisions and replacement ROMs such as JiffyDOS are not accepted.
 
 ## Keys
 
@@ -157,8 +138,8 @@ In a name field, Up/Down cycles the character and Left/Right moves the cursor.
 Opening a SID file (PSID or RSID, single SID) starts the player, with title,
 author, release and elapsed time. Left/Right changes the sub-tune, Space
 pauses and Esc returns to the file list. The clock and SID chip follow the
-file, or a PAL 6581 when it names none. The SID is ReC64's own engine,
-described in the [design notes](docs/DESIGN.md).
+file, or a PAL 6581 when it names none. The SID is ReC64's own engine; its
+[limitations](docs/NOTES.md#limitations) are listed in the notes.
 
 ## Status line and on-screen keyboard
 
@@ -169,67 +150,37 @@ with LED (`*`) and motor (`M`), the tape counter with play, stop or record
 Shift+F9, or Back on a controller, opens the C64 keyboard for mouse, touch
 (several fingers at once) and controllers. Tap Shift, C= or Ctrl to latch it.
 
-## Configuration
-
-Settings are saved in `rec64.yaml` beside the program. Setup writes it and
-keeps your comments; `--config FILE` selects another file, and
-`src/app/rec64.yaml` is an example. Unknown keys and invalid values are
-rejected with a line number.
-
-| Setting | Values |
-| --- | --- |
-| `machine.model` | `c64-pal`, `c64c-pal`, `c64-ntsc`, `c64c-ntsc` (also `--model`) |
-| `machine.options.sid` | `6581`, `8580` |
-| `machine.options.drive_model`, `drive_device` | `1541`, `1541-ii`; 8 to 11 |
-| `machine.options.reu` | `off`, `128k`, `256k`, `512k`, `1m`, `2m`, `4m`, `8m`, `16m` |
-| `machine.options.georam` | `off`, `512k`, `1m`, `2m`, `4m` |
-| `video.look`, `video.filter` | `crt`, `plain`; `nearest`, `linear` |
-| `video.border` | `full`, `medium` (16 pixels), `minimal` (5 pixels), `none` |
-| `video.palette` | `default`, or `color-corrected` for a truer blue and more saturation |
-| `media.cartridge.startup` | `true` keeps the cartridge between launches |
-| `ui.media_folder` | Folder the first file browser opens |
-| `ui.status_line` | `true` shows the status line |
-
-C64 keys and the keyboard joystick can be rebound with SDL key names; F9 to
-F12, Pause and Print Screen stay reserved:
-
-```yaml
-keyboard:
-  RUN STOP: Escape
-  RESTORE: PageUp
-controllers:
-  joystick2: {type: joystick, device: controller 1}
-  keyboard_port: 2
-  keys: {up: Up, down: Down, left: Left, right: Right, fire: Left Ctrl, fire2: Left Shift}
-```
-
 ## Building
 
 Windows needs Visual Studio's C++ tools, CMake 3.24 or later and Ninja:
 
 ```powershell
-./src/build.ps1                # x64, into work/build-x64
-./src/build.ps1 -Pgo           # the same, profile-guided: about a third faster
-./src/build.ps1 -Arch arm64    # needs the ARM64 compiler tools
+tools/build.ps1                # x64, into build/x64
+tools/build.ps1 -Pgo           # the same, profile-guided: about a third faster
+tools/build.ps1 -Arch arm64    # needs the ARM64 compiler tools
 python tools/fetch_roms.py     # firmware for the checks, into roms/
-./work/build-x64/rec64.exe
-./tools/build_dist.ps1         # portable build in dist/, ARM64 in dist/arm64/, release archives
+./build/x64/rec64.exe
+tools/build_dist.ps1           # portable build in dist/, release archives in dist/releases/
 ```
 
 On Linux:
 
 ```sh
-cmake -S src -B work/build && cmake --build work/build
+cmake -S src -B build/linux && cmake --build build/linux
 tools/build_linux.sh all       # release archives for x64 and ARM64 (see the script's --help)
 ```
 
 For a profile-guided Linux build, configure with `-DRC_PGO=generate`, build,
-run `python3 tools/pgo_train.py work/build/rec64`, then configure with
+run `python3 tools/pgo_train.py build/linux/rec64`, then configure with
 `-DRC_PGO=use` and build again. The training run needs the firmware.
 
-SDL 2 is downloaded during configuration. `python tools/verify.py` runs the
-checks without opening a window. The [design notes](docs/DESIGN.md) describe
-the architecture, the snapshot format and the scripting interface.
+SDL 2 is downloaded during configuration. `python tests/verify.py` runs the
+checks without opening a window.
+
+## Documentation
+
+- [Notes](docs/NOTES.md): the firmware, the configuration file and the limitations.
+- [Changelog](docs/CHANGELOG.md).
 
 ## License
 

@@ -1,8 +1,18 @@
-/work/
+# Development files kept locally, never committed.
+/AGENTS.md
+/PLAN.md
+/ISSUES.md
+/TODO.md
+/docs/DEVELOPMENT.md
+/docs/dev/
+# Firmware for the checks: never committed.
 /roms/
-/src/build*/
+# Scratch and test output; build trees; the distribution.
+/work/
+/build/
+/dist/
+# Snapshots written by running ReC64 in the repository root.
+/states/
+# Python.
 __pycache__/
 *.pyc
-/dist/
-
-/states/

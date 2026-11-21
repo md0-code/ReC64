@@ -6,9 +6,9 @@ call it after they have built the program.
 
 PLATFORM is windows-x64, windows-arm64, linux-x64 or linux-arm64; PROGRAM the built rec64.exe or rec64. The archive
 ReC64-<version>-<platform>.zip (Windows) or .tar.gz (Linux, under a folder of the same name) goes to --out (default
-dist/), replacing the earlier archive of that platform and no other.
+dist/releases/), which holds the current version only: archives of other versions are removed.
 
-The member list is fixed below: the program, the documents and the licences of the components linked into it, and
+The member list is fixed below: the program, the documents (THIRD_PARTY.md carries the components' notices), and
 an empty roms/ folder. No firmware, no settings file (the program writes rec64.yaml on its first start) and no
 software for the machine. The program must be an executable of the platform's format and architecture, every
 relative link of the shipped documents must resolve inside the archive, and the finished archive is opened again:
@@ -35,8 +35,8 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 NAME = "ReC64"
 PLATFORMS = ("windows-x64", "windows-arm64", "linux-x64", "linux-arm64")
-DOCS = {"README.md": "README.md", "docs/DESIGN.md": "docs/DESIGN.md", "docs/THIRD_PARTY.md": "docs/THIRD_PARTY.md",
-        "docs/LICENSE": "docs/LICENSE", "docs/licenses/libyaml-MIT": "src/third_party/libyaml/LICENSE"}
+DOCS = {"README.md": "README.md", "docs/NOTES.md": "docs/NOTES.md", "docs/CHANGELOG.md": "docs/CHANGELOG.md",
+        "docs/THIRD_PARTY.md": "docs/THIRD_PARTY.md", "docs/LICENSE": "docs/LICENSE"}
 FOLDERS = ("roms",)
 EXECUTABLES = {"windows-x64": ("pe", 0x8664), "windows-arm64": ("pe", 0xAA64),
                "linux-x64": ("elf", 0x3E), "linux-arm64": ("elf", 0xB7)}
@@ -62,7 +62,7 @@ def archive_name(platform: str) -> str:
 
 
 def expected_files(platform: str) -> list[str]:
-    return sorted([program_name(platform), *DOCS, "docs/licenses/SDL-zlib"])
+    return sorted([program_name(platform), *DOCS])
 
 
 def check_executable(platform: str, path: Path) -> None:
@@ -76,17 +76,9 @@ def check_executable(platform: str, path: Path) -> None:
         raise PackageError(f"{path} is not a 64-bit little-endian ELF executable for {platform}")
 
 
-def sdl_licence(program: Path) -> Path:
-    """SDL's licence from the dependency tree of the build the program came from."""
-    licence = program.parent / "_deps" / "sdl2-src" / "LICENSE.txt"
-    if not licence.is_file():
-        raise PackageError(f"{licence} is missing: build the program with tools/build_dist.ps1 or tools/build_linux.sh")
-    return licence
-
-
 def gather(platform: str, program: Path) -> dict[str, Path]:
     check_executable(platform, program)
-    entries = {program_name(platform): program, "docs/licenses/SDL-zlib": sdl_licence(program)}
+    entries = {program_name(platform): program}
     for member, source in DOCS.items():
         if not (ROOT / source).is_file():
             raise PackageError(f"{source} is missing")
@@ -235,8 +227,13 @@ def package(platform: str, program: Path, out: Path, start: bool = True) -> Path
             raise PackageError(f"the archive's {name} differs from the staged one")
     if start and runnable_here(platform):
         start_check(platform, temp)
-    for old in out.glob(f"{NAME}-*-{platform}.*"):
-        if old.name != final.name and re.fullmatch(rf"{NAME}-\d+\.\d+\.\d+-{platform}\.(zip|tar\.gz)", old.name):
+    archive = re.compile(rf"{NAME}-(\d+\.\d+\.\d+)-[a-z]+-[a-z0-9]+\.(zip|tar\.gz)")
+    for old in out.glob(f"{NAME}-*"):
+        m = archive.fullmatch(old.name)
+        if m and m.group(1) != version():
+            old.unlink()
+    for old in out.parent.glob(f"{NAME}-*-{platform}.*"):    # archives of the earlier layout, in dist/ itself
+        if archive.fullmatch(old.name):
             old.unlink()
     shutil.move(str(temp), final)
     print(f"OK: {final} ({final.stat().st_size:,} bytes)" + (", starts to READY" if start and runnable_here(platform) else ""))
@@ -247,7 +244,7 @@ def main(argv: list[str]) -> int:
     parser = argparse.ArgumentParser(description=__doc__.split("\n")[0])
     parser.add_argument("platform", choices=PLATFORMS)
     parser.add_argument("program", nargs="?", type=Path)
-    parser.add_argument("--out", type=Path, default=ROOT / "dist")
+    parser.add_argument("--out", type=Path, default=ROOT / "dist" / "releases")
     parser.add_argument("--no-start", action="store_true", help="skip the start check of a fresh extraction")
     parser.add_argument("--list", action="store_true", help="print the files of the archive and stop")
     args = parser.parse_args(argv)

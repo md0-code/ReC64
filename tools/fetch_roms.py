@@ -1,6 +1,6 @@
 """Fetch the hash-identified firmware images.
 
-Only the firmware URLs in tools/pins.py are requested; an image
+Only the firmware URLs in tests/pins.py are requested; an image
 listed with several URLs is joined from those parts in order. --check
 verifies installed files without writing.
 --from-dir DIR imports matching images by content, whatever their filenames.
@@ -11,6 +11,7 @@ import hashlib
 import sys
 import urllib.request
 from pathlib import Path
+sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "tests"))   # the pinned sources live with the checks
 import pins
 ROOT = Path(__file__).resolve().parents[1]
 

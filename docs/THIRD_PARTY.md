@@ -1,20 +1,42 @@
-# Component and firmware notices
+# Third-party components
 
-| Component | License | Location |
-|---|---|---|
-| SDL 2.32.10 | zlib | Downloaded at build time; its `LICENSE.txt` is retained in the dependency tree |
-| libyaml 0.2.5 | MIT, Copyright (c) 2006-2016 Kirill Simonov | `src/third_party/libyaml/LICENSE` |
+| Component | Use | License |
+| --- | --- | --- |
+| [SDL 2.32.10](https://www.libsdl.org/) | Window, input and sound; fetched at build time and linked statically | zlib |
+| [libyaml 0.2.5](https://github.com/yaml/libyaml/tree/0.2.5) | YAML syntax of `rec64.yaml` (`src/third_party/libyaml`); linked statically | MIT, below |
 
-The CRT presenter uses the project's M-CRT shader. Program source is
-GPL-3.0-or-later (`LICENSE`).
+ReC64 itself is licensed under GPL-3.0-or-later ([LICENSE](LICENSE)).
 
 ReC64 includes no firmware: none is committed to this repository and none is
 part of a build. The Commodore images a user supplies retain their owners'
-rights. Their exact byte counts and SHA-256 checksums are listed in the
-README; the 1541 image is joined from the 325302-01 lower half and the
-901229-05 upper half.
-The test screen does not require firmware.
+rights; [the notes](NOTES.md#firmware) list their sizes and SHA-256
+checksums.
 
-SingleStepTests/65x02 test vectors are MIT-licensed, downloaded only into
-`work/cpu/` at a pinned commit. Their full notice is downloaded
-with them. They are not program source and are not distributed with ReC64.
+The SingleStepTests/65x02 test vectors used by the checks are MIT-licensed,
+downloaded only into `work/cpu/` at a pinned commit with their notice. They
+are not program source and are not distributed with ReC64.
+
+## libyaml
+
+```
+Copyright (c) 2017-2020 Ingy döt Net
+Copyright (c) 2006-2016 Kirill Simonov
+
+Permission is hereby granted, free of charge, to any person obtaining a copy of
+this software and associated documentation files (the "Software"), to deal in
+the Software without restriction, including without limitation the rights to
+use, copy, modify, merge, publish, distribute, sublicense, and/or sell copies
+of the Software, and to permit persons to whom the Software is furnished to do
+so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.
+```

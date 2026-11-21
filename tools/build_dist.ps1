@@ -1,5 +1,6 @@
-<# Build the portable Windows folders (dist/, dist/arm64/; existing user settings and ROMs are kept) and the release
-   archives dist/ReC64-<version>-windows-x64.zip and -windows-arm64.zip (tools/package.py), which hold no firmware. #>
+<# Build the portable Windows x64 folder (dist/; existing user settings, ROMs and other files are kept) and the release
+   archives dist/releases/ReC64-<version>-windows-x64.zip and -windows-arm64.zip (tools/package.py), which hold no
+   firmware. dist/releases/ holds the current version only. #>
 [CmdletBinding()]
 param([switch]$NoBuild)
 $ErrorActionPreference = 'Stop'
@@ -26,40 +27,38 @@ function Publish-Program([string]$source, [string]$destination) {
     }
 }
 if (-not $NoBuild) {
-    & "$repo/src/build.ps1" -NoTest -StaticRuntime -Pgo
-    & "$repo/src/build.ps1" -Arch arm64 -NoTest -StaticRuntime
+    & "$repo/tools/build.ps1" -NoTest -StaticRuntime -Pgo
+    & "$repo/tools/build.ps1" -Arch arm64 -NoTest -StaticRuntime
 }
 $version = (Get-Content -LiteralPath "$repo/src/VERSION" -Raw).Trim()
-$commit = git -C $repo rev-parse HEAD
+
+# The run folder: the x64 program and the documents of the release.
+$target = "$repo/dist"
+foreach ($folder in @($target, "$target/roms", "$target/docs")) {
+    New-Item -ItemType Directory -Force -Path $folder | Out-Null
+}
+Publish-Program "$repo/build/x64/rec64.exe" "$target/rec64.exe"
+# Retired mapped images become removable after their process exits.
+Get-ChildItem -LiteralPath $target -Filter 'rec64.exe.running-*' -File | Where-Object {
+    $_.Name -match '^rec64\.exe\.running-[0-9a-f]{32}$'
+} | ForEach-Object {
+    try { Remove-Item -LiteralPath $_.FullName -Force -ErrorAction Stop } catch { }
+}
+if (-not (Test-Path -LiteralPath "$target/rec64.yaml")) {
+    Copy-Item -LiteralPath "$repo/src/app/rec64.yaml" -Destination "$target/rec64.yaml"
+}
+foreach ($name in @('NOTES.md', 'CHANGELOG.md', 'THIRD_PARTY.md', 'LICENSE')) {
+    Copy-Item -LiteralPath "$repo/docs/$name" -Destination "$target/docs/$name" -Force
+}
+Copy-Item -LiteralPath "$repo/README.md" -Destination "$target/README.md" -Force
+# What earlier releases put in the run folder and this one does not.
+foreach ($old in @("$target/docs/DESIGN.md", "$target/docs/build.json", "$target/docs/licenses", "$target/arm64")) {
+    if (Test-Path -LiteralPath $old) { Remove-Item -LiteralPath $old -Recurse -Force }
+}
+Write-Host "Ready: $target/rec64.exe ($version, x64)"
+
+# The release archives: the same program and documents, no firmware and no settings.
 foreach ($arch in @('x64', 'arm64')) {
-    $build = "$repo/work/build-$arch"
-    $target = if ($arch -eq 'x64') { "$repo/dist" } else { "$repo/dist/arm64" }
-    foreach ($folder in @($target, "$target/roms", "$target/docs/licenses")) {
-        New-Item -ItemType Directory -Force -Path $folder | Out-Null
-    }
-    Publish-Program "$build/rec64.exe" "$target/rec64.exe"
-    # Retired mapped images become removable after their process exits.
-    Get-ChildItem -LiteralPath $target -Filter 'rec64.exe.running-*' -File | Where-Object {
-        $_.Name -match '^rec64\.exe\.running-[0-9a-f]{32}$'
-    } | ForEach-Object {
-        try { Remove-Item -LiteralPath $_.FullName -Force -ErrorAction Stop } catch { }
-    }
-    if (-not (Test-Path -LiteralPath "$target/rec64.yaml")) {
-        Copy-Item -LiteralPath "$repo/src/app/rec64.yaml" -Destination "$target/rec64.yaml"
-    }
-    foreach ($name in @('DESIGN.md', 'THIRD_PARTY.md', 'LICENSE')) {
-        Copy-Item -LiteralPath "$repo/docs/$name" -Destination "$target/docs/$name" -Force
-    }
-    Copy-Item -LiteralPath "$repo/README.md" -Destination "$target/README.md" -Force
-    Copy-Item -LiteralPath "$repo/src/third_party/libyaml/LICENSE" -Destination "$target/docs/licenses/libyaml-MIT" -Force
-    Copy-Item -LiteralPath "$build/_deps/sdl2-src/LICENSE.txt" -Destination "$target/docs/licenses/SDL-zlib" -Force
-    $manifest = [ordered]@{
-        version = $version; architecture = "windows-$arch"; commit = $commit
-        executable_sha256 = (Get-FileHash -LiteralPath "$target/rec64.exe" -Algorithm SHA256).Hash.ToLowerInvariant()
-    }
-    $manifest | ConvertTo-Json -Depth 8 | Set-Content -LiteralPath "$target/docs/build.json" -Encoding utf8
-    Write-Host "Ready: $target/rec64.exe ($version, $arch)"
-    # The release archive: the same program and documents, no firmware and no settings.
-    python "$repo/tools/package.py" "windows-$arch" "$build/rec64.exe" --out "$repo/dist"
+    python "$repo/tools/package.py" "windows-$arch" "$repo/build/$arch/rec64.exe" --out "$repo/dist/releases"
     if ($LASTEXITCODE -ne 0) { throw "packaging windows-$arch failed" }
 }
