@@ -2,6 +2,10 @@
 
 The changes users notice, newest first.
 
+## 0.23.2 (2026-11-21)
+
+- The controller's Y button opens the on-screen keyboard.
+
 ## 0.23.1 (2026-11-21)
 
 - Firmware, configuration and limitations are in docs/NOTES.md; the design notes are no longer shipped.

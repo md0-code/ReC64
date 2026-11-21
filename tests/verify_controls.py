@@ -70,7 +70,7 @@ def main():
         shot('controllers-settings'); key('Pad LB'); call('expect KEYBOARD JOYSTICK (P1)')
         key('RIGHT'); t = text(); assert 'REU' in t and 'LOAD CARTRIDGE' in t and 'FREEZE' in t, t
         shot('cartridge-settings'); key('Pad A'); call('expect FILES AND FOLDERS'); key('Pad B'); call('expect CARTRIDGE 6/8'); key('Pad B')
-        key('Pad Y'); call('expect No disk or tape inserted')
+        key('Pad Y'); call('expect ON-SCREEN KEYBOARD OPEN'); key('Pad Y')
         key('Pad X'); call('expect FILES AND FOLDERS'); shot('load-browser'); key('Pad B')
         key('Pad RB'); call('expect Full speed'); key('Pad RB'); call('expect 100% speed')
         key('Pad RT'); call('expect SELECT SNAPSHOT SLOT'); key('Pad A'); call('expect No snapshot in this slot'); shot('first-load-picker'); key('Pad B')
@@ -100,7 +100,7 @@ def main():
         pad('Y','A'); assert not (media/'BA.PRG').exists()
         pad('RB','Right','RB','Y','Up','Right','Up','Up','A')
         assert (media/'AB.TAP').exists()
-        pad('X','Down','X','Y','Right'); call('expect AB.TAP'); pad('B')
+        pad('X','Down','X'); key('Ctrl+F4'); call('expect AB.TAP'); pad('B')
 
         # Delete the active snapshot directly and cancel without leaving States.
         pad('B','Left','Left','Left')

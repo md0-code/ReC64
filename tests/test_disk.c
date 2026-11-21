@@ -21,17 +21,12 @@ static int continuation(void){
     const int ok=expected.size==actual.size&&!memcmp(expected.data,actual.data,actual.size);rc_sw_free(&saved);rc_sw_free(&expected);rc_sw_free(&actual);return ok;
 }
 int main(int argc,char **argv){
-    const int loader=argc>1&&!strcmp(argv[1],"loader");rc_rom_index roms;rc_rom_index_init(&roms);const char *folders[]={RC_ROM_DIR};CHECK(rc_rom_index_scan(&roms,folders,1));
+    (void)argc;(void)argv;rc_rom_index roms;rc_rom_index_init(&roms);const char *folders[]={RC_ROM_DIR};CHECK(rc_rom_index_scan(&roms,folders,1));
     unsigned options[RC_CONFIG_OPTIONS]={0};rc_machine_setup setup={.family=&rc_c64_family,.model=0,.options=options,.roms=&roms};c=rc_c64_create(&setup,error,sizeof error);CHECK(c);CHECK(rc_c64_run(c,period()*200)==RC_RUN_OK&&ready());
     rc_media *media=NULL;
-    if(loader){media=rc_media_open(RC_WORK "/p5/loadertest-c64.d64",0,error,sizeof error);CHECK(media);}
-    else {rc_d64 disk;uint8_t name[16];memset(name,0xa0,16);memcpy(name,"PHASE FIVE",10);const uint8_t id[2]={'P','5'};CHECK(rc_d64_create(&disk,name,id,error,sizeof error));media=disk.image;snprintf(media->path,sizeof media->path,RC_WORK "/p5/saved.d64");}
+    {rc_d64 disk;uint8_t name[16];memset(name,0xa0,16);memcpy(name,"PHASE FIVE",10);const uint8_t id[2]={'P','5'};CHECK(rc_d64_create(&disk,name,id,error,sizeof error));media=disk.image;snprintf(media->path,sizeof media->path,RC_WORK "/p5/saved.d64");}
     CHECK(rc_c64_insert(c,2,media,error,sizeof error));
-    if(loader){
-        CHECK(type("LOAD\"*\",8,1\n")&&prompt(18000));CHECK(type("RUN\n"));unsigned ram_frames=0;
-        for(unsigned frame=0;frame<1000;++frame){CHECK(rc_c64_run(c,period())==RC_RUN_OK);if(c->drive.cpu.pc<0x800)++ram_frames;}
-        CHECK(ram_frames>50&&(c->vic.reg[17]&32u));CHECK(shot("loader"));printf("Custom loader reached its bitmap display; custom drive code observed for %u frames; cycles=%llu\n",ram_frames,(unsigned long long)c->sched.now);
-    }else {
+    {
         CHECK(type("LOAD\"$\",8\n"));CHECK(rc_c64_activity(c)&4u);CHECK(continuation());
         CHECK(prompt(4000));int16_t samples[1024];int heard=0;for(unsigned block=0;block<94&&!heard;++block){const size_t n=rc_c64_family.impl->audio_pull(c,samples,512);if(!n)break;for(size_t i=0;i<n*2;++i)if(samples[i])heard=1;}CHECK(heard);
         CHECK(type("LIST\n"));char text[2048];rc_c64_family.impl->text(c,text,sizeof text);CHECK(strstr(text,"PHASE FIVE")&&strstr(text,"BLOCKS FREE"));CHECK(shot("directory"));

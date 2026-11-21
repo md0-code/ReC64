@@ -4,9 +4,26 @@ import argparse
 import json
 import struct
 import subprocess
-from verify_states import machine_bytes
 
 ROOT = Path(__file__).resolve().parents[1]
+
+def chunks(data: bytes):
+    at = 12
+    for _ in range(2):
+        n = struct.unpack_from('<H', data, at)[0]; at += n+2
+    hashes = struct.unpack_from('<I', data, at)[0]; at += 4+32*hashes
+    body = at
+    rows = []
+    while at+12 <= len(data):
+        tag, instance, n = struct.unpack_from('<4sII', data, at)
+        if tag == b'END ': break
+        rows.append((tag, instance, at, n)); at += 12+n
+    return body, rows
+
+def machine_bytes(path: Path) -> bytes:
+    data = path.read_bytes(); body, rows = chunks(data)
+    return data[:body]+b''.join(data[at:at+12+n] for tag, _, at, n in rows
+                               if tag not in {b'TIME', b'VERS', b'THMB', b'SHA2'})
 
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)

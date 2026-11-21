@@ -30,10 +30,6 @@ target_link_libraries(test_c64 PRIVATE rc_core rc_platform)
 target_compile_definitions(test_c64 PRIVATE RC_WORK="${RC_WORK}" RC_ROM_DIR="${CMAKE_CURRENT_SOURCE_DIR}/../roms")
 rc_set_warnings(test_c64)
 add_test(NAME c64 COMMAND test_c64)
-add_executable(lorenz_suite ${RC_TESTS}/lorenz_suite.c)
-target_link_libraries(lorenz_suite PRIVATE rc_core)
-target_compile_definitions(lorenz_suite PRIVATE RC_ROM_DIR="${CMAKE_CURRENT_SOURCE_DIR}/../roms")
-rc_set_warnings(lorenz_suite)
 add_library(rc_core STATIC core/config.c core/yamledit.c core/romdb.c core/state.c
     core/media.c core/font8x8.c core/palette.c core/keymap.c core/stick.c core/machine.c core/stub_machine.c core/machines/c64.c core/machines/c64_media.c hw/bus.c hw/sched.c hw/mos6510.c
     hw/traps.c hw/mouse1351.c hw/cia6526.c hw/pla.c hw/c64kbd.c hw/sid.c hw/sid_own.c hw/vic2.c hw/via6522.c

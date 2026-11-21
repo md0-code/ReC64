@@ -547,7 +547,7 @@ static void controller_key(desktop *d,rc_pad_key key,int down){
     case RC_PAD_X:shell_key(d,"Ctrl+F1",1);break;
     case RC_PAD_Y:
         if(d->setup.active&&d->setup.page==RC_SETUP_STATES)shell_key(d,"DELETE",1);
-        else if(media_available(d)){if(d->transport||transport_media(d,1)||transport_media(d,2))transport_open(d,d->transport?d->transport:transport_media(d,1)?1u:2u);else message(d,"No disk or tape inserted");}
+        else shell_key(d,"Shift+F9",1);
         break;
     case RC_PAD_SHOULDER_LEFT:shell_key(d,"Shift+F11",1);break;
     case RC_PAD_SHOULDER_RIGHT:shell_key(d,"F10",1);break;

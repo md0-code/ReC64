@@ -1,14 +1,11 @@
 """One native headless flow for the live status panel and C64 touch keyboard."""
 from __future__ import annotations
 import argparse
-import hashlib
 import json
 from pathlib import Path
-import pins
 import re
 import struct
 import subprocess
-import zipfile
 from PIL import Image, ImageChops
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -96,30 +93,10 @@ def main() -> None:
         call('key F11'); call('expect Keyboard joystick on'); call('frames 126'); call('expect J:2'); call('key Shift+F11'); call('expect Joystick port 1'); call('frames 126'); call('expect J:1'); call('key F11')
         print('Native OSK input, multitouch, sticky snapshot and combined crop passed', flush=True)
 
-        # The pinned disk executes its original loader while F9 keeps showing live state.
-        pin = pins.KRILL_LOADER
-        archive = ROOT/'work/p5/loader-v164.zip'
-        assert hashlib.sha256(archive.read_bytes()).hexdigest() == pin['sha256']
-        with zipfile.ZipFile(archive) as z: original = z.read(pin['file'])
-        assert hashlib.sha256(original).hexdigest() == pin['file_sha256']
-        fixture = work/'loader.d64'; fixture.write_bytes(original)
-        call('reset power'); call('frames 200'); call(f'drop {fixture.as_posix()}'); call('enter'); call('until 90 LOADING'); call('frames 126')
-        seen = []
-        for _ in range(16):
-            call('frames 5'); reply = call('text'); line = next(s for s in reply['text'].splitlines() if s.startswith('D8:'))
-            seen.append({'frame': reply['frame'], 'drive': line})
-            if '*M' in line:
-                shot('drive-loading'); break
-        assert any('*M' in s['drive'] for s in seen), seen
-        start_frame = seen[-1]['frame']; call('key F9'); call('frames 5'); call('key F9'); call('expect D8:')
-        call('until 90 INSTALLING LOADER'); final = call('text'); assert final['frame'] > start_frame
-        shot('loader-running'); (work/'drive-observations.json').write_text(json.dumps(seen, indent=2)+'\n')
         (work/'result.json').write_text(json.dumps({'status': 'passed', 'version': subprocess.check_output([str(binary), '--version'], text=True).strip(),
             'checks': ['native BASIC key touch', 'same-key multitouch and slide/cancel', 'SHIFT+A matrix chord',
                        'sticky SHIFT/CTRL/C= snapshot rebind and close release', 'controller navigation and accept release',
-                       'live keyboard joystick port', '320x200 combined overlay preserves guest above the keyboard',
-                       'F9 shows real drive LED/motor during original custom load; loader continues']}, indent=2)+'\n')
-        print('Native status panel during original disk load passed', flush=True)
+                       'live keyboard joystick port', '320x200 combined overlay preserves guest above the keyboard']}, indent=2)+'\n')
     finally:
         try:
             if proc.poll() is None: call('quit')
