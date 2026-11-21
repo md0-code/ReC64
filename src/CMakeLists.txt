@@ -71,6 +71,9 @@ add_executable(rec64 app/rec64.c app/desktop.c app/browser.c app/tui.c app/setup
 if(WIN32)
     set_target_properties(rec64 PROPERTIES WIN32_EXECUTABLE TRUE)
     target_sources(rec64 PRIVATE app/winmain.c app/rec64.manifest)
+    # The executable's icon: assets/rec64.ico (tools/embed_icon.py).
+    file(WRITE ${CMAKE_CURRENT_BINARY_DIR}/generated/rec64_icon.rc "1 ICON \"${CMAKE_CURRENT_SOURCE_DIR}/../assets/rec64.ico\"\n")
+    target_sources(rec64 PRIVATE ${CMAKE_CURRENT_BINARY_DIR}/generated/rec64_icon.rc)
     target_link_libraries(rec64 PRIVATE shell32)
 endif()
 target_include_directories(rec64 PRIVATE ${CMAKE_CURRENT_BINARY_DIR}/generated)

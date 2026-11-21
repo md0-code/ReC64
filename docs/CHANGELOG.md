@@ -2,6 +2,10 @@
 
 The changes users notice, newest first.
 
+## 0.23.3 (2026-11-21)
+
+- rec64.exe and its window show the ReC64 keys logo as their icon.
+
 ## 0.23.2 (2026-11-21)
 
 - The controller's Y button opens the on-screen keyboard.

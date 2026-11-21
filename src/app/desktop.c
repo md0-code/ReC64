@@ -9,6 +9,9 @@
 #include "panel.h"
 #include "sidplayer.h"
 #include "osk.h"
+#ifndef _WIN32
+#include "rec64_icon.h"
+#endif
 #include "rc_version.h"
 #include "../core/media/tapedeck.h"
 #include "../core/media/d64.h"
@@ -773,6 +776,9 @@ int rc_desktop_run(rc_machine **owner,rc_config *c,rc_rom_index *roms,const rc_d
         rc_frame f;if(!picture(&d,&f,error,cap)) goto done;
         d.video=rc_video_open("ReC64",&settings,(int)f.width,(int)f.height,(int)f.aspect_w,(int)f.aspect_h,false,error,cap);
         if(!d.video) goto done;
+#ifndef _WIN32
+        rc_video_set_icon(d.video,RC_ICON_ARGB,RC_ICON_SIZE);   /* Windows: the executable's icon (assets/rec64.ico) */
+#endif
         d.setup.crt_available=rc_video_crt_available(d.video);
         if(!d.setup.crt_available&&c->look==RC_LOOK_CRT){c->look=RC_LOOK_PLAIN;c->filter=RC_CONFIG_FILTER_NEAREST;message(&d,"CRT unavailable: nearest filtering");}
         if(!apply_video(&d,error,cap))goto done;
