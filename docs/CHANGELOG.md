@@ -2,6 +2,10 @@
 
 The changes users notice, newest first.
 
+## 0.23.4 (2026-11-21)
+
+- The controller's Y button finds a file by name in the Load browser.
+
 ## 0.23.3 (2026-11-21)
 
 - rec64.exe and its window show the ReC64 keys logo as their icon.

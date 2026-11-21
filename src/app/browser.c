@@ -262,7 +262,7 @@ unsigned rc_browser_pad(rc_browser *b,rc_pad_key key){
         if(b->save)return rc_browser_key(b,"F2");
         if((b->folders_only&&!b->roots)||can_insert(b))return rc_browser_key(b,"SPACE");
         break;
-    case RC_PAD_Y:if(b->save)return rc_browser_key(b,"DELETE");break;
+    case RC_PAD_Y:if(b->save)return rc_browser_key(b,"DELETE");/* fall through - Y finds in the load browser */
     case RC_PAD_BACK:
         if(b->count){b->finding=1;b->name_cursor=0;b->replace_name=0;b->edit_name[0]=0;b->message[0]=0;}
         break;
@@ -318,7 +318,7 @@ void rc_browser_draw(rc_browser *b,const uint32_t palette[16],rc_frame *frame){
     else if(b->save&&!b->search[0]&&!b->pad_ui)rc_tui_put(&b->tui,22,1,"F2 RENAME  DEL DELETE SELECTED FILE",14,6);
     else if(b->search[0]){char line[39];snprintf(line,sizeof line,"FIND: %.31s",b->search);rc_tui_put(&b->tui,22,1,line,14,6);}
     if(b->pad_ui){
-        if(!b->save)rc_tui_put(&b->tui,24,1,"LB/RB PAGE   BACK FIND   B CLOSE",14,6);
+        if(!b->save)rc_tui_put(&b->tui,24,1,"LB/RB PAGE   Y FIND   B CLOSE",14,6);
         else if(b->focus==2){
             rc_tui_put(&b->tui,23,1,"UP/DOWN CHAR  LEFT/RIGHT  B CLOSE",14,6);
             rc_tui_put(&b->tui,24,1,"LB/RB FIELD  A SAVE  X ERASE Y CLEAR",14,6);

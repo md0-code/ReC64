@@ -124,7 +124,7 @@ F12 releases the captured mouse.
 | D-pad / left stick | Joystick; menu navigation |
 | A / B | Fire, accept / open setup, go back |
 | X | Open Load; in a browser, insert the image or use the current folder; rename in Save |
-| Y | On-screen keyboard; delete a file in Save or a snapshot in States |
+| Y | On-screen keyboard; find by name in Load; delete a file in Save or a snapshot in States |
 | LB / RB | Swap ports / full speed; page the Load list; switch fields in Save |
 | LT / RT | Quick save / quick load |
 | Start | Setup; held with Y cold boot, with X exit, with R3 screenshot |
