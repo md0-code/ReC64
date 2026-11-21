@@ -22,10 +22,14 @@ int rc_typist_start(rc_typist *t,const char *commands,char *error,size_t cap){
     if(t->length&&t->commands[t->length-1]!='\n')t->commands[t->length++]='\n';
     t->active=t->length!=0;if(cap)error[0]=0;return 1;
 }
-static int ready(const char *text){
-    const char *end=text+strlen(text);while(end>text&&(end[-1]=='\n'||end[-1]=='\r'||end[-1]==' '))--end;
-    const char *start=end;while(start>text&&start[-1]!='\n'&&start[-1]!='\r')--start;
-    while(start<end&&*start==' ')++start;return end-start==6&&!memcmp(start,"READY.",6);
+/* READY. stands on the line above the cursor's row (the KERNAL's TBLX, $D6);
+ * a loaded file may have written text further down the screen. */
+static int ready(const char *text,unsigned cursor_row){
+    if(!cursor_row||cursor_row>25)return 0;
+    const char *start=text;for(unsigned row=0;row+1<cursor_row;++row){start=strchr(start,'\n');if(!start)return 0;++start;}
+    const char *end=strchr(start,'\n');if(!end)end=start+strlen(start);
+    while(start<end&&*start==' ')++start;while(end>start&&(end[-1]==' '||end[-1]=='\r'))--end;
+    return end-start==6&&!memcmp(start,"READY.",6);
 }
 static int basic_error(const char *text){
     while(*text){const char *end=strchr(text,'\n');if(!end)end=text+strlen(text);
@@ -38,7 +42,7 @@ int rc_typist_frame(rc_typist *t,rc_machine *machine,rc_keymap *keys){
     if(!t->active||keys->count)return 0;
     if(t->queued){uint8_t count;if(!rc_machine_peek(machine,0xc6,&count)||count)return 0;t->queued=0;if(t->position==t->length){t->active=0;return 0;}}
     if(rc_machine_activity(machine))return 0;
-    char text[2048];rc_machine_text(machine,text,sizeof text);if(!ready(text))return 0;
+    char text[2048];uint8_t row;if(!rc_machine_peek(machine,0xd6,&row))return 0;rc_machine_text(machine,text,sizeof text);if(!ready(text,row))return 0;
     if(t->position&&basic_error(text)){fail(t,"Auto-load stopped after a BASIC error",NULL,0);return -1;}
     /* Feed the documented KERNAL keyboard FIFO ($0277, length $C6).
      * Advance the original editor between batches without presenting partial

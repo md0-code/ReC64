@@ -206,9 +206,11 @@ const char *rc_c64_autoload(const void *self,unsigned slot,int *power){rc_c64 *c
         size_t used=0;if(simple)used=(size_t)snprintf(c->autoload_text,sizeof c->autoload_text,"LOAD\"%.*s\",%u,1\n",(int)(n?n:1),n?(const char *)c->disk_name:"*",c->drive.device);
         else {used=(size_t)snprintf(c->autoload_text,sizeof c->autoload_text,"A$=\"\"\n");for(unsigned i=0;i<n&&used<sizeof c->autoload_text;++i)used+=(size_t)snprintf(c->autoload_text+used,sizeof c->autoload_text-used,"A$=A$+CHR$(%u)\n",c->disk_name[i]);
             if(used<sizeof c->autoload_text)used+=(size_t)snprintf(c->autoload_text+used,sizeof c->autoload_text-used,"LOADA$,%u,1\n",c->drive.device);}
-        if(used<sizeof c->autoload_text){if(c->disk_address==0x0801||!c->disk_address)snprintf(c->autoload_text+used,sizeof c->autoload_text-used,"RUN\n");else snprintf(c->autoload_text+used,sizeof c->autoload_text-used,"SYS%u\n",c->disk_address);}return c->autoload_text;
+        if(used<sizeof c->autoload_text){if(c->disk_address<=0x0801)snprintf(c->autoload_text+used,sizeof c->autoload_text-used,"RUN\n");else snprintf(c->autoload_text+used,sizeof c->autoload_text-used,"SYS%u\n",c->disk_address);}return c->autoload_text;
     }
-    if(c->program_address==0x0801||!c->program_address)snprintf(c->autoload_text,sizeof c->autoload_text,"LOAD\"\",1,1\nRUN\n");
+    /* A file that starts at or below the BASIC area, as crunched programs with the
+     * zero byte of $0800 do, holds the BASIC line that starts it. */
+    if(c->program_address<=0x0801)snprintf(c->autoload_text,sizeof c->autoload_text,"LOAD\"\",1,1\nRUN\n");
     else snprintf(c->autoload_text,sizeof c->autoload_text,"LOAD\"\",1,1\nSYS%u\n",c->program_address);return c->autoload_text;
 }
 struct rc_tape_deck *rc_c64_tape_deck(void *self,unsigned slot){rc_c64 *c=self;return (slot==0||slot==c->source)&&c->tape.deck.tape.image?&c->tape.deck:NULL;}
