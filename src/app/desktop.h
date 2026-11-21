@@ -5,6 +5,8 @@ typedef struct rc_desktop_options {
     int hidden;
     uint64_t frames;
     const char *script, *control, *screenshot, *audio;
+    /* A file named on the command line: opened as a dropped file is. */
+    const char *open;
     /* The folders searched for ROMs, and the one a user is told to fill. */
     const char *const *rom_folders;
     size_t rom_folder_count;

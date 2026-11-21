@@ -17,10 +17,11 @@ Linux, on x64 and ARM64.
 
 ## Getting started
 
-Supply the [firmware](#firmware), then run `rec64.exe`. A PAL C64 starts at
-the BASIC prompt. Press **Ctrl+F1** to
-load a program, disk, tape or cartridge, or drop a file on the window.
-**F12** opens setup, where every setting can be changed.
+Supply the [firmware](#firmware), then run `rec64.exe` (`rec64` on Linux). A
+PAL C64 starts at the BASIC prompt. Press **Ctrl+F1** to load a program, disk,
+tape or cartridge, or drop a file on the window or on the program; `rec64 FILE`
+opens a file the same way. **F12** opens setup, where every setting can be
+changed.
 
 ## Firmware
 
@@ -212,13 +213,14 @@ Windows needs Visual Studio's C++ tools, CMake 3.24 or later and Ninja:
 ./src/build.ps1 -Arch arm64    # needs the ARM64 compiler tools
 python tools/fetch_roms.py     # firmware for the checks, into roms/
 ./work/build-x64/rec64.exe
-./tools/build_dist.ps1         # portable build in dist/, ARM64 in dist/arm64/
+./tools/build_dist.ps1         # portable build in dist/, ARM64 in dist/arm64/, release archives
 ```
 
 On Linux:
 
 ```sh
 cmake -S src -B work/build && cmake --build work/build
+tools/build_linux.sh all       # release archives for x64 and ARM64 (see the script's --help)
 ```
 
 For a profile-guided Linux build, configure with `-DRC_PGO=generate`, build,

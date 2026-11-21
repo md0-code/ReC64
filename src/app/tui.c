@@ -6,7 +6,10 @@
 void rc_tui_init(rc_tui *t){memset(t,0,sizeof *t);rc_font8x8_build(t->font);rc_tui_clear(t);}
 void rc_tui_clear(rc_tui *t){memset(t->ch,' ',sizeof t->ch);memset(t->ink,14,sizeof t->ink);memset(t->paper,6,sizeof t->paper);}
 void rc_tui_put(rc_tui *t,unsigned row,unsigned col,const char *text,uint8_t ink,uint8_t paper){
-    if(row>=25)return;for(;*text&&col<40;++text,++col){t->ch[row][col]=(uint8_t)toupper((unsigned char)*text);t->ink[row][col]=ink;t->paper[row][col]=paper;}
+    /* Text is UTF-8 (file names): a character outside ASCII shows as one question mark. */
+    if(row>=25)return;for(;*text&&col<40;++text,++col){unsigned char c=(unsigned char)*text;
+        if(c>=0x80){c='?';while(((unsigned char)text[1]&0xc0u)==0x80u)++text;}
+        t->ch[row][col]=(uint8_t)toupper(c);t->ink[row][col]=ink;t->paper[row][col]=paper;}
 }
 static void cell(rc_tui *t,unsigned y,unsigned x,unsigned code){if(y<25&&x<40)t->ch[y][x]=(uint8_t)code;}
 void rc_tui_box(rc_tui *t,unsigned y,unsigned x,unsigned h,unsigned w){

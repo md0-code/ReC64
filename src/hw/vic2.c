@@ -48,7 +48,9 @@ void rc_vic2_begin(rc_vic2 *v){
     if(v->cycle==16)v->crunch=0;
     const unsigned late=ntsc(v)?2u:0u;
     if(v->cycle==55+late||v->cycle==56+late)for(unsigned s=0;s<8;++s){const uint8_t bit=(uint8_t)(1u<<s);if((v->reg[21]&bit)&&v->reg[s*2+1]==(uint8_t)v->raster&&!(v->sprite_dma&bit)){v->sprite_dma|=bit;v->mcbase[s]=0;v->advance|=bit;}}
-    if(v->cycle==58+late){for(unsigned s=0;s<8;++s){const uint8_t bit=(uint8_t)(1u<<s);v->mc[s]=v->mcbase[s];if(!(v->sprite_dma&bit))v->sprite_display&=(uint8_t)~bit;else if(v->reg[s*2+1]==(uint8_t)v->raster&&(v->reg[21]&bit))v->sprite_display|=bit;}v->started=0;memset(v->sprite_active,0,8);}
+    if(v->cycle==58+late){for(unsigned s=0;s<8;++s){const uint8_t bit=(uint8_t)(1u<<s);v->mc[s]=v->mcbase[s];if(!(v->sprite_dma&bit))v->sprite_display&=(uint8_t)~bit;else if(v->reg[s*2+1]==(uint8_t)v->raster&&(v->reg[21]&bit))v->sprite_display|=bit;}
+        /* A sprite may trigger again from here on; one still shifting goes on until its own next fetch. */
+        v->started=0;}
     if(v->cycle==58){if(v->rc==7){v->vcbase=v->vc;v->display=v->bad;}if(v->display)v->rc=(v->rc+1u)&7u;}
     if(v->cycle==rc_vic2_cycles_per_line(v))vertical_compare(v);
     for(unsigned phase=0;phase<2;++phase){v->bus[phase]=(rc_vic_access){0x3fff,phase?RC_VIC_NONE:RC_VIC_IDLE,0};v->sprite_slot[phase]=255;v->sprite_byte[phase]=0;}
@@ -170,7 +172,12 @@ void rc_vic2_clock(rc_vic2 *v,unsigned phase,uint8_t data,uint8_t colour){
     if(v->skip&&!shifting&&!(v->sprite_display&(unsigned)~v->started)){
         /* No sprite can start within a half-cycle it was not waiting in. */
         if(v->pending||v->held||v->gpos<8||g.left-x<4u||g.right-x<4u)unseen(v,&g,x,wrap);
-    } else for(unsigned i=0;i<4;++i){pixel(v,&g,x,at+i);if(++x==wrap)x=0;}
+    } else {
+        /* A sprite's first data byte for its next line, fetched in this half-cycle, ends what it still shows
+         * two pixels in: on PAL sprite 0 ends at X 362, sprite 1 at 378, sprite 3 at 410. */
+        const unsigned cut=phase==1&&b.kind==RC_VIC_SPRITE&&v->sprite_byte[1]==0?v->sprite_slot[1]:8u;
+        for(unsigned i=0;i<4;++i){if(i==2&&cut<8)v->sprite_active[cut]=0;pixel(v,&g,x,at+i);if(++x==wrap)x=0;}
+    }
     if(phase==0){v->phase=1;return;}
     if(v->cycle==56u+(ntsc(v)?2u:0u))v->advance^=v->reg[23]&v->sprite_dma;
     ++v->cycles;v->phase=0;v->begun=0;

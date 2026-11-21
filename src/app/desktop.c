@@ -784,6 +784,7 @@ int rc_desktop_run(rc_machine **owner,rc_config *c,rc_rom_index *roms,const rc_d
     startup_cartridge(&d);
     media_options(&d);media_status(&d);
     if(!store_config(&d,error,cap))message(&d,error);
+    if(o->open&&!d.firmware){char why[256]="";if(!drop(&d,o->open,why,sizeof why))message(&d,why);}
     if(o->audio&&!audio_capture(&d,o->audio,error,cap)) goto done;
     if(o->control) {
         if(!strcmp(o->control,"stdin")) d.stdin_control=1;

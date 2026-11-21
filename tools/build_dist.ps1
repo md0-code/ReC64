@@ -1,4 +1,5 @@
-<# Build the portable Windows folder. It holds no firmware; existing user settings and ROMs are kept. #>
+<# Build the portable Windows folders (dist/, dist/arm64/; existing user settings and ROMs are kept) and the release
+   archives dist/ReC64-<version>-windows-x64.zip and -windows-arm64.zip (tools/package.py), which hold no firmware. #>
 [CmdletBinding()]
 param([switch]$NoBuild)
 $ErrorActionPreference = 'Stop'
@@ -58,4 +59,7 @@ foreach ($arch in @('x64', 'arm64')) {
     }
     $manifest | ConvertTo-Json -Depth 8 | Set-Content -LiteralPath "$target/docs/build.json" -Encoding utf8
     Write-Host "Ready: $target/rec64.exe ($version, $arch)"
+    # The release archive: the same program and documents, no firmware and no settings.
+    python "$repo/tools/package.py" "windows-$arch" "$build/rec64.exe" --out "$repo/dist"
+    if ($LASTEXITCODE -ne 0) { throw "packaging windows-$arch failed" }
 }

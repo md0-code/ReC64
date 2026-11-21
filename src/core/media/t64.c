@@ -9,7 +9,8 @@ int rc_t64_entry_at(const rc_t64 *t,unsigned entry,rc_t64_entry *out){
     for(unsigned i=0;i<t->capacity;++i){const uint8_t *q=data+64+32u*i;const uint32_t pos=rc_image_u32(q+8);if(active(q)&&pos>off&&pos<end)end=pos;}
     const uint16_t start=rc_image_u16(p+2),stop=rc_image_u16(p+4);const uint32_t declared=stop?stop:(start||end>off?65536u:0u);
     if(off<64+32u*t->capacity||off>end)return 0;size_t length;
-    if(stop==0xc3c6)length=end-off;else {if(declared<start)return 0;length=declared-start;if(length>end-off)return 0;}
+    /* An entry whose end address runs past its data, often the last of a cut file, loads what is there. */
+    if(stop==0xc3c6)length=end-off;else {if(declared<start)return 0;length=declared-start;if(length>end-off)length=end-off;}
     if(length>65536u-start)return 0;out->address=start;out->slot=(uint16_t)slot;out->offset=off;out->length=(uint32_t)length;out->type=p[1];memcpy(out->name,p+16,16);return 1;
 }
 int rc_t64_open(rc_t64 *t,const uint8_t *data,size_t size,char *error,size_t cap){memset(t,0,sizeof *t);if(size<64||size>RC_MEDIA_LIMIT||memcmp(data,"C64",3)||(rc_image_u16(data+32)!=0x100&&rc_image_u16(data+32)!=0x101))return rc_image_error(error,cap,"Invalid T64 header");t->capacity=rc_image_u16(data+34);if(64+32u*t->capacity>size||rc_image_u16(data+36)>t->capacity)return rc_image_error(error,cap,"T64 directory is truncated");for(unsigned i=0;i<t->capacity;++i)if(active(data+64+32u*i))++t->count;t->image=rc_media_from("",data,size);if(!t->image)return rc_image_error(error,cap,"Out of memory");for(unsigned i=0;i<t->count;++i){rc_t64_entry e;if(!rc_t64_entry_at(t,i,&e)){rc_t64_close(t);return rc_image_error(error,cap,"T64 program is outside its data area");}}return 1;}

@@ -73,7 +73,7 @@ add_executable(rec64 app/rec64.c app/desktop.c app/browser.c app/tui.c app/setup
     app/panel.c app/sidplayer.c app/osk.c)
 if(WIN32)
     set_target_properties(rec64 PROPERTIES WIN32_EXECUTABLE TRUE)
-    target_sources(rec64 PRIVATE app/winmain.c)
+    target_sources(rec64 PRIVATE app/winmain.c app/rec64.manifest)
     target_link_libraries(rec64 PRIVATE shell32)
 endif()
 target_include_directories(rec64 PRIVATE ${CMAKE_CURRENT_BINARY_DIR}/generated)
