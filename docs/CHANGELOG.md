@@ -2,6 +2,10 @@
 
 The changes users notice, newest first.
 
+## 0.23.5 (2026-11-23)
+
+- Libretro core in the Windows and Linux x64 and ARM64 archives.
+
 ## 0.23.4 (2026-11-21)
 
 - The controller's Y button finds a file by name in the Load browser.

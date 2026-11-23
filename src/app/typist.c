@@ -39,7 +39,7 @@ static int basic_error(const char *text){
     }return 0;
 }
 int rc_typist_frame(rc_typist *t,rc_machine *machine,rc_keymap *keys){
-    if(!t->active||keys->count)return 0;
+    if(!t->active||(keys&&keys->count))return 0;
     if(t->queued){uint8_t count;if(!rc_machine_peek(machine,0xc6,&count)||count)return 0;t->queued=0;if(t->position==t->length){t->active=0;return 0;}}
     if(rc_machine_activity(machine))return 0;
     char text[2048];uint8_t row;if(!rc_machine_peek(machine,0xd6,&row))return 0;rc_machine_text(machine,text,sizeof text);if(!ready(text,row))return 0;

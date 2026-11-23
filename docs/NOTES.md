@@ -3,6 +3,23 @@
 What the [README](../README.md) leaves out: the [firmware](#firmware) ReC64 needs, the
 [configuration](#configuration) file and the [limitations](#limitations).
 
+## Libretro
+
+Copy the library from `cores/` and its matching file from `info/` into
+RetroArch's Cores and Core Info directories. Use the archive that matches the
+operating system and architecture of RetroArch. Put the [firmware](#firmware)
+in `rec64/` inside the frontend's System/BIOS directory.
+
+Start the core on its own for the BASIC prompt, or use Load Content for
+PRG, P00, T64, TAP, D64, G64, CRT or SID files. Images opened through Libretro
+are write-protected. Core Options selects the model, SID, border and automatic
+loading for the next time content or the core is opened. Save states through
+the frontend.
+
+Enable RetroArch's Game Focus to send keyboard shortcuts to the C64 keyboard.
+The first RetroPad uses C64 control port 2 and the second uses port 1. B is
+fire, and L and R on the first RetroPad play and stop a mounted tape.
+
 ## Firmware
 
 ReC64 contains no Commodore firmware. Copy the ROM images below into the

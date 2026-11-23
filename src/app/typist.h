@@ -7,7 +7,8 @@ void rc_typist_init(rc_typist *t);
 /* Newlines or harness-style \n separators; the last line is executed too. */
 int rc_typist_start(rc_typist *t,const char *commands,char *error,size_t capacity);
 void rc_typist_cancel(rc_typist *t);
-/* Call once per guest frame, before its cycles. 1 queued a line, 0 waiting
+/* Call once per guest frame, before its cycles. keys may be NULL when the
+ * frontend has no text queue. 1 queued a line, 0 waiting
  * or finished, -1 failure in t->error. A queued line is displayed instantly. */
 int rc_typist_frame(rc_typist *t,rc_machine *machine,rc_keymap *keys);
 int rc_typist_busy(const rc_typist *t);

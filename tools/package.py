@@ -8,11 +8,10 @@ PLATFORM is windows-x64, windows-arm64, linux-x64 or linux-arm64; PROGRAM the bu
 ReC64-<version>-<platform>.zip (Windows) or .tar.gz (Linux, under a folder of the same name) goes to --out (default
 dist/releases/), which holds the current version only: archives of other versions are removed.
 
-The member list is fixed below: the program, the documents (THIRD_PARTY.md carries the components' notices), and
-an empty roms/ folder. No firmware, no settings file (the program writes rec64.yaml on its first start) and no
-software for the machine. The program must be an executable of the platform's format and architecture, every
-relative link of the shipped documents must resolve inside the archive, and the finished archive is opened again:
-its members must be exactly the list and their bytes the staged ones. Unless --no-start is given, an archive this
+The member list includes the program, the Libretro core and its info file, the documents and an empty roms/ folder.
+The user supplies firmware and software. The program creates rec64.yaml on its first start. The binaries must match
+the platform's format and architecture. Each relative link of the shipped documents must resolve inside the archive.
+The finished archive is opened again to check its file list and the bytes of each member. Unless --no-start is given, an archive this
 host can run is then extracted afresh, the firmware of roms/ is copied in, and the program must start the C64 to
 READY there (headless). Anything else stops the build.
 """
@@ -57,28 +56,44 @@ def program_name(platform: str) -> str:
     return "rec64.exe" if platform.startswith("windows") else "rec64"
 
 
+def core_name(platform: str) -> str:
+    return "rec64_libretro.dll" if platform.startswith("windows") else "rec64_libretro.so"
+
+
+CORE_INFO = "info/rec64_libretro.info"
+
+
 def archive_name(platform: str) -> str:
     return f"{NAME}-{version()}-{platform}" + (".zip" if platform.startswith("windows") else ".tar.gz")
 
 
 def expected_files(platform: str) -> list[str]:
-    return sorted([program_name(platform), *DOCS])
+    return sorted([program_name(platform), f"cores/{core_name(platform)}", CORE_INFO, *DOCS])
 
 
-def check_executable(platform: str, path: Path) -> None:
+def check_executable(platform: str, path: Path, shared: bool = False) -> None:
     kind, machine = EXECUTABLES[platform]
     head = path.read_bytes()[:4096]
     if kind == "pe":
         offset = struct.unpack_from("<I", head, 0x3C)[0] if head[:2] == b"MZ" and len(head) > 0x40 else 0
-        if head[:2] != b"MZ" or head[offset:offset + 4] != b"PE\0\0" or struct.unpack_from("<H", head, offset + 4)[0] != machine:
-            raise PackageError(f"{path} is not a Windows executable for {platform}")
-    elif head[:4] != b"\x7fELF" or head[4] != 2 or head[5] != 1 or struct.unpack_from("<H", head, 18)[0] != machine:
-        raise PackageError(f"{path} is not a 64-bit little-endian ELF executable for {platform}")
+        if (head[:2] != b"MZ" or offset + 24 > len(head) or head[offset:offset + 4] != b"PE\0\0" or
+                struct.unpack_from("<H", head, offset + 4)[0] != machine or
+                bool(struct.unpack_from("<H", head, offset + 22)[0] & 0x2000) != shared):
+            raise PackageError(f"{path} is not a Windows {'DLL' if shared else 'executable'} for {platform}")
+    elif (len(head) < 20 or head[:6] != b"\x7fELF\x02\x01" or
+          struct.unpack_from("<H", head, 18)[0] != machine or
+          (shared and struct.unpack_from("<H", head, 16)[0] != 3)):
+        raise PackageError(f"{path} is not a 64-bit little-endian ELF {'library' if shared else 'executable'} for {platform}")
 
 
 def gather(platform: str, program: Path) -> dict[str, Path]:
     check_executable(platform, program)
-    entries = {program_name(platform): program}
+    core = program.with_name(core_name(platform))
+    check_executable(platform, core, shared=True)
+    info = ROOT / "src" / "libretro" / Path(CORE_INFO).name
+    if not info.is_file():
+        raise PackageError(f"{info} is missing")
+    entries = {program_name(platform): program, f"cores/{core.name}": core, CORE_INFO: info}
     for member, source in DOCS.items():
         if not (ROOT / source).is_file():
             raise PackageError(f"{source} is missing")

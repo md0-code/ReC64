@@ -173,28 +173,22 @@ static int scan_folder(rc_rom_index *ix, const char *folder) {
     if (!rc_host_list_files(folder, collect, &n)) { free(n.list); return -1; }
     if (n.failed) { free(n.list); return 0; }
     if (n.count) qsort(n.list, n.count, sizeof *n.list, by_name);
-    uint8_t *buffer = malloc(LARGEST);
-    int ok = buffer != NULL;
+    int ok = 1;
     for (size_t i = 0; ok && i < n.count; ++i) {
         rc_rom_file *f = new_file(ix);
         if (!f) { ok = 0; break; }
         if (snprintf(f->path, sizeof f->path, "%s%s", folder, n.list[i]) >= (int)sizeof f->path) continue;
         f->name = f->path + strlen(folder);
-        FILE *file = fopen(f->path, "rb");
-        if (!file) continue;
-        long size = -1;
-        if (!fseek(file, 0, SEEK_END)) size = ftell(file);
-        int whole = 0;
-        if (size >= 0) {
-            f->size = (uint64_t)size;
-            whole = size <= (long)LARGEST && !fseek(file, 0, SEEK_SET) && fread(buffer, 1, (size_t)size, file) == (size_t)size;
-        }
-        fclose(file);
-        if (size < 0) continue;
+        if (!rc_host_file_size(f->path, &f->size)) continue;
+        uint8_t *buffer = NULL;
+        size_t size = 0;
+        if (f->size <= LARGEST &&
+            rc_host_read_file(f->path, LARGEST, &buffer, &size, NULL, NULL, 0))
+            f->size = size;
         ix->count++;
-        settle(ix, f, whole ? buffer : NULL);
+        settle(ix, f, buffer);
+        free(buffer);
     }
-    free(buffer);
     free(n.list);
     return ok;
 }

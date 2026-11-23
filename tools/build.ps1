@@ -165,10 +165,14 @@ ctest --test-dir "$BuildDir" --output-on-failure -j $Jobs || exit /b 1
 New-Item -ItemType Directory -Force $BuildDir | Out-Null
 $batch = Join-Path $BuildDir "rec64_build_$PID.bat"
 Set-Content -Path $batch -Value $script -Encoding ASCII
+$originalPath = $env:Path
 try {
+    # The VS batch files expand PATH inside cmd.exe conditionals.
+    $env:Path = ($originalPath -split ';' | Where-Object { $_ -and $_ -notmatch '[()&!^"]' }) -join ';'
     & cmd.exe /c $batch
     if ($LASTEXITCODE -ne 0) { throw "build failed with exit code $LASTEXITCODE" }
 } finally {
+    $env:Path = $originalPath
     Remove-Item $batch -Force -ErrorAction SilentlyContinue
 }
 Write-Host "OK" -ForegroundColor Green

@@ -79,18 +79,29 @@ int rc_host_program_folder(char *out, size_t capacity) {
 
 char rc_host_separator(void) { return '\\'; }
 
+/* The libretro frontend owns the process and can have a non-UTF-8 ANSI
+ * code page. Keep paths UTF-8 across the host interface. */
+static int wide_path(const char *path, WCHAR out[RC_HOST_PATH]) {
+    return MultiByteToWideChar(CP_UTF8, MB_ERR_INVALID_CHARS, path, -1, out, RC_HOST_PATH) != 0;
+}
+
 int rc_host_list_files(const char *folder, rc_host_file_fn fn, void *ctx) {
     char pattern[RC_HOST_PATH];
     const size_t n = strlen(folder);
     const int separated = n && (folder[n - 1] == '\\' || folder[n - 1] == '/');
     if (snprintf(pattern, sizeof pattern, "%s%s*", folder, separated ? "" : "\\") >= (int)sizeof pattern) return 0;
-    WIN32_FIND_DATAA found;
-    HANDLE h = FindFirstFileA(pattern, &found);
+    WCHAR wide[RC_HOST_PATH];
+    if (!wide_path(pattern, wide)) return 0;
+    WIN32_FIND_DATAW found;
+    HANDLE h = FindFirstFileW(wide, &found);
     if (h == INVALID_HANDLE_VALUE) return 0;
     do {
         if (found.dwFileAttributes & (FILE_ATTRIBUTE_DIRECTORY | FILE_ATTRIBUTE_DEVICE)) continue;
-        if (!fn(ctx, found.cFileName)) break;
-    } while (FindNextFileA(h, &found));
+        char name[RC_HOST_PATH];
+        if (!WideCharToMultiByte(CP_UTF8, WC_ERR_INVALID_CHARS, found.cFileName, -1, name, sizeof name, NULL, NULL))
+            continue;
+        if (!fn(ctx, name)) break;
+    } while (FindNextFileW(h, &found));
     FindClose(h);
     return 1;
 }
@@ -128,7 +139,9 @@ int rc_host_list_roots(rc_host_entry_fn fn, void *ctx) {
 
 int rc_host_file_size(const char *path, uint64_t *size) {
     WIN32_FILE_ATTRIBUTE_DATA info;
-    if (!GetFileAttributesExA(path, GetFileExInfoStandard, &info) || (info.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY)) return 0;
+    WCHAR wide[RC_HOST_PATH];
+    if (!wide_path(path, wide) || !GetFileAttributesExW(wide, GetFileExInfoStandard, &info) ||
+        (info.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY)) return 0;
     *size = ((uint64_t)info.nFileSizeHigh << 32) | info.nFileSizeLow;
     return 1;
 }
@@ -529,14 +542,19 @@ static void file_error(char *error, size_t capacity, const char *what, const cha
     snprintf(error, capacity, "%s %s (%s)", what, path, n ? text : "unknown error");
 }
 
-int rc_host_file_exists(const char *path) { return GetFileAttributesA(path) != INVALID_FILE_ATTRIBUTES; }
+int rc_host_file_exists(const char *path) {
+    WCHAR wide[RC_HOST_PATH];
+    return wide_path(path, wide) && GetFileAttributesW(wide) != INVALID_FILE_ATTRIBUTES;
+}
 
 int rc_host_read_file(const char *path, size_t limit, uint8_t **data, size_t *size, int *writable, char *error, size_t capacity) {
     *data = NULL;
     *size = 0;
-    const DWORD attributes = GetFileAttributesA(path);
+    WCHAR wide[RC_HOST_PATH];
+    if (!wide_path(path, wide)) { file_error(error, capacity, "Cannot read", path); return 0; }
+    const DWORD attributes = GetFileAttributesW(wide);
     if (writable) *writable = attributes == INVALID_FILE_ATTRIBUTES || !(attributes & FILE_ATTRIBUTE_READONLY);
-    HANDLE h = CreateFileA(path, GENERIC_READ, FILE_SHARE_READ | FILE_SHARE_WRITE, NULL, OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, NULL);
+    HANDLE h = CreateFileW(wide, GENERIC_READ, FILE_SHARE_READ | FILE_SHARE_WRITE, NULL, OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, NULL);
     if (h == INVALID_HANDLE_VALUE) { file_error(error, capacity, "Cannot read", path); return 0; }
     LARGE_INTEGER length;
     if (!GetFileSizeEx(h, &length)) { file_error(error, capacity, "Cannot read", path); CloseHandle(h); return 0; }
@@ -598,9 +616,11 @@ struct rc_host_file {
 };
 
 rc_host_file *rc_host_file_open(const char *path, int *writable, char *error, size_t capacity) {
-    HANDLE h = CreateFileA(path, GENERIC_READ | GENERIC_WRITE, FILE_SHARE_READ, NULL, OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, NULL);
+    WCHAR wide[RC_HOST_PATH];
+    if (!wide_path(path, wide)) { file_error(error, capacity, "Cannot read", path); return NULL; }
+    HANDLE h = CreateFileW(wide, GENERIC_READ | GENERIC_WRITE, FILE_SHARE_READ, NULL, OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, NULL);
     int can_write = h != INVALID_HANDLE_VALUE;
-    if (!can_write) h = CreateFileA(path, GENERIC_READ, FILE_SHARE_READ | FILE_SHARE_WRITE, NULL, OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, NULL);
+    if (!can_write) h = CreateFileW(wide, GENERIC_READ, FILE_SHARE_READ | FILE_SHARE_WRITE, NULL, OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, NULL);
     if (h == INVALID_HANDLE_VALUE) { file_error(error, capacity, "Cannot read", path); return NULL; }
     LARGE_INTEGER length;
     if (!GetFileSizeEx(h, &length) || length.QuadPart < 0) { file_error(error, capacity, "Cannot read", path); CloseHandle(h); return NULL; }

@@ -23,6 +23,8 @@ tape or cartridge, or drop a file on the window or on the program; `rec64 FILE`
 opens a file the same way. **F12** opens setup, where every setting can be
 changed.
 
+For RetroArch, use the [ReC64 Libretro core](docs/NOTES.md#libretro) included in the binary archives.
+
 ## Keys
 
 | Key | Action |

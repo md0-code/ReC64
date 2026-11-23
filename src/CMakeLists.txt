@@ -45,6 +45,13 @@ if(NOT WIN32)
 endif()
 rc_set_warnings(rc_core)
 
+set_target_properties(rc_core rc_yaml rc_host PROPERTIES POSITION_INDEPENDENT_CODE ON C_VISIBILITY_PRESET hidden)
+add_library(rec64_libretro SHARED libretro/rec64_libretro.c app/typist.c)
+target_include_directories(rec64_libretro PRIVATE third_party/libretro "${CMAKE_CURRENT_BINARY_DIR}/generated")
+target_link_libraries(rec64_libretro PRIVATE rc_core)
+set_target_properties(rec64_libretro PROPERTIES PREFIX "" C_VISIBILITY_PRESET hidden)
+rc_set_warnings(rec64_libretro)
+
 add_executable(test_sid_own ${RC_TESTS}/test_sid_own.c)
 target_link_libraries(test_sid_own PRIVATE rc_core)
 rc_set_warnings(test_sid_own)

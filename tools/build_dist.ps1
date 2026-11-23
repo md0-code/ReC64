@@ -34,10 +34,12 @@ $version = (Get-Content -LiteralPath "$repo/src/VERSION" -Raw).Trim()
 
 # The run folder: the x64 program and the documents of the release.
 $target = "$repo/dist"
-foreach ($folder in @($target, "$target/roms", "$target/docs")) {
+foreach ($folder in @($target, "$target/roms", "$target/docs", "$target/cores", "$target/info")) {
     New-Item -ItemType Directory -Force -Path $folder | Out-Null
 }
 Publish-Program "$repo/build/x64/rec64.exe" "$target/rec64.exe"
+Publish-Program "$repo/build/x64/rec64_libretro.dll" "$target/cores/rec64_libretro.dll"
+Copy-Item -LiteralPath "$repo/src/libretro/rec64_libretro.info" -Destination "$target/info/rec64_libretro.info" -Force
 # Retired mapped images become removable after their process exits.
 Get-ChildItem -LiteralPath $target -Filter 'rec64.exe.running-*' -File | Where-Object {
     $_.Name -match '^rec64\.exe\.running-[0-9a-f]{32}$'
