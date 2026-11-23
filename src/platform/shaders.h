@@ -1,4 +1,4 @@
-/* GLSL presentation shaders, including the M-CRT filter. */
+/* GLSL presentation shaders, including the CRT emulation filter. */
 #ifndef RC_SHADERS_H
 #define RC_SHADERS_H
 
