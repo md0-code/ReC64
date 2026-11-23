@@ -5,10 +5,10 @@ What the [README](../README.md) leaves out: the [firmware](#firmware) ReC64 need
 
 ## Libretro
 
-Copy the library from `cores/` and its matching file from `info/` into
-RetroArch's Cores and Core Info directories. Use the archive that matches the
-operating system and architecture of RetroArch. Put the [firmware](#firmware)
-in `rec64/` inside the frontend's System/BIOS directory.
+Choose the `ReC64-Libretro-<version>-<os>-<arch>` archive that matches
+RetroArch's operating system and architecture. Copy the library from `cores/`
+and its metadata from `info/` into RetroArch's Cores and Core Info directories.
+Put the [firmware](#firmware) in `rec64/` inside the frontend's System/BIOS directory.
 
 Start the core on its own for the BASIC prompt, or use Load Content for
 PRG, P00, T64, TAP, D64, G64, CRT or SID files. Images opened through Libretro

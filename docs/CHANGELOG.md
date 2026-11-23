@@ -2,6 +2,10 @@
 
 The changes users notice, newest first.
 
+## 0.23.6 (2026-11-23)
+
+- Separate downloads for the desktop emulator and Libretro core on Windows and Linux.
+
 ## 0.23.5 (2026-11-23)
 
 - Libretro core in the Windows and Linux x64 and ARM64 archives.

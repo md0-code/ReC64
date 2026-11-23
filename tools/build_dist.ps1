@@ -1,10 +1,24 @@
 <# Build the portable Windows x64 folder (dist/; existing user settings, ROMs and other files are kept) and the release
    archives dist/releases/ReC64-<version>-windows-x64.zip and -windows-arm64.zip (tools/package.py), which hold no
-   firmware. dist/releases/ holds the current version only. #>
+   firmware. -Libretro builds and packages ReC64-Libretro-<version>-windows-<arch>.zip for both architectures.
+   dist/releases/ holds the current version only. #>
 [CmdletBinding()]
-param([switch]$NoBuild)
+param([switch]$NoBuild, [switch]$Libretro)
 $ErrorActionPreference = 'Stop'
 $repo = [IO.Path]::GetFullPath("$PSScriptRoot/..")
+$arches = @('x64', 'arm64')
+if ($Libretro) {
+    foreach ($arch in $arches) {
+        if (-not $NoBuild) {
+            & "$repo/tools/build.ps1" -Arch $arch -Libretro -Config Release -StaticRuntime
+            if ($LASTEXITCODE -eq 3) { exit 3 }
+        }
+        python "$repo/tools/package.py" "windows-$arch" "$repo/build/libretro-$arch/rec64_libretro.dll" --libretro --out "$repo/dist/releases"
+        if ($LASTEXITCODE -ne 0) { throw "packaging Libretro for windows-$arch failed" }
+    }
+    return
+}
+
 function Publish-Program([string]$source, [string]$destination) {
     if ((Test-Path -LiteralPath $destination) -and
         (Get-FileHash -LiteralPath $source).Hash -eq (Get-FileHash -LiteralPath $destination).Hash) { return }
@@ -34,12 +48,13 @@ $version = (Get-Content -LiteralPath "$repo/src/VERSION" -Raw).Trim()
 
 # The run folder: the x64 program and the documents of the release.
 $target = "$repo/dist"
-foreach ($folder in @($target, "$target/roms", "$target/docs", "$target/cores", "$target/info")) {
+foreach ($folder in @($target, "$target/roms", "$target/docs")) {
     New-Item -ItemType Directory -Force -Path $folder | Out-Null
 }
 Publish-Program "$repo/build/x64/rec64.exe" "$target/rec64.exe"
-Publish-Program "$repo/build/x64/rec64_libretro.dll" "$target/cores/rec64_libretro.dll"
-Copy-Item -LiteralPath "$repo/src/libretro/rec64_libretro.info" -Destination "$target/info/rec64_libretro.info" -Force
+foreach ($old in @("$target/cores/rec64_libretro.dll", "$target/info/rec64_libretro.info")) {
+    if (Test-Path -LiteralPath $old -PathType Leaf) { Remove-Item -LiteralPath $old -Force }
+}
 # Retired mapped images become removable after their process exits.
 Get-ChildItem -LiteralPath $target -Filter 'rec64.exe.running-*' -File | Where-Object {
     $_.Name -match '^rec64\.exe\.running-[0-9a-f]{32}$'
@@ -60,7 +75,7 @@ foreach ($old in @("$target/docs/DESIGN.md", "$target/docs/build.json", "$target
 Write-Host "Ready: $target/rec64.exe ($version, x64)"
 
 # The release archives: the same program and documents, no firmware and no settings.
-foreach ($arch in @('x64', 'arm64')) {
+foreach ($arch in $arches) {
     python "$repo/tools/package.py" "windows-$arch" "$repo/build/$arch/rec64.exe" --out "$repo/dist/releases"
     if ($LASTEXITCODE -ne 0) { throw "packaging windows-$arch failed" }
 }

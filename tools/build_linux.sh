@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Build, test and package ReC64 for Linux: linux-x64 (native) and linux-arm64 (cross-compiled).
 #
-#   tools/build_linux.sh [x64|arm64|all] [--no-test] [--no-package] [--no-pgo] [--keep]
+#   tools/build_linux.sh [x64|arm64|all] [--libretro] [--no-test] [--no-package] [--no-pgo] [--keep]
 #   tools/build_linux.sh sysroot          (as root, once before an arm64 build: the arm64 root for the cross build)
 #   tools/build_linux.sh clean            (removes everything the script made under /tmp/rec64-build)
 #
@@ -17,6 +17,8 @@
 #   arm64  the same build with aarch64-linux-gnu-gcc against an arm64 root (Debian 12's packages, which `sysroot`
 #          unpacks into /tmp/rec64-build/sysroot-arm64); when qemu-aarch64 is installed the program's version is
 #          checked through it. dist/releases/ReC64-<version>-linux-arm64.tar.gz.
+#   --libretro builds only the shared core, packaged as ReC64-Libretro-<version>-linux-<arch>.tar.gz.
+#          The ARM64 core uses the cross compiler's libc and needs no SDL packages or sysroot.
 #
 # Packages (Debian, root): build-essential cmake ninja-build pkg-config python3 rsync libasound2-dev libpulse-dev
 # libx11-dev libxext-dev libxrandr-dev libxcursor-dev libxfixes-dev libxi-dev libxss-dev libxkbcommon-dev
@@ -31,14 +33,14 @@ version=$(head -n 1 "$root/src/VERSION" | tr -d '[:space:]')
 [[ $version =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]] || { echo "src/VERSION must hold MAJOR.MINOR.PATCH, not '$version'" >&2; exit 1; }
 
 base=/tmp/rec64-build
-tree=$base/repo
 sysroot=$base/sysroot-arm64
-test=1 package=1 pgo=1 keep=0
+test=1 package=1 pgo=1 keep=0 libretro=0
 targets=()
 while [[ $# -gt 0 ]]; do
     case $1 in
         x64|arm64|sysroot|clean) targets+=("$1") ;;
         all) targets+=(x64 arm64) ;;
+        --libretro) libretro=1 ;;
         --no-test) test=0 ;;
         --no-package) package=0 ;;
         --no-pgo) pgo=0 ;;
@@ -49,6 +51,12 @@ while [[ $# -gt 0 ]]; do
     shift
 done
 [[ ${#targets[@]} -gt 0 ]] || targets=(x64)
+prefix=
+if [[ $libretro -eq 1 ]]; then
+    prefix=libretro-
+    test=0
+fi
+tree="$base/${prefix}repo"
 
 sysroot_packages=(libc6-dev linux-libc-dev libasound2-dev libpulse-dev libx11-dev libxext-dev libxrandr-dev
     libxcursor-dev libxfixes-dev libxi-dev libxss-dev libxkbcommon-dev libdrm-dev libgbm-dev libgl-dev libgles-dev
@@ -81,16 +89,24 @@ sync_sources() {
 }
 
 build_target() {
-    local arch=$1 dir="$base/$1"
-    local args=(-S "$tree/src" -G Ninja -DCMAKE_BUILD_TYPE=Release)
+    local arch=$1 dir="$base/$prefix$1"
+    local binary=rec64 core_only=OFF pack_args=()
+    if [[ $libretro -eq 1 ]]; then
+        binary=rec64_libretro.so core_only=ON
+        pack_args=(--libretro)
+    fi
+    local args=(-S "$tree/src" -B "$dir" -G Ninja -DCMAKE_BUILD_TYPE=Release -DRC_LIBRETRO_ONLY="$core_only")
     if [[ $arch == arm64 ]]; then
         command -v aarch64-linux-gnu-gcc >/dev/null || { echo "aarch64-linux-gnu-gcc is not installed (apt-get install gcc-aarch64-linux-gnu)" >&2; exit 1; }
-        [[ -f $sysroot/usr/include/X11/Xlib.h ]] || { echo "no arm64 sysroot at $sysroot: sudo tools/build_linux.sh sysroot" >&2; exit 1; }
         mkdir -p "$dir"
-        cat > "$base/toolchain-arm64.cmake" <<EOF
+        cat > "$dir/toolchain.cmake" <<EOF
 set(CMAKE_SYSTEM_NAME Linux)
 set(CMAKE_SYSTEM_PROCESSOR aarch64)
 set(CMAKE_C_COMPILER aarch64-linux-gnu-gcc)
+EOF
+        if [[ $libretro -eq 0 ]]; then
+            [[ -f $sysroot/usr/include/X11/Xlib.h ]] || { echo "no arm64 sysroot at $sysroot: sudo tools/build_linux.sh sysroot" >&2; exit 1; }
+            cat >> "$dir/toolchain.cmake" <<EOF
 set(CMAKE_SYSROOT "$sysroot")
 set(CMAKE_FIND_ROOT_PATH "$sysroot")
 set(CMAKE_FIND_ROOT_PATH_MODE_PROGRAM NEVER)
@@ -98,23 +114,26 @@ set(CMAKE_FIND_ROOT_PATH_MODE_LIBRARY ONLY)
 set(CMAKE_FIND_ROOT_PATH_MODE_INCLUDE ONLY)
 set(CMAKE_FIND_ROOT_PATH_MODE_PACKAGE ONLY)
 EOF
-        args+=(-DCMAKE_TOOLCHAIN_FILE="$base/toolchain-arm64.cmake")
-        export PKG_CONFIG_SYSROOT_DIR="$sysroot"
-        export PKG_CONFIG_LIBDIR="$sysroot/usr/lib/aarch64-linux-gnu/pkgconfig:$sysroot/usr/lib/pkgconfig:$sysroot/usr/share/pkgconfig"
-        unset PKG_CONFIG_PATH
+            export PKG_CONFIG_SYSROOT_DIR="$sysroot"
+            export PKG_CONFIG_LIBDIR="$sysroot/usr/lib/aarch64-linux-gnu/pkgconfig:$sysroot/usr/lib/pkgconfig:$sysroot/usr/share/pkgconfig"
+            unset PKG_CONFIG_PATH
+        fi
+        args+=(-DCMAKE_TOOLCHAIN_FILE="$dir/toolchain.cmake")
     fi
     echo "== linux-$arch: $dir"
     local trained=0
-    if [[ $arch == x64 && $pgo -eq 1 ]] && python3 "$tree/tools/fetch_roms.py" --check >/dev/null 2>&1; then
+    if [[ $libretro -eq 1 ]]; then
+        cmake "${args[@]}"
+    elif [[ $arch == x64 && $pgo -eq 1 ]] && python3 "$tree/tools/fetch_roms.py" --check >/dev/null 2>&1; then
         rm -f "$dir"/*.gcda
         find "$dir" -name '*.gcda' -delete 2>/dev/null || true
-        cmake "${args[@]}" -B "$dir" -DRC_PGO=generate
+        cmake "${args[@]}" -DRC_PGO=generate
         cmake --build "$dir" --target rec64
         python3 "$tree/tools/pgo_train.py" "$dir/rec64"
-        cmake "${args[@]}" -B "$dir" -DRC_PGO=use
+        cmake "${args[@]}" -DRC_PGO=use
         trained=1
     else
-        cmake "${args[@]}" -B "$dir" -DRC_PGO=
+        cmake "${args[@]}" -DRC_PGO=
     fi
     cmake --build "$dir"
     [[ $trained -eq 0 ]] || echo "profile-guided build"
@@ -129,9 +148,8 @@ EOF
         fi
     fi
     if [[ $package -eq 1 ]]; then
-        local start=()
-        [[ $test -eq 1 ]] || start=(--no-start)
-        python3 "$tree/tools/package.py" "linux-$arch" "$dir/rec64" --out "$root/dist/releases" "${start[@]}"
+        [[ $test -eq 1 ]] || pack_args+=(--no-start)
+        python3 "$tree/tools/package.py" "linux-$arch" "$dir/$binary" --out "$root/dist/releases" "${pack_args[@]}"
     fi
 }
 
@@ -144,6 +162,6 @@ for t in "${targets[@]}"; do
     esac
 done
 if [[ $built -eq 1 && $keep -eq 0 ]]; then
-    rm -rf "$tree" "$base/x64" "$base/arm64" "$base/toolchain-arm64.cmake"
+    rm -rf "$tree" "$base/${prefix}x64" "$base/${prefix}arm64"
     echo "build trees removed (the arm64 root stays until: tools/build_linux.sh clean)"
 fi

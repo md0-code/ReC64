@@ -11,8 +11,7 @@ endif()
 set(CMAKE_C_STANDARD_REQUIRED ON)
 include(cmake/Warnings.cmake)
 configure_file(rc_version.h.in ${CMAKE_CURRENT_BINARY_DIR}/generated/rc_version.h @ONLY)
-get_filename_component(RC_WORK "${CMAKE_CURRENT_SOURCE_DIR}/../work" ABSOLUTE)
-get_filename_component(RC_TESTS "${CMAKE_CURRENT_SOURCE_DIR}/../tests" ABSOLUTE)
+option(RC_LIBRETRO_ONLY "Configure only the ReC64 Libretro core" OFF)
 file(GLOB RC_YAML_SOURCES CONFIGURE_DEPENDS third_party/libyaml/src/*.c)
 add_library(rc_yaml STATIC ${RC_YAML_SOURCES})
 target_include_directories(rc_yaml PUBLIC third_party/libyaml/include)
@@ -25,11 +24,6 @@ else()
     add_library(rc_host STATIC host/host_posix.c)
 endif()
 rc_set_warnings(rc_host)
-add_executable(test_c64 ${RC_TESTS}/test_c64.c)
-target_link_libraries(test_c64 PRIVATE rc_core rc_platform)
-target_compile_definitions(test_c64 PRIVATE RC_WORK="${RC_WORK}" RC_ROM_DIR="${CMAKE_CURRENT_SOURCE_DIR}/../roms")
-rc_set_warnings(test_c64)
-add_test(NAME c64 COMMAND test_c64)
 add_library(rc_core STATIC core/config.c core/yamledit.c core/romdb.c core/state.c
     core/media.c core/font8x8.c core/palette.c core/keymap.c core/stick.c core/machine.c core/stub_machine.c core/machines/c64.c core/machines/c64_media.c hw/bus.c hw/sched.c hw/mos6510.c
     hw/traps.c hw/mouse1351.c hw/cia6526.c hw/pla.c hw/c64kbd.c hw/sid.c hw/sid_own.c hw/vic2.c hw/via6522.c
@@ -51,6 +45,25 @@ target_include_directories(rec64_libretro PRIVATE third_party/libretro "${CMAKE_
 target_link_libraries(rec64_libretro PRIVATE rc_core)
 set_target_properties(rec64_libretro PROPERTIES PREFIX "" C_VISIBILITY_PRESET hidden)
 rc_set_warnings(rec64_libretro)
+
+include(CheckIPOSupported)
+check_ipo_supported(RESULT RC_IPO LANGUAGES C)
+if(RC_LIBRETRO_ONLY)
+    if(RC_IPO)
+        set_target_properties(rc_core rc_yaml rc_host rec64_libretro PROPERTIES
+            INTERPROCEDURAL_OPTIMIZATION_RELEASE ON INTERPROCEDURAL_OPTIMIZATION_RELWITHDEBINFO ON)
+    endif()
+    return()
+endif()
+set_target_properties(rec64_libretro PROPERTIES EXCLUDE_FROM_ALL TRUE)
+
+get_filename_component(RC_WORK "${CMAKE_CURRENT_SOURCE_DIR}/../work" ABSOLUTE)
+get_filename_component(RC_TESTS "${CMAKE_CURRENT_SOURCE_DIR}/../tests" ABSOLUTE)
+add_executable(test_c64 ${RC_TESTS}/test_c64.c)
+target_link_libraries(test_c64 PRIVATE rc_core rc_platform)
+target_compile_definitions(test_c64 PRIVATE RC_WORK="${RC_WORK}" RC_ROM_DIR="${CMAKE_CURRENT_SOURCE_DIR}/../roms")
+rc_set_warnings(test_c64)
+add_test(NAME c64 COMMAND test_c64)
 
 add_executable(test_sid_own ${RC_TESTS}/test_sid_own.c)
 target_link_libraries(test_sid_own PRIVATE rc_core)
@@ -208,8 +221,6 @@ add_test(NAME states COMMAND test_states)
 
 # Whole-program optimization for our own targets: the board calls its chips
 # across source files every cycle.
-include(CheckIPOSupported)
-check_ipo_supported(RESULT RC_IPO LANGUAGES C)
 if(RC_IPO)
     get_property(RC_TARGETS DIRECTORY PROPERTY BUILDSYSTEM_TARGETS)
     set_target_properties(${RC_TARGETS} PROPERTIES

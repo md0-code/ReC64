@@ -1,18 +1,20 @@
 """Assembles a ReC64 release archive and checks it. tools/build_dist.ps1 (Windows) and tools/build_linux.sh (Linux)
 call it after they have built the program.
 
-    python tools/package.py PLATFORM PROGRAM [--out DIR] [--no-start]
-    python tools/package.py --list PLATFORM
+    python tools/package.py PLATFORM BINARY [--libretro] [--out DIR] [--no-start]
+    python tools/package.py --list PLATFORM [--libretro]
 
-PLATFORM is windows-x64, windows-arm64, linux-x64 or linux-arm64; PROGRAM the built rec64.exe or rec64. The archive
-ReC64-<version>-<platform>.zip (Windows) or .tar.gz (Linux, under a folder of the same name) goes to --out (default
+PLATFORM is windows-x64, windows-arm64, linux-x64 or linux-arm64. BINARY is the desktop executable or, with
+--libretro, the shared core. The archive uses ReC64 or ReC64-Libretro before the version and platform.
+The .zip (Windows) or .tar.gz (Linux, under a folder of the same name) goes to --out (default
 dist/releases/), which holds the current version only: archives of other versions are removed.
 
-The member list includes the program, the Libretro core and its info file, the documents and an empty roms/ folder.
+Both archives include the documents. The desktop archive includes an empty roms/ folder, and the Libretro archive
+ships the library and its info file.
 The user supplies firmware and software. The program creates rec64.yaml on its first start. The binaries must match
 the platform's format and architecture. Each relative link of the shipped documents must resolve inside the archive.
-The finished archive is opened again to check its file list and the bytes of each member. Unless --no-start is given, an archive this
-host can run is then extracted afresh, the firmware of roms/ is copied in, and the program must start the C64 to
+The finished archive is opened again to check its file list and the bytes of each member. Unless --no-start is given, a desktop archive
+this host can run is then extracted afresh, the firmware of roms/ is copied in, and the program must start the C64 to
 READY there (headless). Anything else stops the build.
 """
 
@@ -63,51 +65,61 @@ def core_name(platform: str) -> str:
 CORE_INFO = "info/rec64_libretro.info"
 
 
-def archive_name(platform: str) -> str:
-    return f"{NAME}-{version()}-{platform}" + (".zip" if platform.startswith("windows") else ".tar.gz")
+def binary_member(platform: str, libretro: bool) -> str:
+    return f"cores/{core_name(platform)}" if libretro else program_name(platform)
 
 
-def expected_files(platform: str) -> list[str]:
-    return sorted([program_name(platform), f"cores/{core_name(platform)}", CORE_INFO, *DOCS])
+def archive_name(platform: str, libretro: bool = False) -> str:
+    name = f"{NAME}-Libretro" if libretro else NAME
+    return f"{name}-{version()}-{platform}" + (".zip" if platform.startswith("windows") else ".tar.gz")
+
+
+def expected_files(platform: str, libretro: bool = False) -> list[str]:
+    files = [binary_member(platform, libretro), *DOCS]
+    if libretro:
+        files.append(CORE_INFO)
+    return sorted(files)
 
 
 def check_executable(platform: str, path: Path, shared: bool = False) -> None:
     kind, machine = EXECUTABLES[platform]
-    head = path.read_bytes()[:4096]
+    with path.open("rb") as binary:
+        head = binary.read(4096)
     if kind == "pe":
         offset = struct.unpack_from("<I", head, 0x3C)[0] if head[:2] == b"MZ" and len(head) > 0x40 else 0
         if (head[:2] != b"MZ" or offset + 24 > len(head) or head[offset:offset + 4] != b"PE\0\0" or
                 struct.unpack_from("<H", head, offset + 4)[0] != machine or
                 bool(struct.unpack_from("<H", head, offset + 22)[0] & 0x2000) != shared):
             raise PackageError(f"{path} is not a Windows {'DLL' if shared else 'executable'} for {platform}")
-    elif (len(head) < 20 or head[:6] != b"\x7fELF\x02\x01" or
-          struct.unpack_from("<H", head, 18)[0] != machine or
-          (shared and struct.unpack_from("<H", head, 16)[0] != 3)):
-        raise PackageError(f"{path} is not a 64-bit little-endian ELF {'library' if shared else 'executable'} for {platform}")
+    else:
+        elf_types = (3,) if shared else (2, 3)  # ET_DYN, including position-independent executables, and ET_EXEC
+        if (len(head) < 64 or head[:6] != b"\x7fELF\x02\x01" or
+                struct.unpack_from("<H", head, 18)[0] != machine or
+                struct.unpack_from("<H", head, 16)[0] not in elf_types or
+                (struct.unpack_from("<Q", head, 24)[0] == 0) != shared):
+            raise PackageError(f"{path} is not a 64-bit little-endian ELF {'library' if shared else 'executable'} for {platform}")
 
 
-def gather(platform: str, program: Path) -> dict[str, Path]:
-    check_executable(platform, program)
-    core = program.with_name(core_name(platform))
-    check_executable(platform, core, shared=True)
-    info = ROOT / "src" / "libretro" / Path(CORE_INFO).name
-    if not info.is_file():
-        raise PackageError(f"{info} is missing")
-    entries = {program_name(platform): program, f"cores/{core.name}": core, CORE_INFO: info}
+def gather(platform: str, binary: Path, libretro: bool = False) -> dict[str, Path]:
+    check_executable(platform, binary, shared=libretro)
+    entries = {binary_member(platform, libretro): binary}
+    if libretro:
+        info = ROOT / "src" / "libretro" / Path(CORE_INFO).name
+        if not info.is_file():
+            raise PackageError(f"{info} is missing")
+        entries[CORE_INFO] = info
     for member, source in DOCS.items():
         if not (ROOT / source).is_file():
             raise PackageError(f"{source} is missing")
         entries[member] = ROOT / source
-    if sorted(entries) != expected_files(platform):
-        raise PackageError(f"the files gathered differ from the list: {sorted(set(entries) ^ set(expected_files(platform)))}")
     return entries
 
 
 LINK = re.compile(r"(?<!!)\[[^\]]*\]\(([^)\s]+)(?:\s+\"[^\"]*\")?\)")
 
 
-def broken_links(entries: dict[str, Path]) -> list[str]:
-    names = set(entries) | set(FOLDERS)
+def broken_links(entries: dict[str, Path], empty_folders: tuple[str, ...]) -> list[str]:
+    names = set(entries) | set(empty_folders)
     folders = {str(Path(n).parent).replace("\\", "/") for n in names}
     problems = []
     for name in sorted(n for n in entries if n.endswith(".md")):
@@ -130,11 +142,12 @@ def broken_links(entries: dict[str, Path]) -> list[str]:
     return problems
 
 
-def write_archive(platform: str, entries: dict[str, Path], target: Path) -> None:
+def write_archive(platform: str, entries: dict[str, Path], target: Path, libretro: bool = False) -> None:
     stamp = time.localtime()[:6]
+    empty_folders = () if libretro else FOLDERS
     if platform.startswith("windows"):
         with zipfile.ZipFile(target, "w", zipfile.ZIP_DEFLATED, compresslevel=9) as z:
-            for folder in FOLDERS:
+            for folder in empty_folders:
                 info = zipfile.ZipInfo(folder + "/", stamp)
                 info.external_attr = (0o40755 << 16) | 0x10
                 z.writestr(info, b"")
@@ -144,10 +157,10 @@ def write_archive(platform: str, entries: dict[str, Path], target: Path) -> None
                 info.external_attr = 0o100644 << 16
                 z.writestr(info, entries[name].read_bytes())
         return
-    top = f"{NAME}-{version()}-{platform}"
+    top = archive_name(platform, libretro).removesuffix(".tar.gz")
     now = int(time.time())
     with tarfile.open(target, "w:gz", compresslevel=9, format=tarfile.GNU_FORMAT) as t:
-        folders = sorted({str(p) for n in entries for p in Path(n).parents} | set(FOLDERS))
+        folders = sorted({str(p) for n in entries for p in Path(n).parents} | set(empty_folders))
         for folder in folders:
             info = tarfile.TarInfo(top if folder == "." else f"{top}/{Path(folder).as_posix()}")
             info.type, info.mode, info.mtime, info.uid, info.gid, info.uname, info.gname = tarfile.DIRTYPE, 0o755, now, 0, 0, "root", "root"
@@ -160,7 +173,7 @@ def write_archive(platform: str, entries: dict[str, Path], target: Path) -> None
             t.addfile(info, io.BytesIO(data))
 
 
-def read_back(platform: str, archive: Path) -> dict[str, bytes]:
+def read_back(platform: str, archive: Path, libretro: bool = False) -> dict[str, bytes]:
     found: dict[str, bytes] = {}
     if platform.startswith("windows"):
         with zipfile.ZipFile(archive) as z:
@@ -173,7 +186,7 @@ def read_back(platform: str, archive: Path) -> dict[str, bytes]:
                     raise PackageError(f"{archive}: bad member name {info.filename!r}")
                 found[info.filename] = z.read(info)
         return found
-    top = f"{NAME}-{version()}-{platform}/"
+    top = archive_name(platform, libretro).removesuffix(".tar.gz") + "/"
     with tarfile.open(archive, "r:gz") as t:
         for info in t:
             if info.isdir():
@@ -223,54 +236,58 @@ def start_check(platform: str, archive: Path) -> None:
     shutil.rmtree(work, ignore_errors=True)
 
 
-def package(platform: str, program: Path, out: Path, start: bool = True) -> Path:
-    entries = gather(platform, program)
-    problems = broken_links(entries)
+def package(platform: str, binary: Path, out: Path, start: bool = True, *, libretro: bool = False) -> Path:
+    entries = gather(platform, binary, libretro)
+    expected = expected_files(platform, libretro)
+    problems = broken_links(entries, () if libretro else FOLDERS)
     if problems:
         raise PackageError("links that lead nowhere in the archive:\n  " + "\n  ".join(problems))
     out.mkdir(parents=True, exist_ok=True)
-    final = out / archive_name(platform)
+    final = out / archive_name(platform, libretro)
     work = ROOT / "work" / "package"
     work.mkdir(parents=True, exist_ok=True)
-    temp = work / archive_name(platform)
-    write_archive(platform, entries, temp)
-    back = read_back(platform, temp)
-    if sorted(back) != expected_files(platform):
-        raise PackageError(f"the archive holds {sorted(set(back) ^ set(expected_files(platform)))} beyond or short of the list")
+    temp = work / final.name
+    write_archive(platform, entries, temp, libretro)
+    back = read_back(platform, temp, libretro)
+    if sorted(back) != expected:
+        raise PackageError(f"the archive holds {sorted(set(back) ^ set(expected))} beyond or short of the list")
     for name, path in entries.items():
         if back[name] != path.read_bytes():
             raise PackageError(f"the archive's {name} differs from the staged one")
-    if start and runnable_here(platform):
+    smoke_test = start and not libretro and runnable_here(platform)
+    if smoke_test:
         start_check(platform, temp)
-    archive = re.compile(rf"{NAME}-(\d+\.\d+\.\d+)-[a-z]+-[a-z0-9]+\.(zip|tar\.gz)")
+    archive = re.compile(rf"{NAME}(?:-Libretro)?-(\d+\.\d+\.\d+)-[a-z]+-[a-z0-9]+\.(zip|tar\.gz)")
     for old in out.glob(f"{NAME}-*"):
         m = archive.fullmatch(old.name)
         if m and m.group(1) != version():
-            old.unlink()
+            old.unlink(missing_ok=True)
     for old in out.parent.glob(f"{NAME}-*-{platform}.*"):    # archives of the earlier layout, in dist/ itself
         if archive.fullmatch(old.name):
-            old.unlink()
+            old.unlink(missing_ok=True)
     shutil.move(str(temp), final)
-    print(f"OK: {final} ({final.stat().st_size:,} bytes)" + (", starts to READY" if start and runnable_here(platform) else ""))
+    print(f"OK: {final} ({final.stat().st_size:,} bytes)" + (", starts to READY" if smoke_test else ""))
     return final
 
 
 def main(argv: list[str]) -> int:
     parser = argparse.ArgumentParser(description=__doc__.split("\n")[0])
     parser.add_argument("platform", choices=PLATFORMS)
-    parser.add_argument("program", nargs="?", type=Path)
+    parser.add_argument("binary", nargs="?", type=Path)
+    parser.add_argument("--libretro", action="store_true", help="package the shared core")
     parser.add_argument("--out", type=Path, default=ROOT / "dist" / "releases")
     parser.add_argument("--no-start", action="store_true", help="skip the start check of a fresh extraction")
     parser.add_argument("--list", action="store_true", help="print the files of the archive and stop")
     args = parser.parse_args(argv)
     if args.list:
-        print("\n".join([*expected_files(args.platform), *(f + "/" for f in FOLDERS)]))
+        empty_folders = () if args.libretro else FOLDERS
+        print("\n".join([*expected_files(args.platform, args.libretro), *(f + "/" for f in empty_folders)]))
         return 0
-    if not args.program:
-        parser.error("the built program is required")
+    if not args.binary:
+        parser.error("a built executable or library is required")
     try:
-        package(args.platform, args.program.resolve(), args.out.resolve(), not args.no_start)
-    except PackageError as e:
+        package(args.platform, args.binary.resolve(), args.out.resolve(), not args.no_start, libretro=args.libretro)
+    except (PackageError, OSError) as e:
         print(f"package: {e}", file=sys.stderr)
         return 1
     return 0

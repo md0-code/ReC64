@@ -20,8 +20,8 @@
     Visual Studio component Microsoft.VisualStudio.Component.VC.Tools.ARM64)
     it says so and exits with code 3.
 
-    SDL2 is fetched and built statically on the first configure. The tests
-    (ctest) write only under the git-ignored work/ folder.
+    Desktop builds fetch and build SDL2 statically. The tests write under
+    work/. -Libretro builds the shared core in build/libretro-<arch>.
 
 .EXAMPLE
     tools/build.ps1                 # configure, build and run the tests (x64)
@@ -36,6 +36,7 @@ param(
     [string]$Arch = "x64",
     [string]$Config = "RelWithDebInfo",
     [string]$BuildDir = "",
+    [switch]$Libretro,
     [switch]$Clean,
     [switch]$NoTest,
     # Link the C runtime statically (/MT), so the binary needs no Visual C++
@@ -54,7 +55,8 @@ $ErrorActionPreference = "Stop"
 $root = [IO.Path]::GetFullPath("$PSScriptRoot/..")
 
 if (-not $BuildDir) {
-    $BuildDir = "$root/build/$Arch"
+    $targetDir = if ($Libretro) { "libretro-$Arch" } else { $Arch }
+    $BuildDir = "$root/build/$targetDir"
 }
 
 # Every Visual Studio install with the C++ toolset, the newest first.
@@ -111,6 +113,9 @@ if ($Clean -and (Test-Path $BuildDir)) {
     Remove-Item -LiteralPath $target -Recurse -Force
 }
 
+if ($Pgo -and $Libretro) {
+    throw "-Pgo requires the desktop target for training."
+}
 if ($Pgo -and $Arch -ne "x64") {
     Write-Host "Profile-guided optimisation needs a program this host can run: building $Arch without it." -ForegroundColor Yellow
     $Pgo = $false
@@ -122,13 +127,14 @@ if ($Pgo) {
         $Pgo = $false
     }
 }
-$pgoFlag = if ($Pgo) { "-DRC_PGO=generate" } else { "-DRC_PGO=" }
+$pgoFlag = if ($Pgo) { "-DRC_PGO=generate" } elseif (-not $Libretro) { "-DRC_PGO=" }
 $runtimeFlag = if ($StaticRuntime) { "-DCMAKE_MSVC_RUNTIME_LIBRARY=MultiThreaded" } else { "" }
 $devArch = if ($Arch -eq "x64") { "amd64" } else { "arm64" }
 # Cross-compiling: CMake must not try to run what it builds.
 $crossFlags = if ($Arch -eq "arm64") { "-DCMAKE_SYSTEM_NAME=Windows -DCMAKE_SYSTEM_PROCESSOR=ARM64" } else { "" }
 $src = "$root/src"
-$test = -not $NoTest -and $Arch -eq "x64"
+$test = -not $Libretro -and -not $NoTest -and $Arch -eq "x64"
+$libretroFlag = if ($Libretro) { "ON" } else { "OFF" }
 foreach ($targetName in $Target) {
     if ($targetName -notmatch '^[A-Za-z0-9_][A-Za-z0-9_.+-]*$') { throw "Invalid build target: $targetName" }
 }
@@ -143,7 +149,7 @@ $script = @"
 @echo off
 set "PATH=$($vs.InstallerDir);%PATH%"
 call "$devcmd" -arch=$devArch -host_arch=amd64 -vcvars_ver=$toolset -no_logo || exit /b 1
-cmake -S "$src" -B "$BuildDir" -G Ninja -DCMAKE_BUILD_TYPE=$Config $pgoFlag $runtimeFlag $crossFlags || exit /b 1
+cmake -S "$src" -B "$BuildDir" -G Ninja -DCMAKE_BUILD_TYPE=$Config -DRC_LIBRETRO_ONLY=$libretroFlag $pgoFlag $runtimeFlag $crossFlags || exit /b 1
 cmake --build "$BuildDir"$targetFlags || exit /b 1
 "@
 if ($Pgo) {

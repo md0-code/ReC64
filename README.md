@@ -23,7 +23,7 @@ tape or cartridge, or drop a file on the window or on the program; `rec64 FILE`
 opens a file the same way. **F12** opens setup, where every setting can be
 changed.
 
-For RetroArch, use the [ReC64 Libretro core](docs/NOTES.md#libretro) included in the binary archives.
+For RetroArch, download the separate [ReC64 Libretro archive](docs/NOTES.md#libretro) for your platform.
 
 ## Keys
 
@@ -175,6 +175,9 @@ tools/build_linux.sh all       # release archives for x64 and ARM64 (see the scr
 For a profile-guided Linux build, configure with `-DRC_PGO=generate`, build,
 run `python3 tools/pgo_train.py build/linux/rec64`, then configure with
 `-DRC_PGO=use` and build again. The training run needs the firmware.
+
+Build the Libretro core with `tools/build.ps1 -Libretro` on Windows. To make the core archives, use
+`tools/build_dist.ps1 -Libretro` on Windows or `tools/build_linux.sh all --libretro` on Linux.
 
 SDL 2 is downloaded during configuration. `python tests/verify.py` runs the
 checks without opening a window.
