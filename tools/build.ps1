@@ -24,7 +24,7 @@
     work/. -Libretro builds the shared core in build/libretro-<arch>.
 
 .EXAMPLE
-    tools/build.ps1                 # configure, build and run the tests (x64)
+    tools/build.ps1                 # configure, build and run the tests (x64; the tests need the firmware)
     tools/build.ps1 -Clean          # wipe the build directory first
     tools/build.ps1 -NoTest         # build only
     tools/build.ps1 -Arch arm64     # cross-compile for ARM64 (no tests)
@@ -134,6 +134,13 @@ $devArch = if ($Arch -eq "x64") { "amd64" } else { "arm64" }
 $crossFlags = if ($Arch -eq "arm64") { "-DCMAKE_SYSTEM_NAME=Windows -DCMAKE_SYSTEM_PROCESSOR=ARM64" } else { "" }
 $src = "$root/src"
 $test = -not $Libretro -and -not $NoTest -and $Arch -eq "x64"
+if ($test) {
+    python "$root/tools/fetch_roms.py" --check | Out-Null
+    if ($LASTEXITCODE -ne 0) {
+        Write-Host "The tests need the firmware in roms/ (python tools/fetch_roms.py): building without running them." -ForegroundColor Yellow
+        $test = $false
+    }
+}
 $libretroFlag = if ($Libretro) { "ON" } else { "OFF" }
 foreach ($targetName in $Target) {
     if ($targetName -notmatch '^[A-Za-z0-9_][A-Za-z0-9_.+-]*$') { throw "Invalid build target: $targetName" }

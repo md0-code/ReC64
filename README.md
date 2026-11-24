@@ -157,10 +157,10 @@ Shift+F9, or Back on a controller, opens the C64 keyboard for mouse, touch
 Windows needs Visual Studio's C++ tools, CMake 3.24 or later and Ninja:
 
 ```powershell
-tools/build.ps1                # x64, into build/x64
+python tools/fetch_roms.py     # firmware for the tests and the training run, into roms/
+tools/build.ps1                # x64, into build/x64; runs the tests when roms/ holds the firmware
 tools/build.ps1 -Pgo           # the same, profile-guided: about a third faster
 tools/build.ps1 -Arch arm64    # needs the ARM64 compiler tools
-python tools/fetch_roms.py     # firmware for the checks, into roms/
 ./build/x64/rec64.exe
 tools/build_dist.ps1           # portable build in dist/, release archives in dist/releases/
 ```
@@ -184,7 +184,7 @@ checks without opening a window.
 
 ## Documentation
 
-- [Notes](docs/NOTES.md): the firmware, the configuration file and the limitations.
+- [Notes](docs/NOTES.md): the Libretro core, the firmware, the configuration file and the limitations.
 - [Changelog](docs/CHANGELOG.md).
 
 ## License

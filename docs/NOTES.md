@@ -1,7 +1,8 @@
 # Notes
 
-What the [README](../README.md) leaves out: the [firmware](#firmware) ReC64 needs, the
-[configuration](#configuration) file and the [limitations](#limitations).
+What the [README](../README.md) leaves out: the [Libretro](#libretro) core, the
+[firmware](#firmware) ReC64 needs, the [configuration](#configuration) file and the
+[limitations](#limitations).
 
 ## Libretro
 

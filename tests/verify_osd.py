@@ -26,7 +26,7 @@ def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--binary', type=Path, default=ROOT/'build/x64/rec64.exe')
     args = parser.parse_args(); binary = args.binary.resolve()
-    work = ROOT/'work/p8/osd-acceptance'; work.mkdir(parents=True, exist_ok=True)
+    work = ROOT/'work/verify-osd'; work.mkdir(parents=True, exist_ok=True)
     config = work/'osd.yaml'
     config.write_text(json.dumps({'machine': {'model': 'c64-pal'}, 'video': {'border': 'none'},
                                  'media': {'disk': {'write_protect': True}}}))

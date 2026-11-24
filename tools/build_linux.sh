@@ -138,7 +138,9 @@ EOF
     cmake --build "$dir"
     [[ $trained -eq 0 ]] || echo "profile-guided build"
     if [[ $test -eq 1 ]]; then
-        if [[ $arch == x64 ]]; then
+        if [[ $arch == x64 ]] && ! python3 "$tree/tools/fetch_roms.py" --check >/dev/null 2>&1; then
+            echo "the tests need the firmware in roms/ (python3 tools/fetch_roms.py): not run"
+        elif [[ $arch == x64 ]]; then
             SDL_VIDEODRIVER=dummy SDL_AUDIODRIVER=dummy ctest --test-dir "$dir" --output-on-failure -j "$(nproc)"
         elif command -v qemu-aarch64 >/dev/null; then
             [[ $(qemu-aarch64 -L "$sysroot" "$dir/rec64" --version) == "$version" ]] || { echo "the arm64 program does not run under qemu-aarch64" >&2; exit 1; }

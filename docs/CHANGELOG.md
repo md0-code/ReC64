@@ -2,6 +2,10 @@
 
 The changes users notice, newest first.
 
+## 0.23.7 (2026-11-24)
+
+- Building from a fresh copy of the source works before the firmware is fetched: the tests run once `roms/` holds it.
+
 ## 0.23.6 (2026-11-23)
 
 - Separate downloads for the desktop emulator and Libretro core on Windows and Linux.

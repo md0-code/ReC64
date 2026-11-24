@@ -1,4 +1,4 @@
-/* Original freezer circuits; references and circuit pin mapping in docs/DEVELOPMENT.md. */
+/* Original freezer circuits: each cartridge's freeze timing and decoding, as its circuit works. */
 #ifndef RC_CART_FREEZER_H
 #define RC_CART_FREEZER_H
 #include "cart.h"
