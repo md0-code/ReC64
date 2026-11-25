@@ -5,7 +5,7 @@
 | [SDL 2.32.10](https://www.libsdl.org/) | Window, input and sound; fetched at build time and linked statically | zlib |
 | [libyaml 0.2.5](https://github.com/yaml/libyaml/tree/0.2.5) | YAML syntax of `rec64.yaml` (`src/third_party/libyaml`); linked statically | MIT, below |
 
-ReC64 itself is licensed under GPL-3.0-or-later ([LICENSE](LICENSE)).
+ReC64 itself is licensed under GPL-3.0-or-later ([LICENSE](../LICENSE)).
 
 ReC64 includes no firmware: none is committed to this repository and none is
 part of a build. The Commodore images a user supplies retain their owners'

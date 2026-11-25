@@ -189,6 +189,6 @@ checks without opening a window.
 
 ## License
 
-ReC64 is licensed under [GPL-3.0-or-later](docs/LICENSE); see the
+ReC64 is licensed under [GPL-3.0-or-later](LICENSE); see the
 [component notices](docs/THIRD_PARTY.md). The Commodore firmware remains the
 property of its owners.

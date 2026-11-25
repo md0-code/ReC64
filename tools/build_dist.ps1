@@ -64,7 +64,9 @@ Get-ChildItem -LiteralPath $target -Filter 'rec64.exe.running-*' -File | Where-O
 if (-not (Test-Path -LiteralPath "$target/rec64.yaml")) {
     Copy-Item -LiteralPath "$repo/src/app/rec64.yaml" -Destination "$target/rec64.yaml"
 }
-foreach ($name in @('NOTES.md', 'CHANGELOG.md', 'THIRD_PARTY.md', 'LICENSE')) {
+Copy-Item -LiteralPath "$repo/LICENSE" -Destination "$target/LICENSE" -Force
+Remove-Item -LiteralPath "$target/docs/LICENSE" -Force -ErrorAction SilentlyContinue
+foreach ($name in @('NOTES.md', 'CHANGELOG.md', 'THIRD_PARTY.md')) {
     Copy-Item -LiteralPath "$repo/docs/$name" -Destination "$target/docs/$name" -Force
 }
 Copy-Item -LiteralPath "$repo/README.md" -Destination "$target/README.md" -Force

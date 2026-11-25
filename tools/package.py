@@ -37,7 +37,7 @@ ROOT = Path(__file__).resolve().parents[1]
 NAME = "ReC64"
 PLATFORMS = ("windows-x64", "windows-arm64", "linux-x64", "linux-arm64")
 DOCS = {"README.md": "README.md", "docs/NOTES.md": "docs/NOTES.md", "docs/CHANGELOG.md": "docs/CHANGELOG.md",
-        "docs/THIRD_PARTY.md": "docs/THIRD_PARTY.md", "docs/LICENSE": "docs/LICENSE"}
+        "docs/THIRD_PARTY.md": "docs/THIRD_PARTY.md", "LICENSE": "LICENSE"}
 FOLDERS = ("roms",)
 EXECUTABLES = {"windows-x64": ("pe", 0x8664), "windows-arm64": ("pe", 0xAA64),
                "linux-x64": ("elf", 0x3E), "linux-arm64": ("elf", 0xB7)}
