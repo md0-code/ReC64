@@ -345,7 +345,7 @@ static void sid_to_list(desktop *d){
     if(!eject(d,4))return;
     char *slash=strrchr(path,'/'),*back=strrchr(path,'\\');if(back&&(!slash||back>slash))slash=back;
     if(!slash)return;
-    *slash=0;snprintf(d->browser.path,sizeof d->browser.path,"%s",path);
+    snprintf(d->browser.path,sizeof d->browser.path,"%.*s",(int)(slash+1-path),path);
     if(!browser_open(d,0,error,sizeof error)){message(d,error);return;}
     rc_browser_select(&d->browser,slash+1);
 }
@@ -863,11 +863,13 @@ int rc_desktop_run(rc_machine **owner,rc_config *c,rc_rom_index *roms,const rc_d
         m=d.machine;
         if(d.pace_dirty){rc_pace_init(&pace,SDL_GetPerformanceFrequency(),rc_machine_clock(m),100);rc_pace_reset(&pace,SDL_GetPerformanceCounter(),rc_machine_time(m));d.pace_dirty=0;}
         uint64_t ticks=rc_machine_frame_period(m);int present=1,input_frame=1,racing=0;
+        rc_machine_status playback;
+        const int sid_paused=d.player.active&&rc_machine_get_status(m,&playback)&&playback.sid_paused;
         if(h) {
             const int action=rc_harness_step(h);
             if(action==RC_HARNESS_QUIT) { status=rc_harness_status(h);if(status) snprintf(error,cap,"%s",rc_harness_error(h));break; }
             if(action==RC_HARNESS_IDLE) { rc_host_sleep_us(1000);continue; }
-        } else if(!o->hidden&&(d.firmware||d.setup.active||d.browser.active||d.slot_picker||d.paused)) {rc_host_sleep_us(16000);d.pace_dirty=1;}
+        } else if(!o->hidden&&(d.firmware||d.setup.active||d.browser.active||d.slot_picker||d.paused||sid_paused)) {rc_host_sleep_us(16000);d.pace_dirty=1;}
         else if(!o->hidden) {
             const int free_running=d.full||automatic_speed(&d);racing=free_running;
             const rc_pace_step step=rc_pace_next(&pace,free_running,SDL_GetPerformanceCounter(),rc_machine_time(m),ticks);
