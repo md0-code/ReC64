@@ -172,6 +172,9 @@ int rc_c64_insert(void *self,unsigned slot,rc_media *image,char *error,size_t ca
     if(!ok){c->media[slot]=old;c->media_owned[slot]=owned;return 0;}if(owned)rc_media_close(old);return 1;
 }
 rc_media *rc_c64_media(const void *self,unsigned slot){return slot<5?((const rc_c64 *)self)->media[slot]:NULL;}
+rc_media *rc_c64_media_companion(const void *self,unsigned slot){
+    return slot==3?((const rc_c64 *)self)->cart_eeprom:NULL;
+}
 int rc_c64_eject(void *self,unsigned slot){rc_c64 *c=self;if(slot>=5||!c->media[slot])return 0;
     if(slot==2){
         if(!rc_c1541_mount(&c->drive,NULL,NULL,0))return 0;

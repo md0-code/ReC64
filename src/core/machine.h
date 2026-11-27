@@ -259,6 +259,7 @@ void rc_machine_pointer(rc_machine *m,unsigned port,unsigned type,int x,int y,un
 int rc_machine_insert(rc_machine *m, unsigned slot, rc_media *media, char *error, size_t capacity);
 /* The file in a slot, NULL when empty. */
 rc_media *rc_machine_media(const rc_machine *m, unsigned slot);
+rc_media *rc_machine_media_companion(const rc_machine *m, unsigned slot);
 /* Takes the file out (the caller may close it then); 0 when empty. */
 int rc_machine_eject(rc_machine *m, unsigned slot);
 /* Bit n set while slot n transfers media (including the drive motor

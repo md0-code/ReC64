@@ -2,6 +2,10 @@
 
 The changes users notice, newest first.
 
+## 0.23.9 (2026-11-27)
+
+- When an edited disk, tape or cartridge cannot be saved on exit, ReC64 keeps a uniquely named recovery copy beside its settings and reports the path. Cartridge EEPROM edits are recovered separately from cartridge images.
+
 ## 0.23.8 (2026-11-27)
 
 - Opening a SID tune keeps the current machine and mounted media when the new tune’s settings cannot be saved.

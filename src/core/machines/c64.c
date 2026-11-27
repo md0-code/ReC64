@@ -191,7 +191,7 @@ static int load(void *self,rc_state_reader *r){
 }
 static const rc_machine_impl IMPL={.destroy=destroy,.description=description,.error=error_text,.reset=reset,.nmi=nmi,
     .clock=clock_hz,.run=rc_c64_run,.time=time_now,.frame_period=period,.frames=frames,.economy=economy,.frame=frame,.text=text,
-    .audio_rate=audio_rate,.audio_pull=audio_pull,.key=key,.joystick=joystick,.activity=rc_c64_activity,.insert=rc_c64_insert,.media=rc_c64_media,.eject=rc_c64_eject,.control=rc_c64_control,.tape_options=rc_c64_tape_options,.tape_deck=rc_c64_tape_deck,.autoload=rc_c64_autoload,
+    .audio_rate=audio_rate,.audio_pull=audio_pull,.key=key,.joystick=joystick,.activity=rc_c64_activity,.insert=rc_c64_insert,.media=rc_c64_media,.media_companion=rc_c64_media_companion,.eject=rc_c64_eject,.control=rc_c64_control,.tape_options=rc_c64_tape_options,.tape_deck=rc_c64_tape_deck,.autoload=rc_c64_autoload,
     .save=save,.load=load,.rom_hashes=hashes,.set_trace=trace,.peek=peek,.poke=poke,.border=border,.pointer=pointer,.status=status};
 const rc_family rc_c64_family={.id="c64",.name="Commodore 64",.models=MODELS,.model_count=4,
     .media=MEDIA,.media_count=5,.options=OPTIONS,.option_count=sizeof OPTIONS/sizeof OPTIONS[0],.keys=KEYS,.key_count=65,

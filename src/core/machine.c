@@ -262,6 +262,9 @@ int rc_machine_insert(rc_machine *m, unsigned slot, rc_media *media, char *error
     return m->impl->insert(m->self, slot, media, error, capacity);
 }
 rc_media *rc_machine_media(const rc_machine *m, unsigned slot) { return slot < m->family->media_count ? m->impl->media(m->self, slot) : NULL; }
+rc_media *rc_machine_media_companion(const rc_machine *m, unsigned slot) {
+    return slot < m->family->media_count && m->impl->media_companion ? m->impl->media_companion(m->self, slot) : NULL;
+}
 int rc_machine_eject(rc_machine *m, unsigned slot) { return slot < m->family->media_count && m->impl->eject(m->self, slot); }
 unsigned rc_machine_activity(const rc_machine *m) { return m->impl->activity(m->self); }
 int rc_machine_control(rc_machine *m, unsigned slot, unsigned command, uint32_t value) {

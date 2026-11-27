@@ -39,6 +39,7 @@ typedef struct rc_machine_impl {
     void (*joystick)(void *self, unsigned stick, unsigned held); /* NULL: no sockets */
     int (*insert)(void *self, unsigned slot, rc_media *media, char *error, size_t capacity);
     rc_media *(*media)(const void *self, unsigned slot);
+    rc_media *(*media_companion)(const void *self, unsigned slot); /* optional writable companion, e.g. an EEPROM */
     int (*eject)(void *self, unsigned slot);
     unsigned (*activity)(const void *self);
     int (*control)(void *self, unsigned slot, unsigned command, uint32_t value);   /* NULL: none */

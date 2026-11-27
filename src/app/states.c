@@ -192,3 +192,54 @@ void rc_states_time_text(const rc_states_time *t, char *out, size_t capacity) {
              (unsigned)t->minute);
 }
 
+
+static int recover_media(const rc_media *image, unsigned slot, const char *base, char *result, size_t cap) {
+    if (!image || !image->dirty || image->in_place) return 0;
+    char path[RC_HOST_PATH], extension[32], why[256];
+    rc_media_extension(image->path, extension, sizeof extension);
+    for (unsigned n = 1; n <= 9999; ++n) {
+        const int length = snprintf(path, sizeof path, "%s.recovery-%u-%u%s%s", base, slot, n, extension[0] ? "." : "", extension);
+        if (length < 0 || (size_t)length >= sizeof path) break;
+        if (!rc_host_file_create(path, 0, 0, why, sizeof why)) {
+            if (rc_host_file_exists(path)) continue;
+            break;
+        }
+        if (rc_host_write_file(path, image->data, image->size, why, sizeof why)) {
+            snprintf(result, cap, "Saved a recovery copy to %s", path);
+            return 1;
+        }
+        rc_host_delete_file(path);
+        break;
+    }
+    return 0;
+}
+
+int rc_states_finish_media(rc_machine *m, unsigned slot, rc_media *owned, const char *base, char *error, size_t capacity) {
+    const rc_family *family = rc_machine_family(m);
+    rc_media *mounted = slot < family->media_count ? rc_machine_media(m, slot) : NULL;
+    rc_media *companion = rc_machine_media_companion(m, slot);
+    int ok = 1;
+    if (mounted && (family->media[slot].kind == RC_MEDIA_FLOPPY || family->media[slot].kind == RC_MEDIA_CART))
+        ok = rc_machine_control(m, slot, RC_MEDIA_FLUSH, 0);
+    char why[256] = "Cannot flush mounted media";
+    if (ok && mounted && !rc_media_save(mounted)) {
+        snprintf(why, sizeof why, "%s", mounted->error);
+        ok = 0;
+    }
+    if (owned && owned != mounted && !rc_media_save(owned)) {
+        snprintf(why, sizeof why, "%s", owned->error);
+        ok = 0;
+    }
+    if (!ok) {
+        rc_media *images[] = {mounted, owned != mounted ? owned : NULL, companion};
+        snprintf(error, capacity, "%s", why);
+        for (unsigned i = 0; i < sizeof images / sizeof images[0]; ++i) {
+            char saved[RC_HOST_PATH + 32];
+            if (recover_media(images[i], slot, base, saved, sizeof saved)) {
+                size_t used = strlen(error);
+                if (used < capacity) snprintf(error + used, capacity - used, ". %s", saved);
+            }
+        }
+    }
+    return ok;
+}

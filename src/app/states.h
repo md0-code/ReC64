@@ -44,6 +44,10 @@ typedef struct rc_states_info {
     rc_states_media media[RC_CONFIG_MEDIA];
 } rc_states_info;
 
+/* Final save for a session that is about to be destroyed. On a write failure,
+ * recover every available dirty image under a fresh name beside base. */
+int rc_states_finish_media(rc_machine *m, unsigned slot, rc_media *owned, const char *base, char *error, size_t capacity);
+
 /* The thumbnail of a frame: a quarter of its size (at most RC_STATES_THUMB_W x RC_STATES_THUMB_H, its shape kept),
  * each pixel the frame's colour nearest to the average of the pixels it stands for. 0 when the frame has no pixels. */
 int rc_states_thumb_make(const rc_frame *frame, rc_states_thumb *thumb);

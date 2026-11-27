@@ -899,7 +899,16 @@ int rc_desktop_run(rc_machine **owner,rc_config *c,rc_rom_index *roms,const rc_d
     if(!status&&o->screenshot&&!shot(&d,o->screenshot,error,cap)) status=1;
 done:
     if(d.io_failed) { snprintf(error,cap,"Control channel failed");status=1; }
-    if(!flush_media(&d,error,cap))status=1;
+    char recovery_base[RC_HOST_PATH];
+    snprintf(recovery_base,sizeof recovery_base,"%s",c->source[0]?c->source:"rec64.yaml");
+    for(unsigned i=0;i<RC_CONFIG_MEDIA;++i){
+        char failure[RC_HOST_PATH+128];
+        if(!rc_states_finish_media(d.machine,i,d.media[i],recovery_base,failure,sizeof failure)){
+            fprintf(stderr,"%s\n",failure);
+            snprintf(error,cap,"%s",failure);
+            status=1;
+        }
+    }
     if(!rc_wav_close(&d.wav)) { snprintf(error,cap,"Cannot finish audio capture");status=1; }
     rc_harness_close(h);rc_host_stream_close(d.tcp);rc_host_audio_close(&d.audio);
     if(!o->hidden){SDL_StopTextInput();rc_pads_close(&d.pads);}rc_video_close(d.video);rc_browser_close(&d.browser);const rc_family *final_family=rc_machine_family(d.machine);for(unsigned i=0;i<RC_CONFIG_MEDIA;++i){if(i<final_family->media_count&&rc_machine_media(d.machine,i))rc_machine_eject(d.machine,i);rc_media_close(d.media[i]);}rc_osk_close(&d.osk);rc_panel_close(&d.panel);free(d.pixels);SDL_Quit();return status;

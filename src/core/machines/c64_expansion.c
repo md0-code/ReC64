@@ -55,10 +55,9 @@ int rc_c64_cart_flush(rc_c64 *c){
     if(!c->cart.crt.image)return 1;
     if(c->cart.crt.hardware==RC_CRT_EASYFLASH)return rc_easyflash_sync(&c->easyflash);
     if(c->cart.crt.hardware!=RC_CRT_GMOD2)return 1;
-    if(!rc_gmod2_sync(&c->gmod2))return 0;
-    rc_media *e=c->cart_eeprom;if(!e)return 1;
-    if(memcmp(e->data,c->gmod2.eeprom.memory,RC_M93C86_SIZE)){memcpy(e->data,c->gmod2.eeprom.memory,RC_M93C86_SIZE);e->dirty=1;}
-    return rc_media_save(e);
+    rc_media *e=c->cart_eeprom;
+    if(e && memcmp(e->data,c->gmod2.eeprom.memory,RC_M93C86_SIZE)){memcpy(e->data,c->gmod2.eeprom.memory,RC_M93C86_SIZE);e->dirty=1;}
+    return rc_gmod2_sync(&c->gmod2) && (!e || rc_media_save(e));
 }
 static int eeprom_open(rc_gmod2 *g,rc_media **out,char *error,size_t cap){
     const char *image=g->port->crt.image->path;*out=NULL;if(!*image)return 1;
