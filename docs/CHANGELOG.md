@@ -2,6 +2,10 @@
 
 The changes users notice, newest first.
 
+## 0.23.8 (2026-11-27)
+
+- Opening a SID tune keeps the current machine and mounted media when the new tune’s settings cannot be saved.
+
 ## 0.23.7 (2026-11-24)
 
 - Building from a fresh copy of the source works before the firmware is fetched: the tests run once `roms/` holds it.

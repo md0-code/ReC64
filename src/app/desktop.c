@@ -222,12 +222,13 @@ static int apply_video(desktop *d,char *error,size_t cap){
         rc_video_set_integer_scale(d->video,c->scale==RC_CONFIG_SCALE_INTEGER?8:0);rc_video_set_aspect(d->video,(int)c->aspect);rc_video_set_vsync(d->video,c->vsync!=0);}
     return 1;
 }
-static int store_config(desktop *d,char *error,size_t cap){
-    if(d->hidden&&!d->config->source[0])return 1;
-    const char *path=d->config->source[0]?d->config->source:"rec64.yaml";rc_ydoc doc={0};
+static int write_config(const rc_config *config,int hidden,char *error,size_t cap){
+    if(hidden&&!config->source[0])return 1;
+    const char *path=config->source[0]?config->source:"rec64.yaml";rc_ydoc doc={0};
     if(rc_host_file_exists(path)&&!rc_ydoc_load(&doc,path)){snprintf(error,cap,"Cannot read configuration");return 0;}
-    const int ok=rc_config_store(d->config,&doc)&&rc_ydoc_save(&doc,path);rc_ydoc_free(&doc);if(!ok)snprintf(error,cap,"Cannot save configuration");return ok;
+    const int ok=rc_config_store(config,&doc)&&rc_ydoc_save(&doc,path);rc_ydoc_free(&doc);if(!ok)snprintf(error,cap,"Cannot save configuration");return ok;
 }
+static int store_config(desktop *d,char *error,size_t cap){return write_config(d->config,d->hidden,error,cap);}
 static int media_available(const desktop *d){return !strcmp(rc_machine_family(d->machine)->id,"c64");}
 static void states_status(desktop *d){
     if(!d->slot_picker&&(!d->setup.active||d->setup.page!=RC_SETUP_STATES))return;const rc_family *f=rc_machine_family(d->machine);const char *model=f->models[rc_machine_model(d->machine)].id;
@@ -276,6 +277,7 @@ static int mount_sid(desktop *d,rc_media *image,char *error,size_t cap){
         if(ok&&d->media_entry[i]!=UINT32_MAX)ok=rc_machine_control(next,i,RC_MEDIA_SEEK,d->media_entry[i]);
     }
     if(ok)ok=rc_machine_insert(next,4,image,error,cap);
+    if(ok)ok=write_config(&config,d->hidden,error,cap);
     if(!ok){rc_machine_destroy(next);for(unsigned i=0;i<3;++i)rc_media_close(clones[i]);return 0;}
     release_keys(d);rc_machine_destroy(d->machine);*d->owner=d->machine=next;*d->config=config;
     for(unsigned i=0;i<3;++i)if(clones[i]){rc_media_close(d->media[i]);d->media[i]=clones[i];}
@@ -283,7 +285,7 @@ static int mount_sid(desktop *d,rc_media *image,char *error,size_t cap){
     rc_media_close(d->media[4]);d->media[4]=image;d->media_entry[4]=UINT32_MAX;
     rc_keymap_init(&d->keymap,next,d->config);rc_sidplayer_open(&d->player,image->data,image->size,NULL,0);
     d->running_config=config;d->restart_pending=0;d->pace_dirty=d->states_dirty=1;media_options(d);media_status(d);
-    return store_config(d,error,cap);
+    return 1;
 }
 static int mount_media(desktop *d,unsigned slot,const char *path,char *error,size_t cap){
     const rc_family *f=rc_machine_family(d->machine);if(slot>=f->media_count||slot>=RC_CONFIG_MEDIA){snprintf(error,cap,"No media slot available");return 0;}
